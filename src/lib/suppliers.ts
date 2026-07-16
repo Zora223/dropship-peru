@@ -202,7 +202,7 @@ export async function getAllSupplierProfiles(): Promise<SupplierWithProfile[]> {
     .select(
       `
       *,
-      profiles (
+      profiles!supplier_profiles_id_fkey (
         full_name,
         email,
         avatar_url
@@ -227,7 +227,7 @@ export async function getPendingSupplierProfiles(): Promise<
     .select(
       `
       *,
-      profiles (
+      profiles!supplier_profiles_id_fkey (
         full_name,
         email,
         avatar_url
@@ -252,7 +252,7 @@ export async function getActiveSupplierProfiles(): Promise<
     .select(
       `
       *,
-      profiles (
+      profiles!supplier_profiles_id_fkey (
         full_name,
         email,
         avatar_url
@@ -277,7 +277,7 @@ export async function getSupplierProfileById(
     .select(
       `
       *,
-      profiles (
+      profiles!supplier_profiles_id_fkey (
         full_name,
         email,
         avatar_url
