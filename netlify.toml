@@ -1,6 +1,10 @@
 [build]
-  command = "npm run build"
+  command = "npm ci && node ./node_modules/vite/bin/vite.js build"
   publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+  NPM_FLAGS = "--legacy-peer-deps"
 
 [[redirects]]
   from = "/*"
