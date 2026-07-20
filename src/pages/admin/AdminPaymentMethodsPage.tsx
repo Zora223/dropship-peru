@@ -55,6 +55,46 @@ const DEFAULT_ENABLED: PaymentMethodType[] = [
   "card",
 ];
 
+// 🛡️ Helper defensivo: siempre devuelve un array válido de métodos
+function normalizePaymentMethods(raw: unknown): DbStorePaymentMethod[] {
+  // Caso 1: ya es un array (formato correcto)
+  if (Array.isArray(raw)) {
+    return raw as DbStorePaymentMethod[];
+  }
+
+  // Caso 2: es un string JSON (parsearlo)
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed as DbStorePaymentMethod[];
+    } catch {
+      return [];
+    }
+  }
+
+  // Caso 3: es un object formato viejo (convertirlo)
+  if (raw && typeof raw === "object") {
+    const obj = raw as Record<string, { enabled?: boolean; [key: string]: unknown }>;
+    const methods: DbStorePaymentMethod[] = [];
+
+    for (const key of Object.keys(obj)) {
+      const value = obj[key];
+      if (value && typeof value === "object") {
+        methods.push({
+          id: key as PaymentMethodType,
+          enabled: Boolean(value.enabled),
+          config: {},
+        } as DbStorePaymentMethod);
+      }
+    }
+
+    return methods;
+  }
+
+  // Caso 4: null, undefined o cualquier otro tipo
+  return [];
+}
+
 export default function AdminPaymentMethodsPage() {
   const [settings, setSettings] = useState<DbPlatformSettings | null>(null);
   const [enabledMethods, setEnabledMethods] =
@@ -129,11 +169,12 @@ export default function AdminPaymentMethodsPage() {
         cash_on_delivery: 0,
       };
 
+      // 🛡️ Uso defensivo: normalizamos siempre antes de iterar
       (stores ?? []).forEach((store) => {
-        const methods = (store.payment_methods ?? []) as DbStorePaymentMethod[];
+        const methods = normalizePaymentMethods(store.payment_methods);
 
         methods.forEach((method) => {
-          if (method.enabled && method.id in usage) {
+          if (method?.enabled && method?.id && method.id in usage) {
             usage[method.id] += 1;
           }
         });
