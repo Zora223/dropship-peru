@@ -364,13 +364,14 @@ export default function PaymentPage() {
     );
   }, [enabledPaymentMethods, selectedMethod]);
 
-  // 🆕 Calcular total con delivery fee
+  // 🆕 Delivery fee INTERNO (para pagar al delivery). NO se muestra al cliente.
   const deliveryFee = useMemo(() => {
     if (deliveryMode !== "home_delivery" || !deliverySettings) return 0;
     return Number(deliverySettings.delivery_cost) || 0;
   }, [deliveryMode, deliverySettings]);
 
-  const total = subtotal + deliveryFee;
+  // 🆕 Total = subtotal (delivery ya viene INCLUIDO en el precio del producto)
+  const total = subtotal;
 
   if (count === 0 || !storeId) {
     return (
@@ -419,7 +420,6 @@ export default function PaymentPage() {
       return;
     }
 
-    // 🆕 Validar según modo
     if (deliveryMode === "home_delivery") {
       if (!selectedDeliveryDate || !selectedDeliverySlot) {
         setError("Selecciona la fecha y franja horaria de entrega.");
@@ -466,7 +466,7 @@ export default function PaymentPage() {
           deliveryMode === "home_delivery" ? selectedDeliveryDate : null,
         delivery_time_slot:
           deliveryMode === "home_delivery" ? selectedDeliverySlot : null,
-        delivery_fee: deliveryFee,
+        delivery_fee: deliveryFee, // 🆕 Se guarda internamente aunque no se muestre
 
         pickup_location_id:
           deliveryMode === "store_pickup" ? selectedPickupId : null,
@@ -603,9 +603,7 @@ export default function PaymentPage() {
                           Delivery a domicilio
                         </div>
                         <div className="text-xs text-gray-500">
-                          {deliveryFee > 0
-                            ? `+ S/ ${deliveryFee.toFixed(2)}`
-                            : "Costo por confirmar"}
+                          Lo recibes en tu casa
                         </div>
                       </div>
                     </div>
@@ -637,8 +635,8 @@ export default function PaymentPage() {
                         <div className="font-bold text-gray-900">
                           Recojo en tienda
                         </div>
-                        <div className="text-xs text-emerald-600 font-semibold">
-                          ¡Sin costo de envío!
+                        <div className="text-xs text-gray-500">
+                          Retira tu pedido personalmente
                         </div>
                       </div>
                     </div>
@@ -773,7 +771,7 @@ export default function PaymentPage() {
               </div>
             </div>
 
-            {/* 🆕 v16 FASE 3 - Selector de fecha/hora para DELIVERY */}
+            {/* Selector de fecha/hora para DELIVERY */}
             {deliveryMode === "home_delivery" && deliverySlots.length > 0 && (
               <div className="rounded-3xl bg-white p-6 shadow-sm">
                 <h2 className="text-lg font-bold text-gray-900">
@@ -838,7 +836,6 @@ export default function PaymentPage() {
               </div>
             )}
 
-            {/* Si no hay slots de delivery configurados */}
             {deliveryMode === "home_delivery" && deliverySlots.length === 0 && (
               <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">
                 ⚠️ Esta tienda aún no ha configurado sus horarios de entrega. El
@@ -1069,7 +1066,7 @@ export default function PaymentPage() {
                   ))}
                 </div>
 
-                {/* 🆕 Info del modo de entrega */}
+                {/* Info del modo de entrega */}
                 <div className="mt-4 rounded-xl bg-gray-50 p-3 text-xs">
                   <div className="font-semibold text-gray-700">
                     {deliveryMode === "home_delivery"
@@ -1092,7 +1089,7 @@ export default function PaymentPage() {
 
                 <div className="my-4 border-t border-dashed border-gray-200" />
 
-                {/* 🆕 Desglose de precios */}
+                {/* 🆕 Desglose - Delivery INCLUIDO en el precio */}
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Subtotal</span>
@@ -1102,16 +1099,10 @@ export default function PaymentPage() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Envío</span>
-                    <span
-                      className={`font-semibold tabular-nums ${
-                        deliveryFee === 0
-                          ? "text-emerald-600"
-                          : "text-gray-900"
-                      }`}
-                    >
-                      {deliveryFee === 0
-                        ? "GRATIS"
-                        : `S/ ${deliveryFee.toFixed(2)}`}
+                    <span className="font-semibold tabular-nums text-emerald-600">
+                      {deliveryMode === "store_pickup"
+                        ? "SIN ENVÍO"
+                        : "INCLUIDO"}
                     </span>
                   </div>
                 </div>
