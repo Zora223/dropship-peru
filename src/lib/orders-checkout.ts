@@ -25,7 +25,10 @@ export interface CheckoutInput {
   notes: string | null;
 }
 
-export async function validatePaymentMethod(storeId: string, paymentMethod: PaymentMethodType): Promise<void> {
+export async function validatePaymentMethod(
+  storeId: string,
+  paymentMethod: PaymentMethodType
+): Promise<void> {
   const { data, error } = await supabase
     .from("stores")
     .select("id, is_active, payment_methods")
@@ -40,7 +43,9 @@ export async function validatePaymentMethod(storeId: string, paymentMethod: Paym
   const enabledMethods = paymentMethods.filter((method) => method.enabled);
 
   if (enabledMethods.length === 0) {
-    throw new Error("Esta tienda no tiene métodos de pago habilitados en su configuración.");
+    throw new Error(
+      "Esta tienda no tiene métodos de pago habilitados en su configuración."
+    );
   }
 
   const exists = enabledMethods.some((method) => method.id === paymentMethod);
@@ -54,8 +59,14 @@ export async function validateStock(items: CartItem[]): Promise<string[]> {
 
   for (const item of items) {
     let realStock = 0;
-    const table = (item.source === "catalog" && item.catalogProductId) ? "catalog_products" : "products";
-    const lookupId = (item.source === "catalog" && item.catalogProductId) ? item.catalogProductId : item.productId;
+    const table =
+      item.source === "catalog" && item.catalogProductId
+        ? "catalog_products"
+        : "products";
+    const lookupId =
+      item.source === "catalog" && item.catalogProductId
+        ? item.catalogProductId
+        : item.productId;
 
     const { data, error } = await supabase
       .from(table)
@@ -71,30 +82,26 @@ export async function validateStock(items: CartItem[]): Promise<string[]> {
     realStock = data.stock;
 
     if (realStock < item.quantity) {
-      errors.push(realStock === 0 ? `${item.name}: AGOTADO` : `${item.name}: Solo quedan ${realStock} unidades.`);
+      errors.push(
+        realStock === 0
+          ? `${item.name}: AGOTADO`
+          : `${item.name}: Solo quedan ${realStock} unidades.`
+      );
     }
   }
 
   return errors;
 }
 
-async function discountStock(items: CartItem[]): Promise<void> {
-  for (const item of items) {
-    const table = (item.source === "catalog" && item.catalogProductId) ? "catalog_products" : "products";
-    const lookupId = (item.source === "catalog" && item.catalogProductId) ? item.catalogProductId : item.productId;
-
-    const { data: current } = await supabase.from(table).select("stock").eq("id", lookupId).single();
-
-    if (current) {
-      const newStock = Math.max(0, current.stock - item.quantity);
-      await supabase.from(table).update({ stock: newStock }).eq("id", lookupId);
-    }
-  }
-}
+// ⚠️ FUNCIÓN discountStock() ELIMINADA
+// El descuento de stock ahora lo hace el trigger SQL:
+//   → trg_reduce_stock_on_order (AFTER INSERT en orders)
+// Esto evita la doble reducción y garantiza atomicidad.
 
 export async function createOrder(input: CheckoutInput): Promise<DbOrder> {
   if (!input.items.length) throw new Error("El carrito está vacío.");
-  if (!input.customer_name.trim()) throw new Error("Ingresa tu nombre completo.");
+  if (!input.customer_name.trim())
+    throw new Error("Ingresa tu nombre completo.");
   if (!input.customer_phone.trim()) throw new Error("Ingresa tu celular.");
 
   await validatePaymentMethod(input.storeId, input.payment_method);
@@ -104,16 +111,20 @@ export async function createOrder(input: CheckoutInput): Promise<DbOrder> {
   // Sincronizado milimétricamente con AdminOrdersPage.tsx:
   const orderItems = input.items.map((item) => ({
     product_id: item.productId,
-    name: item.name,                  // <--- Clave unificada
-    price: item.price,                // <--- Clave unificada
+    name: item.name,
+    price: item.price,
     quantity: item.quantity,
-    image: (item as any).image ?? "", // <--- Foto para el futuro
+    image: (item as any).image ?? "",
     source: item.source,
     subtotal: item.price * item.quantity,
   }));
 
-  const has_catalog_items = input.items.some((item) => item.source === "catalog");
-  const { data: { user } } = await supabase.auth.getUser();
+  const has_catalog_items = input.items.some(
+    (item) => item.source === "catalog"
+  );
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const { data, error } = await supabase
     .from("orders")
@@ -135,13 +146,11 @@ export async function createOrder(input: CheckoutInput): Promise<DbOrder> {
     .select()
     .single();
 
-  if (error) throw new Error("Error en el motor de base de datos: " + error.message);
+  if (error)
+    throw new Error("Error en el motor de base de datos: " + error.message);
 
-  try {
-    await discountStock(input.items);
-  } catch (err) {
-    console.error("Stock no descontado por latencia, pero pedido creado con éxito.", err);
-  }
+  // ✅ Stock reducido automáticamente por trigger SQL
+  //    (trg_reduce_stock_on_order)
 
   return data as DbOrder;
 }

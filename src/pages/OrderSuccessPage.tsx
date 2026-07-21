@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { fetchOrderSuccessData } from "../lib/order-success";
 import WhatsappFloatingButton from "../components/WhatsappFloatingButton";
+import PaymentReceiptModal from "../components/PaymentReceiptModal";
+import type { ValidationResponse } from "../lib/payment-validation";
 import type {
   DbOrder,
   DbStore,
@@ -279,6 +281,9 @@ export default function OrderSuccessPage() {
   const [error, setError] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
 
+  // 🆕 Modal de validación OCR
+  const [receiptModalOpen, setReceiptModalOpen] = useState(false);
+
   const theme = getTheme(store);
 
   useEffect(() => {
@@ -328,13 +333,13 @@ export default function OrderSuccessPage() {
     return buildPaymentMessage(order, store.name);
   }, [order, store]);
 
-  // 🆕 URL de tracking público
+  // URL de tracking público
   const trackingUrl = useMemo(() => {
     if (!order) return "";
     return `${window.location.origin}/pedido/${order.order_number}`;
   }, [order]);
 
-  // 🆕 Copiar link de tracking
+  // Copiar link de tracking
   async function copyTrackingLink() {
     try {
       await navigator.clipboard.writeText(trackingUrl);
@@ -345,7 +350,7 @@ export default function OrderSuccessPage() {
     }
   }
 
-  // 🆕 Compartir tracking por WhatsApp
+  // Compartir tracking por WhatsApp
   function shareTrackingByWhatsapp() {
     if (!order || !store) return;
     const message = [
@@ -360,6 +365,17 @@ export default function OrderSuccessPage() {
 
     const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
     window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  // 🆕 Callback cuando OCR valida el pago
+  function handlePaymentValidated(result: ValidationResponse) {
+    setReceiptModalOpen(false);
+
+    // Si fue aprobado, recargamos los datos del pedido
+    if (result.status === "approved" && orderNumber) {
+      // Recargar la página para ver el nuevo estado
+      window.location.reload();
+    }
   }
 
   if (loading) {
@@ -398,6 +414,9 @@ export default function OrderSuccessPage() {
     order.status === "pending_payment" &&
     order.payment_method !== "cash_on_delivery" &&
     order.payment_method !== "card";
+
+  // 🆕 OCR disponible solo para Yape/Plin/Transfer con pago pendiente
+  const canUseAIValidation = needsPaymentProof;
 
   return (
     <div
@@ -444,8 +463,47 @@ export default function OrderSuccessPage() {
           </div>
         </div>
 
-        {/* 🆕 CARD DESTACADO — Link de tracking (FASE 4B) */}
-        <div className="mt-8 overflow-hidden rounded-3xl border-2 border-blue-200 bg-linear-to-br from-blue-50 to-indigo-50 shadow-lg">
+        {/* 🆕 CARD DESTACADO — Validación automática con IA */}
+        {canUseAIValidation && (
+          <div className="mt-8 overflow-hidden rounded-3xl border-2 border-purple-200 bg-linear-to-br from-purple-50 to-fuchsia-50 shadow-lg">
+            <div className="p-6">
+              <div className="flex items-start gap-4">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-purple-500 to-fuchsia-500 text-2xl text-white shadow-lg">
+                  🤖
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-lg font-black text-purple-900">
+                      Validación automática con IA
+                    </h3>
+                    <span className="rounded-full bg-purple-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                      ⚡ Nuevo
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-purple-800">
+                    Sube tu captura de pago y nuestra IA la valida en 2 segundos.
+                    ¡Sin esperar al vendedor!
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setReceiptModalOpen(true)}
+                className="mt-4 w-full rounded-xl bg-linear-to-r from-purple-600 to-fuchsia-600 py-3.5 text-sm font-bold text-white shadow-md transition hover:shadow-xl active:scale-[0.98]"
+              >
+                📸 Subir comprobante ahora
+              </button>
+
+              <p className="mt-3 text-center text-xs text-purple-700">
+                💡 Aprobación instantánea si los datos coinciden
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* CARD — Link de tracking */}
+        <div className="mt-6 overflow-hidden rounded-3xl border-2 border-blue-200 bg-linear-to-br from-blue-50 to-indigo-50 shadow-lg">
           <div className="p-6">
             <div className="flex items-start gap-4">
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-blue-500 to-indigo-500 text-2xl text-white shadow-lg">
@@ -498,21 +556,21 @@ export default function OrderSuccessPage() {
           </div>
         </div>
 
-        {/* Aviso destacado si necesita enviar comprobante */}
+        {/* Aviso destacado si necesita enviar comprobante (WhatsApp - método alternativo) */}
         {needsPaymentProof && store?.whatsapp && (
           <div className="mt-6 overflow-hidden rounded-3xl border-2 border-emerald-200 bg-linear-to-br from-emerald-50 to-teal-50 shadow-lg">
             <div className="flex flex-col items-start gap-4 p-6 sm:flex-row sm:items-center">
               <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-3xl text-white shadow-lg">
-                📸
+                💬
               </div>
 
               <div className="flex-1">
                 <h3 className="text-lg font-black text-emerald-900">
-                  ¡Último paso! Envía tu comprobante
+                  ¿Prefieres enviarlo por WhatsApp?
                 </h3>
                 <p className="mt-1 text-sm text-emerald-800">
-                  Para acelerar la confirmación de tu pedido, envía la foto o
-                  captura de tu pago por WhatsApp a la tienda.
+                  También puedes contactar directamente a la tienda por WhatsApp
+                  para enviar tu comprobante.
                 </p>
               </div>
 
@@ -754,8 +812,8 @@ export default function OrderSuccessPage() {
                 <div className="font-bold text-blue-900">💡 Recomendación</div>
 
                 <p className="mt-1 text-sm text-blue-800">
-                  Si realizaste un pago por Yape, Plin o transferencia, envía el
-                  comprobante a la tienda para acelerar la confirmación.
+                  Usa la validación con IA para que tu pedido se confirme al
+                  instante, o envía tu comprobante por WhatsApp a la tienda.
                 </p>
               </div>
             </div>
@@ -783,6 +841,18 @@ export default function OrderSuccessPage() {
           }
           highlight={needsPaymentProof}
           pulse={true}
+        />
+      )}
+
+      {/* 🆕 Modal de validación OCR */}
+      {order && (
+        <PaymentReceiptModal
+          orderId={order.id}
+          orderNumber={order.order_number}
+          expectedAmount={Number(order.total)}
+          isOpen={receiptModalOpen}
+          onClose={() => setReceiptModalOpen(false)}
+          onValidated={handlePaymentValidated}
         />
       )}
     </div>
