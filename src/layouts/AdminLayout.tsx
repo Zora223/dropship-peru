@@ -12,8 +12,9 @@ const navItems = [
   { to: "/admin/stores", label: "Tiendas", icon: "🏪" },
   { to: "/admin/orders", label: "Pedidos", icon: "🧾" },
   { to: "/admin/payments", label: "Métodos de pago", icon: "💳" },
+  { to: "/admin/payment-validations", label: "Validaciones OCR", icon: "🤖" }, // 🆕 v16 - OCR
   { to: "/admin/theme", label: "Temas y branding", icon: "🎨" },
-  { to: "/admin/whatsapp", label: "WhatsApp Bot", icon: "🤖" }, // 🆕 FASE 5B
+  { to: "/admin/whatsapp", label: "WhatsApp Bot", icon: "💬" }, // 🆕 FASE 5B
   { to: "/admin/whatsapp-templates", label: "WA Templates", icon: "📝" }, // 🆕 FASE 5B Etapa 4
   { to: "/admin/whatsapp-logs", label: "WA Logs", icon: "📋" }, // 🆕 v13
 ];

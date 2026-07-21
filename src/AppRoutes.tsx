@@ -31,6 +31,7 @@ import AdminPaymentMethodsPage from "./pages/admin/AdminPaymentMethodsPage";
 import AdminDeliveriesPage from "./pages/admin/AdminDeliveriesPage";
 import AdminDeliveryPaymentsPage from "./pages/admin/AdminDeliveryPaymentsPage";
 import AdminWhatsappPage from "./pages/admin/AdminWhatsappPage"; // 🆕 FASE 5B
+import { PaymentValidationsPage } from "./pages/admin/PaymentValidationsPage"; // 🆕 v16 - OCR
 
 import VendorLayout from "./layouts/VendorLayout";
 import VendorDashboard from "./pages/vendor/VendorDashboard";
@@ -108,6 +109,7 @@ export default function AppRoutes() {
         <Route path="stores" element={<AdminStoresPage />} />
         <Route path="orders" element={<AdminOrdersPage />} />
         <Route path="payments" element={<AdminPaymentMethodsPage />} />
+        <Route path="payment-validations" element={<PaymentValidationsPage />} /> {/* 🆕 v16 - OCR */}
         <Route path="whatsapp" element={<AdminWhatsappPage />} /> {/* 🆕 FASE 5B */}
         <Route path="whatsapp-templates" element={<AdminWhatsappTemplatesPage />} /> {/* 🆕 FASE 5B Etapa 4 */}
         <Route path="whatsapp-logs" element={<AdminWhatsappLogsPage />} /> {/* 🆕 v13 */}
