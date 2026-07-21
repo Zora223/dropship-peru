@@ -3,20 +3,56 @@ import { deleteFileByUrl } from "./storage";
 import type { DbCatalogProduct, DbSupplier } from "../types/database";
 
 // ============================================
+// TYPES 🆕 v16
+// ============================================
+
+/**
+ * 🆕 Catalog product con info del proveedor incluida
+ */
+export interface CatalogProductWithSupplier extends DbCatalogProduct {
+  supplier?: {
+    id: string;
+    business_name: string;
+    logo_url: string | null;
+    city: string | null;
+    is_verified: boolean;
+    rating: number | null;
+  } | null;
+}
+
+// ============================================
 // CATALOG PRODUCTS
 // ============================================
 
-export async function fetchCatalogProducts(): Promise<DbCatalogProduct[]> {
+/**
+ * 🆕 v16: Ahora trae info del proveedor asociado.
+ * Usa join a supplier_profiles vía supplier_id.
+ */
+export async function fetchCatalogProducts(): Promise<
+  CatalogProductWithSupplier[]
+> {
   const { data, error } = await supabase
     .from("catalog_products")
-    .select("*")
+    .select(
+      `
+      *,
+      supplier:supplier_profiles!catalog_products_supplier_id_fkey(
+        id,
+        business_name,
+        logo_url,
+        city,
+        is_verified,
+        rating
+      )
+    `
+    )
     .order("created_at", { ascending: false });
 
   if (error) {
     console.error("Error fetching catalog:", error);
     throw error;
   }
-  return data ?? [];
+  return (data ?? []) as CatalogProductWithSupplier[];
 }
 
 export interface CreateCatalogProductInput {

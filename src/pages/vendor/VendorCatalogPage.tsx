@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMyStore } from "../../hooks/useMyStore";
 import { fetchCatalogProducts } from "../../lib/catalog";
+import type { CatalogProductWithSupplier } from "../../lib/catalog";
 import {
   fetchImportedCatalogIds,
   importCatalogProduct,
 } from "../../lib/vendor-products";
-import type { DbCatalogProduct } from "../../types/database";
 
 function normalizeImages(images: unknown): string[] {
   if (Array.isArray(images)) {
@@ -21,14 +21,17 @@ function formatCurrency(value: number) {
 
 export default function VendorCatalogPage() {
   const { store, loading: loadingStore } = useMyStore();
-  const [catalog, setCatalog] = useState<DbCatalogProduct[]>([]);
+  const [catalog, setCatalog] = useState<CatalogProductWithSupplier[]>([]);
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("Todas");
+  const [supplierFilter, setSupplierFilter] = useState("Todos"); // 🆕 v16
   const [showOnlyAvailable, setShowOnlyAvailable] = useState(false);
   const [importing, setImporting] = useState<string | null>(null);
-  const [importModal, setImportModal] = useState<DbCatalogProduct | null>(null);
+  const [importModal, setImportModal] = useState<CatalogProductWithSupplier | null>(
+    null
+  );
   const [importPrice, setImportPrice] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -62,6 +65,17 @@ export default function VendorCatalogPage() {
     return ["Todas", ...new Set(catalog.map((p) => p.category).filter(Boolean))];
   }, [catalog]);
 
+  // 🆕 Lista de proveedores únicos para filtro
+  const suppliersList = useMemo(() => {
+    const map = new Map<string, string>();
+    catalog.forEach((p) => {
+      if (p.supplier?.id && p.supplier?.business_name) {
+        map.set(p.supplier.id, p.supplier.business_name);
+      }
+    });
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [catalog]);
+
   const filtered = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
@@ -70,17 +84,30 @@ export default function VendorCatalogPage() {
         !query ||
         product.name.toLowerCase().includes(query) ||
         (product.description?.toLowerCase().includes(query) ?? false) ||
-        (product.category?.toLowerCase().includes(query) ?? false);
+        (product.category?.toLowerCase().includes(query) ?? false) ||
+        (product.supplier?.business_name?.toLowerCase().includes(query) ?? false); // 🆕
 
       const matchesCategory =
         categoryFilter === "Todas" || product.category === categoryFilter;
 
+      const matchesSupplier =
+        supplierFilter === "Todos" || product.supplier?.id === supplierFilter; // 🆕
+
       const matchesAvailability =
         !showOnlyAvailable || !importedIds.has(product.id);
 
-      return matchesSearch && matchesCategory && matchesAvailability;
+      return (
+        matchesSearch && matchesCategory && matchesSupplier && matchesAvailability
+      );
     });
-  }, [catalog, searchQuery, categoryFilter, showOnlyAvailable, importedIds]);
+  }, [
+    catalog,
+    searchQuery,
+    categoryFilter,
+    supplierFilter,
+    showOnlyAvailable,
+    importedIds,
+  ]);
 
   const stats = useMemo(() => {
     return {
@@ -90,7 +117,7 @@ export default function VendorCatalogPage() {
     };
   }, [catalog, importedIds]);
 
-  const openImportModal = (product: DbCatalogProduct) => {
+  const openImportModal = (product: CatalogProductWithSupplier) => {
     setImportModal(product);
     setImportPrice(Number(product.suggested_price).toFixed(2));
   };
@@ -169,7 +196,8 @@ export default function VendorCatalogPage() {
             Catálogo disponible
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Importa productos del marketplace a tu tienda con tu propio margen.
+            Importa productos de proveedores verificados a tu tienda con tu propio
+            margen.
           </p>
         </div>
 
@@ -200,7 +228,7 @@ export default function VendorCatalogPage() {
         <div className="text-sm text-rose-900">
           <strong>¿Cómo funciona?</strong> Elige productos del catálogo central,
           ponles tu precio de venta y aparecerán en tu tienda. El stock y la
-          logística los maneja el marketplace.
+          logística los maneja el proveedor.
         </div>
       </div>
 
@@ -240,22 +268,40 @@ export default function VendorCatalogPage() {
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="🔍 Buscar en el catálogo..."
+          placeholder="🔍 Buscar productos o proveedores..."
           className="w-full rounded-full border border-gray-200 bg-gray-50 px-5 py-2.5 text-sm outline-none transition focus:border-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-900/10"
         />
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="rounded-full border border-gray-200 bg-gray-50 px-5 py-2.5 text-sm font-medium outline-none transition focus:border-gray-900 focus:bg-white"
-          >
-            {categories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="rounded-full border border-gray-200 bg-gray-50 px-5 py-2.5 text-sm font-medium outline-none transition focus:border-gray-900 focus:bg-white"
+            >
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+
+            {/* 🆕 v16 - Filtro por proveedor */}
+            {suppliersList.length > 0 && (
+              <select
+                value={supplierFilter}
+                onChange={(e) => setSupplierFilter(e.target.value)}
+                className="rounded-full border border-gray-200 bg-gray-50 px-5 py-2.5 text-sm font-medium outline-none transition focus:border-amber-500 focus:bg-white"
+              >
+                <option value="Todos">🏭 Todos los proveedores</option>
+                {suppliersList.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    🏭 {s.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
 
           <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700">
             <input
@@ -374,6 +420,53 @@ export default function VendorCatalogPage() {
                     </p>
                   )}
 
+                  {/* 🆕 v16 - Info del PROVEEDOR */}
+                  {product.supplier && (
+                    <div className="mt-3 flex items-center gap-2 rounded-xl bg-amber-50 p-2">
+                      {/* Logo */}
+                      {product.supplier.logo_url ? (
+                        <img
+                          src={product.supplier.logo_url}
+                          alt={product.supplier.business_name}
+                          className="h-8 w-8 shrink-0 rounded-lg object-cover ring-1 ring-amber-200"
+                        />
+                      ) : (
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-200 text-sm">
+                          🏭
+                        </div>
+                      )}
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1">
+                          <p className="truncate text-[11px] font-bold text-amber-900">
+                            {product.supplier.business_name}
+                          </p>
+                          {product.supplier.is_verified && (
+                            <span
+                              className="shrink-0 text-blue-500"
+                              title="Proveedor verificado"
+                            >
+                              ✓
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-amber-700">
+                          {product.supplier.city && (
+                            <span className="truncate">
+                              📍 {product.supplier.city}
+                            </span>
+                          )}
+                          {product.supplier.rating !== null &&
+                            product.supplier.rating > 0 && (
+                              <span className="shrink-0">
+                                ⭐ {product.supplier.rating.toFixed(1)}
+                              </span>
+                            )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Precios base vs sugerido */}
                   <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-gray-50 p-3">
                     <div>
@@ -472,8 +565,52 @@ export default function VendorCatalogPage() {
               return null;
             })()}
 
+            {/* 🆕 v16 - Info del proveedor en el modal */}
+            {importModal.supplier && (
+              <div className="mt-4 flex items-center gap-3 rounded-2xl bg-amber-50 p-3">
+                {importModal.supplier.logo_url ? (
+                  <img
+                    src={importModal.supplier.logo_url}
+                    alt={importModal.supplier.business_name}
+                    className="h-12 w-12 shrink-0 rounded-xl object-cover ring-2 ring-amber-200"
+                  />
+                ) : (
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-200 text-xl">
+                    🏭
+                  </div>
+                )}
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className="truncate text-sm font-bold text-amber-900">
+                      {importModal.supplier.business_name}
+                    </p>
+                    {importModal.supplier.is_verified && (
+                      <span
+                        className="shrink-0 rounded-full bg-blue-500 px-1.5 py-0.5 text-[9px] font-bold text-white"
+                        title="Proveedor verificado"
+                      >
+                        ✓ VERIFICADO
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-3 text-xs text-amber-700">
+                    {importModal.supplier.city && (
+                      <span>📍 {importModal.supplier.city}</span>
+                    )}
+                    {importModal.supplier.rating !== null &&
+                      importModal.supplier.rating > 0 && (
+                        <span>
+                          ⭐ {importModal.supplier.rating.toFixed(1)}
+                        </span>
+                      )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Info de precios */}
-            <div className="mt-6 rounded-2xl bg-gray-50 p-4">
+            <div className="mt-4 rounded-2xl bg-gray-50 p-4">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Precio base (proveedor)</span>
                 <span className="font-bold text-gray-900">
