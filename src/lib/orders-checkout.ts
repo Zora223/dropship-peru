@@ -28,12 +28,18 @@ export interface CheckoutInput {
     reference: string | null;
   } | null;
 
+  // 🆕 Franja para delivery a domicilio
+  delivery_date?: string | null;      // "2026-07-22"
+  delivery_time_slot?: string | null; // "15:00-18:00"
+  delivery_fee?: number;              // Costo del delivery
+
   // 🆕 Solo si delivery_mode === "store_pickup"
   pickup_location_id?: string | null;
   pickup_time_slot?: string | null;
 
   items: CartItem[];
-  total: number;
+  subtotal: number;   // 🆕 Ahora separamos subtotal y total
+  total: number;      // subtotal + delivery_fee
   payment_method: PaymentMethodType;
   notes: string | null;
 }
@@ -106,23 +112,25 @@ export async function validateStock(items: CartItem[]): Promise<string[]> {
   return errors;
 }
 
-// ⚠️ FUNCIÓN discountStock() ELIMINADA
-// El descuento de stock ahora lo hace el trigger SQL:
-//   → trg_reduce_stock_on_order (AFTER INSERT en orders)
-
 export async function createOrder(input: CheckoutInput): Promise<DbOrder> {
   if (!input.items.length) throw new Error("El carrito está vacío.");
   if (!input.customer_name.trim())
     throw new Error("Ingresa tu nombre completo.");
   if (!input.customer_phone.trim()) throw new Error("Ingresa tu celular.");
 
-  // 🆕 v16 FASE 3 - Validar según modo de entrega
+  // 🆕 v16 FASE 3 - Validar según modo
   if (input.delivery_mode === "home_delivery") {
     if (!input.shipping_address) {
       throw new Error("Falta la dirección de entrega.");
     }
     if (!input.shipping_address.street?.trim()) {
       throw new Error("Ingresa tu dirección.");
+    }
+    if (!input.delivery_date) {
+      throw new Error("Selecciona la fecha de entrega.");
+    }
+    if (!input.delivery_time_slot) {
+      throw new Error("Selecciona la franja horaria de entrega.");
     }
   } else if (input.delivery_mode === "store_pickup") {
     if (!input.pickup_location_id) {
@@ -164,7 +172,6 @@ export async function createOrder(input: CheckoutInput): Promise<DbOrder> {
       customer_email: input.customer_email,
       customer_phone: input.customer_phone,
 
-      // Dirección solo si es home_delivery
       shipping_address:
         input.delivery_mode === "home_delivery"
           ? input.shipping_address
@@ -172,11 +179,14 @@ export async function createOrder(input: CheckoutInput): Promise<DbOrder> {
 
       // 🆕 v16 FASE 3
       delivery_mode: input.delivery_mode,
+      delivery_date: input.delivery_date ?? null,
+      delivery_time_slot: input.delivery_time_slot ?? null,
+      delivery_fee: input.delivery_fee ?? 0,
       pickup_location_id: input.pickup_location_id ?? null,
       pickup_time_slot: input.pickup_time_slot ?? null,
 
       items: orderItems,
-      subtotal: input.total,
+      subtotal: input.subtotal,
       total: input.total,
       payment_method: input.payment_method,
       status: "pending_payment",

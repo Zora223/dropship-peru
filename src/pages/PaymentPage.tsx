@@ -13,6 +13,14 @@ import type {
   PickupLocation,
   TimeSlot,
 } from "../lib/pickup-locations";
+import {
+  getStoreDeliverySettings,
+  generateDeliverySlots,
+} from "../lib/vendor-delivery-settings";
+import type {
+  VendorDeliverySettings,
+  DeliveryTimeSlot,
+} from "../lib/vendor-delivery-settings";
 import type {
   DbStore,
   DbStorePaymentMethod,
@@ -21,11 +29,7 @@ import type {
 
 const PAYMENT_INFO: Record<
   PaymentMethodType,
-  {
-    name: string;
-    icon: string;
-    description: string;
-  }
+  { name: string; icon: string; description: string }
 > = {
   yape: {
     name: "Yape",
@@ -37,11 +41,7 @@ const PAYMENT_INFO: Record<
     icon: "💙",
     description: "Transferencia inmediata desde tu app",
   },
-  card: {
-    name: "Tarjeta",
-    icon: "💳",
-    description: "Crédito o débito",
-  },
+  card: { name: "Tarjeta", icon: "💳", description: "Crédito o débito" },
   transfer: {
     name: "Transferencia",
     icon: "🏦",
@@ -63,8 +63,8 @@ const PAYMENT_ORDER: PaymentMethodType[] = [
 ];
 
 function getStoreTheme(store: DbStore | null) {
-  const theme = store?.theme && typeof store.theme === "object" ? store.theme : null;
-
+  const theme =
+    store?.theme && typeof store.theme === "object" ? store.theme : null;
   return {
     primary_color: theme?.primary_color ?? "#e11d48",
     secondary_color: theme?.secondary_color ?? "#fb923c",
@@ -74,15 +74,8 @@ function getStoreTheme(store: DbStore | null) {
 
 function getWhatsappUrl(value: string) {
   const digits = value.replace(/[^0-9]/g, "");
-
-  if (digits.startsWith("51")) {
-    return `https://wa.me/${digits}`;
-  }
-
-  if (digits.length === 9) {
-    return `https://wa.me/51${digits}`;
-  }
-
+  if (digits.startsWith("51")) return `https://wa.me/${digits}`;
+  if (digits.length === 9) return `https://wa.me/51${digits}`;
   return `https://wa.me/${digits}`;
 }
 
@@ -90,7 +83,6 @@ function getEnabledPaymentMethods(
   paymentMethods: unknown
 ): DbStorePaymentMethod[] {
   if (!Array.isArray(paymentMethods)) return [];
-
   return (paymentMethods as DbStorePaymentMethod[])
     .filter((method) => method && method.enabled)
     .sort(
@@ -106,7 +98,6 @@ function PaymentInstructions({
   store: DbStore | null;
 }) {
   if (!method) return null;
-
   const config = method.config ?? {};
   const info = PAYMENT_INFO[method.id];
 
@@ -114,12 +105,10 @@ function PaymentInstructions({
     <div className="mt-5 rounded-2xl border border-gray-100 bg-gray-50 p-4">
       <div className="flex items-center gap-3">
         <div className="text-3xl">{info.icon}</div>
-
         <div>
           <h3 className="font-bold text-gray-900">
             Datos para pagar con {info.name}
           </h3>
-
           <p className="text-xs text-gray-500">
             Usa esta información para completar tu pago.
           </p>
@@ -135,7 +124,6 @@ function PaymentInstructions({
                 <span className="font-bold text-gray-900">{config.phone}</span>
               </div>
             )}
-
             {config.holder_name && (
               <div className="flex justify-between gap-4 rounded-xl bg-white p-3">
                 <span className="text-gray-500">Titular</span>
@@ -144,13 +132,11 @@ function PaymentInstructions({
                 </span>
               </div>
             )}
-
             {config.qr_url && (
               <div className="rounded-xl bg-white p-3 text-center">
                 <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
                   QR de pago
                 </div>
-
                 <img
                   src={config.qr_url}
                   alt={`QR ${info.name}`}
@@ -171,7 +157,6 @@ function PaymentInstructions({
                 </span>
               </div>
             )}
-
             {config.account_holder && (
               <div className="flex justify-between gap-4 rounded-xl bg-white p-3">
                 <span className="text-gray-500">Titular</span>
@@ -180,7 +165,6 @@ function PaymentInstructions({
                 </span>
               </div>
             )}
-
             {config.account_number && (
               <div className="flex justify-between gap-4 rounded-xl bg-white p-3">
                 <span className="text-gray-500">Cuenta</span>
@@ -189,14 +173,12 @@ function PaymentInstructions({
                 </span>
               </div>
             )}
-
             {config.cci && (
               <div className="flex justify-between gap-4 rounded-xl bg-white p-3">
                 <span className="text-gray-500">CCI</span>
                 <span className="font-bold text-gray-900">{config.cci}</span>
               </div>
             )}
-
             {config.document_number && (
               <div className="flex justify-between gap-4 rounded-xl bg-white p-3">
                 <span className="text-gray-500">DNI/RUC</span>
@@ -247,7 +229,7 @@ function PaymentInstructions({
 }
 
 export default function PaymentPage() {
-  const { items, total, count, clearCart, storeId, storeSlug } = useCart();
+  const { items, total: subtotal, count, clearCart, storeId, storeSlug } = useCart();
   const navigate = useNavigate();
 
   const [store, setStore] = useState<DbStore | null>(null);
@@ -259,11 +241,24 @@ export default function PaymentPage() {
   const [deliveryMode, setDeliveryMode] =
     useState<DeliveryMode>("home_delivery");
 
-  // 🆕 v16 FASE 3 - Puntos de recojo
+  // 🆕 v16 FASE 3 - Delivery settings del vendor
+  const [deliverySettings, setDeliverySettings] =
+    useState<VendorDeliverySettings | null>(null);
+  const [deliverySlots, setDeliverySlots] = useState<DeliveryTimeSlot[]>([]);
+  const [selectedDeliveryDate, setSelectedDeliveryDate] = useState<
+    string | null
+  >(null);
+  const [selectedDeliverySlot, setSelectedDeliverySlot] = useState<
+    string | null
+  >(null);
+
+  // 🆕 v16 FASE 3 - Pickup locations
   const [pickupLocations, setPickupLocations] = useState<PickupLocation[]>([]);
   const [selectedPickupId, setSelectedPickupId] = useState<string | null>(null);
-  const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
-  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  const [pickupSlots, setPickupSlots] = useState<TimeSlot[]>([]);
+  const [selectedPickupSlot, setSelectedPickupSlot] = useState<string | null>(
+    null
+  );
 
   const [form, setForm] = useState({
     name: "",
@@ -293,18 +288,28 @@ export default function PaymentPage() {
         setError(null);
 
         const data = await fetchPublicStoreById(storeId);
-
         if (!data) {
           setError("La tienda ya no está disponible.");
           return;
         }
 
         setStore(data);
-
         const activeMethods = getEnabledPaymentMethods(data.payment_methods);
         setSelectedMethod(activeMethods[0]?.id ?? null);
 
-        // 🆕 Cargar puntos de recojo de la tienda
+        // 🆕 Cargar delivery settings del vendor
+        try {
+          const settings = await getStoreDeliverySettings(storeId);
+          setDeliverySettings(settings);
+          if (settings) {
+            const slots = generateDeliverySlots(settings);
+            setDeliverySlots(slots);
+          }
+        } catch (settingsErr) {
+          console.warn("No se pudo cargar delivery settings:", settingsErr);
+        }
+
+        // 🆕 Cargar puntos de recojo
         try {
           const locations = await getStorePickupLocations(storeId);
           setPickupLocations(locations);
@@ -331,22 +336,20 @@ export default function PaymentPage() {
     loadStore();
   }, [storeId]);
 
-  // 🆕 Cuando cambia el punto de recojo, actualizar franjas
+  // 🆕 Al cambiar pickup location, actualizar franjas
   useEffect(() => {
     if (!selectedPickupId) {
-      setAvailableSlots([]);
-      setSelectedSlot(null);
+      setPickupSlots([]);
+      setSelectedPickupSlot(null);
       return;
     }
     const location = pickupLocations.find((l) => l.id === selectedPickupId);
     if (!location) return;
-
     const openingHours =
       (location as any).opening_hours as Record<string, string[]> | null;
-
     const slots = generateAvailableSlots(openingHours ?? null, 7);
-    setAvailableSlots(slots);
-    setSelectedSlot(null);
+    setPickupSlots(slots);
+    setSelectedPickupSlot(null);
   }, [selectedPickupId, pickupLocations]);
 
   const enabledPaymentMethods = useMemo(() => {
@@ -361,15 +364,21 @@ export default function PaymentPage() {
     );
   }, [enabledPaymentMethods, selectedMethod]);
 
+  // 🆕 Calcular total con delivery fee
+  const deliveryFee = useMemo(() => {
+    if (deliveryMode !== "home_delivery" || !deliverySettings) return 0;
+    return Number(deliverySettings.delivery_cost) || 0;
+  }, [deliveryMode, deliverySettings]);
+
+  const total = subtotal + deliveryFee;
+
   if (count === 0 || !storeId) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-linear-to-br from-rose-50 via-white to-orange-50 px-6 text-center">
         <div className="text-7xl">🛍️</div>
-
         <h1 className="mt-6 text-3xl font-bold text-gray-900">
           Tu carrito está vacío
         </h1>
-
         <Link
           to="/"
           className="mt-8 rounded-full bg-gray-900 px-8 py-3.5 text-sm font-semibold text-white shadow-lg transition hover:bg-gray-800"
@@ -411,12 +420,19 @@ export default function PaymentPage() {
     }
 
     // 🆕 Validar según modo
+    if (deliveryMode === "home_delivery") {
+      if (!selectedDeliveryDate || !selectedDeliverySlot) {
+        setError("Selecciona la fecha y franja horaria de entrega.");
+        return;
+      }
+    }
+
     if (deliveryMode === "store_pickup") {
       if (!selectedPickupId) {
         setError("Selecciona un punto de recojo.");
         return;
       }
-      if (!selectedSlot) {
+      if (!selectedPickupSlot) {
         setError("Selecciona una franja horaria para recoger tu pedido.");
         return;
       }
@@ -432,10 +448,8 @@ export default function PaymentPage() {
         customer_email: form.email.trim(),
         customer_phone: form.phone.trim(),
 
-        // 🆕 v16 FASE 3
         delivery_mode: deliveryMode,
 
-        // Dirección solo si es home_delivery
         shipping_address:
           deliveryMode === "home_delivery"
             ? {
@@ -448,20 +462,25 @@ export default function PaymentPage() {
               }
             : null,
 
-        // Pickup solo si es store_pickup
+        delivery_date:
+          deliveryMode === "home_delivery" ? selectedDeliveryDate : null,
+        delivery_time_slot:
+          deliveryMode === "home_delivery" ? selectedDeliverySlot : null,
+        delivery_fee: deliveryFee,
+
         pickup_location_id:
           deliveryMode === "store_pickup" ? selectedPickupId : null,
         pickup_time_slot:
-          deliveryMode === "store_pickup" ? selectedSlot : null,
+          deliveryMode === "store_pickup" ? selectedPickupSlot : null,
 
         items,
+        subtotal,
         total,
         payment_method: selectedMethod,
         notes: form.notes.trim() || null,
       });
 
       clearCart();
-
       navigate(`/order-success?order=${order.order_number}`);
     } catch (err) {
       console.error(err);
@@ -514,7 +533,6 @@ export default function PaymentPage() {
         {error && (
           <div className="mb-6 whitespace-pre-line rounded-2xl border-l-4 border-red-500 bg-red-50 p-4 text-sm text-red-700">
             {error}
-
             {storeSlug && (
               <div className="mt-3">
                 <Link
@@ -533,12 +551,10 @@ export default function PaymentPage() {
             <div className="font-bold text-amber-900">
               Esta tienda aún no tiene métodos de pago activos
             </div>
-
             <p className="mt-1 text-sm text-amber-800">
               No se puede completar el pedido hasta que el vendedor configure al
               menos un método de cobro.
             </p>
-
             {storeSlug && (
               <Link
                 to={`/tienda/${storeSlug}`}
@@ -551,9 +567,8 @@ export default function PaymentPage() {
         )}
 
         <form onSubmit={handleSubmit} className="grid gap-8 lg:grid-cols-3">
-          {/* Formulario */}
           <div className="space-y-6 lg:col-span-2">
-            {/* 🆕 v16 FASE 3 - Selector de modo de entrega */}
+            {/* Selector de modo de entrega */}
             {hasPickupAvailable && (
               <div className="rounded-3xl bg-white p-6 shadow-sm">
                 <h2 className="text-lg font-bold text-gray-900">
@@ -561,7 +576,6 @@ export default function PaymentPage() {
                 </h2>
 
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  {/* Home delivery */}
                   <label
                     className={`flex cursor-pointer flex-col rounded-2xl border-2 p-4 transition ${
                       deliveryMode === "home_delivery"
@@ -589,13 +603,14 @@ export default function PaymentPage() {
                           Delivery a domicilio
                         </div>
                         <div className="text-xs text-gray-500">
-                          Lo recibes en tu casa
+                          {deliveryFee > 0
+                            ? `+ S/ ${deliveryFee.toFixed(2)}`
+                            : "Costo por confirmar"}
                         </div>
                       </div>
                     </div>
                   </label>
 
-                  {/* Store pickup */}
                   <label
                     className={`flex cursor-pointer flex-col rounded-2xl border-2 p-4 transition ${
                       deliveryMode === "store_pickup"
@@ -643,7 +658,6 @@ export default function PaymentPage() {
                   <label className="block text-sm font-medium text-gray-700">
                     Nombre completo
                   </label>
-
                   <input
                     name="name"
                     required
@@ -658,7 +672,6 @@ export default function PaymentPage() {
                   <label className="block text-sm font-medium text-gray-700">
                     Correo
                   </label>
-
                   <input
                     name="email"
                     type="email"
@@ -674,7 +687,6 @@ export default function PaymentPage() {
                   <label className="block text-sm font-medium text-gray-700">
                     Celular
                   </label>
-
                   <input
                     name="phone"
                     required
@@ -685,14 +697,13 @@ export default function PaymentPage() {
                   />
                 </div>
 
-                {/* 🆕 Dirección SOLO si es delivery a domicilio */}
+                {/* Dirección SOLO si es delivery */}
                 {deliveryMode === "home_delivery" && (
                   <>
                     <div className="sm:col-span-2">
                       <label className="block text-sm font-medium text-gray-700">
                         Dirección
                       </label>
-
                       <input
                         name="street"
                         required
@@ -707,7 +718,6 @@ export default function PaymentPage() {
                       <label className="block text-sm font-medium text-gray-700">
                         Distrito
                       </label>
-
                       <input
                         name="district"
                         required
@@ -722,7 +732,6 @@ export default function PaymentPage() {
                       <label className="block text-sm font-medium text-gray-700">
                         Ciudad
                       </label>
-
                       <input
                         name="city"
                         required
@@ -737,7 +746,6 @@ export default function PaymentPage() {
                       <label className="block text-sm font-medium text-gray-700">
                         Referencia opcional
                       </label>
-
                       <input
                         name="reference"
                         value={form.reference}
@@ -753,31 +761,98 @@ export default function PaymentPage() {
                   <label className="block text-sm font-medium text-gray-700">
                     Notas opcionales
                   </label>
-
                   <textarea
                     name="notes"
                     rows={2}
                     value={form.notes}
                     onChange={handleChange}
                     className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
-                    placeholder="Color preferido, horario de entrega, etc."
+                    placeholder="Color preferido, indicaciones especiales, etc."
                   />
                 </div>
               </div>
             </div>
 
-            {/* 🆕 v16 FASE 3 - Selector de punto de recojo + franja */}
+            {/* 🆕 v16 FASE 3 - Selector de fecha/hora para DELIVERY */}
+            {deliveryMode === "home_delivery" && deliverySlots.length > 0 && (
+              <div className="rounded-3xl bg-white p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-gray-900">
+                  📅 ¿Cuándo quieres recibir tu pedido?
+                </h2>
+                {deliverySettings?.delivery_notes && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    ℹ️ {deliverySettings.delivery_notes}
+                  </p>
+                )}
+
+                <div className="mt-5 space-y-3">
+                  {deliverySlots.map((daySlot) => (
+                    <div
+                      key={daySlot.date}
+                      className="rounded-2xl border border-gray-100 bg-gray-50 p-3"
+                    >
+                      <div className="text-xs font-bold uppercase tracking-wider text-gray-600 mb-2">
+                        {daySlot.is_today && "🔥 "}
+                        {daySlot.day_short}
+                        {daySlot.is_today && (
+                          <span className="ml-2 rounded-full bg-orange-500 px-2 py-0.5 text-[9px] text-white">
+                            HOY
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {daySlot.slots.map((slot) => {
+                          const active =
+                            selectedDeliveryDate === daySlot.date &&
+                            selectedDeliverySlot === slot;
+                          return (
+                            <button
+                              type="button"
+                              key={slot}
+                              onClick={() => {
+                                setSelectedDeliveryDate(daySlot.date);
+                                setSelectedDeliverySlot(slot);
+                              }}
+                              className={`rounded-full border-2 px-4 py-1.5 text-xs font-semibold transition ${
+                                active
+                                  ? "text-white"
+                                  : "border-gray-200 bg-white text-gray-700 hover:border-gray-400"
+                              }`}
+                              style={
+                                active
+                                  ? {
+                                      borderColor: theme.primary_color,
+                                      backgroundColor: theme.primary_color,
+                                    }
+                                  : undefined
+                              }
+                            >
+                              {slot}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Si no hay slots de delivery configurados */}
+            {deliveryMode === "home_delivery" && deliverySlots.length === 0 && (
+              <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">
+                ⚠️ Esta tienda aún no ha configurado sus horarios de entrega. El
+                vendedor coordinará contigo por WhatsApp.
+              </div>
+            )}
+
+            {/* Selector de punto de recojo + franja */}
             {deliveryMode === "store_pickup" && (
               <div className="rounded-3xl bg-white p-6 shadow-sm">
                 <h2 className="text-lg font-bold text-gray-900">
                   🏪 Elige dónde y cuándo recoger
                 </h2>
 
-                <p className="mt-1 text-sm text-gray-500">
-                  Ve al punto seleccionado dentro de la franja horaria.
-                </p>
-
-                {/* Puntos de recojo */}
                 {pickupLocations.length === 0 ? (
                   <div className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm text-amber-800">
                     Esta tienda aún no tiene puntos de recojo configurados.
@@ -835,15 +910,14 @@ export default function PaymentPage() {
                   </div>
                 )}
 
-                {/* Franjas horarias */}
-                {selectedPickupId && availableSlots.length > 0 && (
+                {selectedPickupId && pickupSlots.length > 0 && (
                   <div className="mt-6">
                     <label className="block text-sm font-semibold text-gray-700 mb-3">
                       Elige día y horario
                     </label>
 
                     <div className="space-y-3">
-                      {availableSlots.map((daySlot) => (
+                      {pickupSlots.map((daySlot) => (
                         <div
                           key={daySlot.date}
                           className="rounded-2xl border border-gray-100 bg-gray-50 p-3"
@@ -851,20 +925,19 @@ export default function PaymentPage() {
                           <div className="text-xs font-bold uppercase tracking-wider text-gray-600 mb-2">
                             {daySlot.day_name}{" "}
                             {new Date(daySlot.date + "T00:00:00").getDate()}{" "}
-                            {new Date(daySlot.date + "T00:00:00").toLocaleDateString(
-                              "es-PE",
-                              { month: "short" }
-                            )}
+                            {new Date(
+                              daySlot.date + "T00:00:00"
+                            ).toLocaleDateString("es-PE", { month: "short" })}
                           </div>
                           <div className="flex flex-wrap gap-2">
                             {daySlot.slots.map((slot) => {
                               const fullSlot = `${daySlot.date} ${slot}`;
-                              const active = selectedSlot === fullSlot;
+                              const active = selectedPickupSlot === fullSlot;
                               return (
                                 <button
                                   type="button"
                                   key={slot}
-                                  onClick={() => setSelectedSlot(fullSlot)}
+                                  onClick={() => setSelectedPickupSlot(fullSlot)}
                                   className={`rounded-full border-2 px-4 py-1.5 text-xs font-semibold transition ${
                                     active
                                       ? "text-white"
@@ -906,7 +979,6 @@ export default function PaymentPage() {
                 {enabledPaymentMethods.map((method) => {
                   const info = PAYMENT_INFO[method.id];
                   const active = selectedMethod === method.id;
-
                   return (
                     <label
                       key={method.id}
@@ -917,9 +989,7 @@ export default function PaymentPage() {
                       }`}
                       style={
                         active
-                          ? {
-                              borderColor: theme.primary_color,
-                            }
+                          ? { borderColor: theme.primary_color }
                           : undefined
                       }
                     >
@@ -931,19 +1001,15 @@ export default function PaymentPage() {
                         onChange={() => setSelectedMethod(method.id)}
                         className="sr-only"
                       />
-
                       <div className="text-3xl">{info.icon}</div>
-
                       <div className="flex-1">
                         <div className="font-bold text-gray-900">
                           {info.name}
                         </div>
-
                         <div className="text-xs text-gray-500">
                           {info.description}
                         </div>
                       </div>
-
                       <div
                         className="flex h-6 w-6 items-center justify-center rounded-full border-2 transition"
                         style={
@@ -976,7 +1042,6 @@ export default function PaymentPage() {
             <div className="sticky top-24 overflow-hidden rounded-3xl bg-white shadow-xl">
               <div className="bg-linear-to-br from-gray-900 to-gray-800 px-6 py-5 text-white">
                 <h2 className="text-lg font-bold">Tu pedido</h2>
-
                 <p className="text-xs text-gray-300">
                   {count} {count === 1 ? "producto" : "productos"}
                 </p>
@@ -993,12 +1058,10 @@ export default function PaymentPage() {
                         <div className="truncate font-medium text-gray-900">
                           {item.name}
                         </div>
-
                         <div className="text-xs text-gray-500">
                           x{item.quantity}
                         </div>
                       </div>
-
                       <div className="ml-3 font-semibold tabular-nums text-gray-900">
                         S/ {(item.price * item.quantity).toFixed(2)}
                       </div>
@@ -1013,18 +1076,52 @@ export default function PaymentPage() {
                       ? "🛵 Entrega a domicilio"
                       : "🏪 Recojo en tienda"}
                   </div>
-                  {deliveryMode === "store_pickup" && selectedSlot && (
-                    <div className="mt-1 text-gray-500">📅 {selectedSlot}</div>
+                  {deliveryMode === "home_delivery" &&
+                    selectedDeliveryDate &&
+                    selectedDeliverySlot && (
+                      <div className="mt-1 text-gray-500">
+                        📅 {selectedDeliveryDate} · {selectedDeliverySlot}
+                      </div>
+                    )}
+                  {deliveryMode === "store_pickup" && selectedPickupSlot && (
+                    <div className="mt-1 text-gray-500">
+                      📅 {selectedPickupSlot}
+                    </div>
                   )}
                 </div>
 
-                <div className="my-5 border-t border-dashed border-gray-200" />
+                <div className="my-4 border-t border-dashed border-gray-200" />
+
+                {/* 🆕 Desglose de precios */}
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Subtotal</span>
+                    <span className="font-semibold tabular-nums text-gray-900">
+                      S/ {subtotal.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Envío</span>
+                    <span
+                      className={`font-semibold tabular-nums ${
+                        deliveryFee === 0
+                          ? "text-emerald-600"
+                          : "text-gray-900"
+                      }`}
+                    >
+                      {deliveryFee === 0
+                        ? "GRATIS"
+                        : `S/ ${deliveryFee.toFixed(2)}`}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="my-4 border-t border-dashed border-gray-200" />
 
                 <div className="flex items-baseline justify-between">
                   <span className="text-base font-bold text-gray-900">
                     Total
                   </span>
-
                   <div className="text-3xl font-extrabold tabular-nums text-gray-900">
                     S/ {total.toFixed(2)}
                   </div>
@@ -1062,7 +1159,7 @@ export default function PaymentPage() {
           </div>
         </form>
       </div>
-      {/* Botón flotante de WhatsApp durante el pago */}
+
       {store?.whatsapp && (
         <WhatsappFloatingButton
           phone={store.whatsapp}
