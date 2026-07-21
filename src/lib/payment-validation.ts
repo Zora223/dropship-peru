@@ -42,6 +42,9 @@ export async function fileToBase64(file: File): Promise<string> {
 
 /**
  * Valida el comprobante de pago llamando a la Edge Function.
+ *
+ * Usa fetch directo (NO el SDK) para evitar problemas de
+ * autenticación cuando el cliente no está logueado.
  */
 export async function validatePaymentReceipt(
   orderId: string,
@@ -60,17 +63,46 @@ export async function validatePaymentReceipt(
   // Convertir a base64
   const imageBase64 = await fileToBase64(imageFile);
 
-  // Llamar Edge Function
-  const { data, error } = await supabase.functions.invoke("validate-payment", {
-    body: {
-      order_id: orderId,
-      image_base64: imageBase64,
-    },
-  });
+  // URL y key desde variables de entorno
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-  if (error) {
-    throw new Error(error.message || "Error al validar el pago");
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error("Configuración de Supabase no disponible");
   }
+
+  // Llamar Edge Function con fetch directo
+  // (evitamos supabase.functions.invoke porque envía tokens
+  // problemáticos cuando el usuario no está logueado)
+  const response = await fetch(
+    `${supabaseUrl}/functions/v1/validate-payment`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": supabaseKey,
+        "Authorization": `Bearer ${supabaseKey}`,
+      },
+      body: JSON.stringify({
+        order_id: orderId,
+        image_base64: imageBase64,
+      }),
+    }
+  );
+
+  // Manejar errores HTTP
+  if (!response.ok) {
+    let errorMessage = `Error ${response.status}: ${response.statusText}`;
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.error || errorData.message || errorMessage;
+    } catch {
+      // Ignorar si no se puede parsear
+    }
+    throw new Error(errorMessage);
+  }
+
+  const data = await response.json();
 
   if (!data) {
     throw new Error("Sin respuesta del servidor");
