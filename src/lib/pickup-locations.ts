@@ -21,6 +21,9 @@ export interface PickupLocation {
   usage_count: number;
   created_at: string;
   updated_at: string;
+  // 🆕 v16 FASE 3
+  accepts_pickup?: boolean;
+  opening_hours?: Record<string, string[]> | null;
 }
 
 // Snapshot que se guarda en orders.pickup_address (JSONB)
@@ -236,47 +239,60 @@ export function guessPickupEmoji(name: string): string {
   if (lower.includes("oficina")) return "🏢";
   return "📍";
 }
+
 // ============================================
 // 🆕 v16 FASE 3 - Pickup para clientes
 // ============================================
 
 /**
  * 🆕 Obtiene puntos de recojo activos de una tienda (para el checkout del cliente).
- * Filtra solo los que aceptan pickup.
+ * FIX: stores.owner_id (no vendor_id)
  */
 export async function getStorePickupLocations(
   storeId: string
 ): Promise<PickupLocation[]> {
-  // Obtener el vendor_id de la tienda
+  // 1. Obtener el owner_id de la tienda
   const { data: store, error: storeErr } = await supabase
     .from("stores")
-    .select("vendor_id")
+    .select("owner_id")
     .eq("id", storeId)
     .maybeSingle();
 
-  if (storeErr || !store) return [];
+  if (storeErr) {
+    console.error("Error obteniendo tienda:", storeErr);
+    return [];
+  }
+  if (!store) return [];
 
+  // 2. Obtener puntos de recojo activos del vendor (owner)
   const { data, error } = await supabase
     .from("vendor_pickup_locations")
     .select("*")
-    .eq("vendor_id", store.vendor_id)
+    .eq("vendor_id", store.owner_id)
     .eq("accepts_pickup", true)
     .order("is_default", { ascending: false });
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    console.error("Error obteniendo pickup locations:", error);
+    return [];
+  }
   return (data ?? []) as PickupLocation[];
 }
 
-/**
- * 🆕 Genera franjas horarias disponibles para los próximos 7 días
- * basado en los horarios del punto de recojo.
- */
+// ============================================
+// 🆕 v16 FASE 3 - Franjas horarias
+// ============================================
+
 export interface TimeSlot {
   date: string;       // "2026-07-22"
   day_name: string;   // "Lunes"
   slots: string[];    // ["09:00-13:00", "15:00-19:00"]
 }
 
+/**
+ * 🆕 Genera franjas horarias disponibles para los próximos N días
+ * basado en los horarios del punto de recojo.
+ */
 export function generateAvailableSlots(
   openingHours: Record<string, string[]> | null,
   daysAhead: number = 7
