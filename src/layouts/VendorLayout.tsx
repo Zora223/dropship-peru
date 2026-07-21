@@ -9,6 +9,7 @@ const navItems = [
   { to: "/vendor/reviews", label: "Reseñas", icon: "⭐" },
   { to: "/vendor/analytics", label: "Analytics", icon: "📈" },
   { to: "/vendor/pickup-locations", label: "Puntos de recojo", icon: "📍" }, // 🆕 v13
+  { to: "/vendor/delivery-settings", label: "Horarios de entrega", icon: "🚚" }, // 🆕 v16 FASE 3
   { to: "/vendor/payments", label: "Métodos de cobro", icon: "💳" },
   { to: "/vendor/theme", label: "Personalizar tienda", icon: "🎨" },
   { to: "/vendor/settings", label: "Configuración", icon: "⚙️" },

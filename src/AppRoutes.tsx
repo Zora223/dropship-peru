@@ -1,4 +1,5 @@
 // src/AppRoutes.tsx
+import VendorDeliverySettingsPage from "./pages/vendor/VendorDeliverySettingsPage";
 import AdminWhatsappTemplatesPage from "./pages/admin/AdminWhatsappTemplatesPage";
 import AdminWhatsappLogsPage from "./pages/admin/AdminWhatsappLogsPage"; // 🆕 v13
 import VendorOnboardingPage from "./pages/vendor/VendorOnboardingPage";
@@ -125,6 +126,7 @@ export default function AppRoutes() {
         }
       >
         <Route index element={<VendorDashboard />} />
+        <Route path="delivery-settings" element={<VendorDeliverySettingsPage />} />
         <Route path="catalog" element={<VendorCatalogPage />} />
         <Route path="products" element={<VendorProductsPage />} />
         <Route path="orders" element={<VendorOrdersPage />} />
