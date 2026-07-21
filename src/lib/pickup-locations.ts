@@ -236,3 +236,127 @@ export function guessPickupEmoji(name: string): string {
   if (lower.includes("oficina")) return "🏢";
   return "📍";
 }
+// ============================================
+// 🆕 v16 FASE 3 - Pickup para clientes
+// ============================================
+
+/**
+ * 🆕 Obtiene puntos de recojo activos de una tienda (para el checkout del cliente).
+ * Filtra solo los que aceptan pickup.
+ */
+export async function getStorePickupLocations(
+  storeId: string
+): Promise<PickupLocation[]> {
+  // Obtener el vendor_id de la tienda
+  const { data: store, error: storeErr } = await supabase
+    .from("stores")
+    .select("vendor_id")
+    .eq("id", storeId)
+    .maybeSingle();
+
+  if (storeErr || !store) return [];
+
+  const { data, error } = await supabase
+    .from("vendor_pickup_locations")
+    .select("*")
+    .eq("vendor_id", store.vendor_id)
+    .eq("accepts_pickup", true)
+    .order("is_default", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as PickupLocation[];
+}
+
+/**
+ * 🆕 Genera franjas horarias disponibles para los próximos 7 días
+ * basado en los horarios del punto de recojo.
+ */
+export interface TimeSlot {
+  date: string;       // "2026-07-22"
+  day_name: string;   // "Lunes"
+  slots: string[];    // ["09:00-13:00", "15:00-19:00"]
+}
+
+export function generateAvailableSlots(
+  openingHours: Record<string, string[]> | null,
+  daysAhead: number = 7
+): TimeSlot[] {
+  if (!openingHours) return [];
+
+  const dayKeys = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+  const dayNames = [
+    "Domingo",
+    "Lunes",
+    "Martes",
+    "Miércoles",
+    "Jueves",
+    "Viernes",
+    "Sábado",
+  ];
+
+  const result: TimeSlot[] = [];
+  const now = new Date();
+
+  for (let i = 1; i <= daysAhead; i++) {
+    const date = new Date(now);
+    date.setDate(now.getDate() + i);
+
+    const dayIndex = date.getDay(); // 0=domingo
+    const dayKey = dayKeys[dayIndex];
+    const slots = openingHours[dayKey] ?? [];
+
+    if (slots.length > 0) {
+      const yyyy = date.getFullYear();
+      const mm = String(date.getMonth() + 1).padStart(2, "0");
+      const dd = String(date.getDate()).padStart(2, "0");
+
+      result.push({
+        date: `${yyyy}-${mm}-${dd}`,
+        day_name: dayNames[dayIndex],
+        slots,
+      });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * 🆕 Formatea un time_slot guardado en la orden.
+ * Ej: "2026-07-22 14:00-17:00" → "Miércoles 22 Jul, 14:00-17:00"
+ */
+export function formatTimeSlot(timeSlot: string | null): string {
+  if (!timeSlot) return "";
+
+  const [date, hours] = timeSlot.split(" ");
+  if (!date || !hours) return timeSlot;
+
+  const d = new Date(date + "T00:00:00");
+  const dayNames = [
+    "Dom",
+    "Lun",
+    "Mar",
+    "Mié",
+    "Jue",
+    "Vie",
+    "Sáb",
+  ];
+  const monthNames = [
+    "Ene",
+    "Feb",
+    "Mar",
+    "Abr",
+    "May",
+    "Jun",
+    "Jul",
+    "Ago",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dic",
+  ];
+
+  return `${dayNames[d.getDay()]} ${d.getDate()} ${
+    monthNames[d.getMonth()]
+  }, ${hours}`;
+}

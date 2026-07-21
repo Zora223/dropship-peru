@@ -3,7 +3,16 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useCart } from "../contexts/CartContext";
 import { createOrder } from "../lib/orders-checkout";
+import type { DeliveryMode } from "../lib/orders-checkout";
 import { fetchPublicStoreById } from "../lib/public-store";
+import {
+  getStorePickupLocations,
+  generateAvailableSlots,
+} from "../lib/pickup-locations";
+import type {
+  PickupLocation,
+  TimeSlot,
+} from "../lib/pickup-locations";
 import type {
   DbStore,
   DbStorePaymentMethod,
@@ -77,10 +86,6 @@ function getWhatsappUrl(value: string) {
   return `https://wa.me/${digits}`;
 }
 
-/**
- * Devuelve siempre un array de métodos de pago habilitados,
- * ordenados según PAYMENT_ORDER. Blindado ante datos malformados.
- */
 function getEnabledPaymentMethods(
   paymentMethods: unknown
 ): DbStorePaymentMethod[] {
@@ -250,6 +255,16 @@ export default function PaymentPage() {
   const [selectedMethod, setSelectedMethod] =
     useState<PaymentMethodType | null>(null);
 
+  // 🆕 v16 FASE 3 - Modo de entrega
+  const [deliveryMode, setDeliveryMode] =
+    useState<DeliveryMode>("home_delivery");
+
+  // 🆕 v16 FASE 3 - Puntos de recojo
+  const [pickupLocations, setPickupLocations] = useState<PickupLocation[]>([]);
+  const [selectedPickupId, setSelectedPickupId] = useState<string | null>(null);
+  const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -287,8 +302,20 @@ export default function PaymentPage() {
         setStore(data);
 
         const activeMethods = getEnabledPaymentMethods(data.payment_methods);
-
         setSelectedMethod(activeMethods[0]?.id ?? null);
+
+        // 🆕 Cargar puntos de recojo de la tienda
+        try {
+          const locations = await getStorePickupLocations(storeId);
+          setPickupLocations(locations);
+          if (locations.length > 0) {
+            const defaultLoc =
+              locations.find((l) => l.is_default) ?? locations[0];
+            setSelectedPickupId(defaultLoc.id);
+          }
+        } catch (locErr) {
+          console.warn("No se pudieron cargar los puntos de recojo:", locErr);
+        }
       } catch (err) {
         console.error(err);
         setError(
@@ -303,6 +330,24 @@ export default function PaymentPage() {
 
     loadStore();
   }, [storeId]);
+
+  // 🆕 Cuando cambia el punto de recojo, actualizar franjas
+  useEffect(() => {
+    if (!selectedPickupId) {
+      setAvailableSlots([]);
+      setSelectedSlot(null);
+      return;
+    }
+    const location = pickupLocations.find((l) => l.id === selectedPickupId);
+    if (!location) return;
+
+    const openingHours =
+      (location as any).opening_hours as Record<string, string[]> | null;
+
+    const slots = generateAvailableSlots(openingHours ?? null, 7);
+    setAvailableSlots(slots);
+    setSelectedSlot(null);
+  }, [selectedPickupId, pickupLocations]);
 
   const enabledPaymentMethods = useMemo(() => {
     return getEnabledPaymentMethods(store?.payment_methods);
@@ -365,6 +410,18 @@ export default function PaymentPage() {
       return;
     }
 
+    // 🆕 Validar según modo
+    if (deliveryMode === "store_pickup") {
+      if (!selectedPickupId) {
+        setError("Selecciona un punto de recojo.");
+        return;
+      }
+      if (!selectedSlot) {
+        setError("Selecciona una franja horaria para recoger tu pedido.");
+        return;
+      }
+    }
+
     setError(null);
     setSubmitting(true);
 
@@ -374,14 +431,29 @@ export default function PaymentPage() {
         customer_name: form.name.trim(),
         customer_email: form.email.trim(),
         customer_phone: form.phone.trim(),
-        shipping_address: {
-          full_name: form.name.trim(),
-          phone: form.phone.trim(),
-          street: form.street.trim(),
-          district: form.district.trim(),
-          city: form.city.trim(),
-          reference: form.reference.trim() || null,
-        },
+
+        // 🆕 v16 FASE 3
+        delivery_mode: deliveryMode,
+
+        // Dirección solo si es home_delivery
+        shipping_address:
+          deliveryMode === "home_delivery"
+            ? {
+                full_name: form.name.trim(),
+                phone: form.phone.trim(),
+                street: form.street.trim(),
+                district: form.district.trim(),
+                city: form.city.trim(),
+                reference: form.reference.trim() || null,
+              }
+            : null,
+
+        // Pickup solo si es store_pickup
+        pickup_location_id:
+          deliveryMode === "store_pickup" ? selectedPickupId : null,
+        pickup_time_slot:
+          deliveryMode === "store_pickup" ? selectedSlot : null,
+
         items,
         total,
         payment_method: selectedMethod,
@@ -398,6 +470,8 @@ export default function PaymentPage() {
       setSubmitting(false);
     }
   };
+
+  const hasPickupAvailable = pickupLocations.length > 0;
 
   return (
     <div
@@ -479,6 +553,86 @@ export default function PaymentPage() {
         <form onSubmit={handleSubmit} className="grid gap-8 lg:grid-cols-3">
           {/* Formulario */}
           <div className="space-y-6 lg:col-span-2">
+            {/* 🆕 v16 FASE 3 - Selector de modo de entrega */}
+            {hasPickupAvailable && (
+              <div className="rounded-3xl bg-white p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-gray-900">
+                  🚚 ¿Cómo quieres recibir tu pedido?
+                </h2>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {/* Home delivery */}
+                  <label
+                    className={`flex cursor-pointer flex-col rounded-2xl border-2 p-4 transition ${
+                      deliveryMode === "home_delivery"
+                        ? "bg-rose-50/50"
+                        : "border-gray-100 hover:border-gray-300"
+                    }`}
+                    style={
+                      deliveryMode === "home_delivery"
+                        ? { borderColor: theme.primary_color }
+                        : undefined
+                    }
+                  >
+                    <input
+                      type="radio"
+                      name="deliveryMode"
+                      value="home_delivery"
+                      checked={deliveryMode === "home_delivery"}
+                      onChange={() => setDeliveryMode("home_delivery")}
+                      className="sr-only"
+                    />
+                    <div className="flex items-center gap-3">
+                      <div className="text-3xl">🛵</div>
+                      <div className="flex-1">
+                        <div className="font-bold text-gray-900">
+                          Delivery a domicilio
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Lo recibes en tu casa
+                        </div>
+                      </div>
+                    </div>
+                  </label>
+
+                  {/* Store pickup */}
+                  <label
+                    className={`flex cursor-pointer flex-col rounded-2xl border-2 p-4 transition ${
+                      deliveryMode === "store_pickup"
+                        ? "bg-rose-50/50"
+                        : "border-gray-100 hover:border-gray-300"
+                    }`}
+                    style={
+                      deliveryMode === "store_pickup"
+                        ? { borderColor: theme.primary_color }
+                        : undefined
+                    }
+                  >
+                    <input
+                      type="radio"
+                      name="deliveryMode"
+                      value="store_pickup"
+                      checked={deliveryMode === "store_pickup"}
+                      onChange={() => setDeliveryMode("store_pickup")}
+                      className="sr-only"
+                    />
+                    <div className="flex items-center gap-3">
+                      <div className="text-3xl">🏪</div>
+                      <div className="flex-1">
+                        <div className="font-bold text-gray-900">
+                          Recojo en tienda
+                        </div>
+                        <div className="text-xs text-emerald-600 font-semibold">
+                          ¡Sin costo de envío!
+                        </div>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* Datos de contacto */}
             <div className="rounded-3xl bg-white p-6 shadow-sm">
               <h2 className="text-lg font-bold text-gray-900">
                 📦 Datos de contacto
@@ -531,64 +685,69 @@ export default function PaymentPage() {
                   />
                 </div>
 
-                <div className="sm:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Dirección
-                  </label>
+                {/* 🆕 Dirección SOLO si es delivery a domicilio */}
+                {deliveryMode === "home_delivery" && (
+                  <>
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Dirección
+                      </label>
 
-                  <input
-                    name="street"
-                    required
-                    value={form.street}
-                    onChange={handleChange}
-                    className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
-                    placeholder="Av. Arequipa 1234"
-                  />
-                </div>
+                      <input
+                        name="street"
+                        required
+                        value={form.street}
+                        onChange={handleChange}
+                        className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
+                        placeholder="Av. Arequipa 1234"
+                      />
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Distrito
-                  </label>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Distrito
+                      </label>
 
-                  <input
-                    name="district"
-                    required
-                    value={form.district}
-                    onChange={handleChange}
-                    className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
-                    placeholder="Miraflores"
-                  />
-                </div>
+                      <input
+                        name="district"
+                        required
+                        value={form.district}
+                        onChange={handleChange}
+                        className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
+                        placeholder="Miraflores"
+                      />
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Ciudad
-                  </label>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Ciudad
+                      </label>
 
-                  <input
-                    name="city"
-                    required
-                    value={form.city}
-                    onChange={handleChange}
-                    className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
-                    placeholder="Lima"
-                  />
-                </div>
+                      <input
+                        name="city"
+                        required
+                        value={form.city}
+                        onChange={handleChange}
+                        className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
+                        placeholder="Lima"
+                      />
+                    </div>
 
-                <div className="sm:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Referencia opcional
-                  </label>
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Referencia opcional
+                      </label>
 
-                  <input
-                    name="reference"
-                    value={form.reference}
-                    onChange={handleChange}
-                    className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
-                    placeholder="Edificio azul, frente al parque"
-                  />
-                </div>
+                      <input
+                        name="reference"
+                        value={form.reference}
+                        onChange={handleChange}
+                        className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
+                        placeholder="Edificio azul, frente al parque"
+                      />
+                    </div>
+                  </>
+                )}
 
                 <div className="sm:col-span-2">
                   <label className="block text-sm font-medium text-gray-700">
@@ -607,6 +766,133 @@ export default function PaymentPage() {
               </div>
             </div>
 
+            {/* 🆕 v16 FASE 3 - Selector de punto de recojo + franja */}
+            {deliveryMode === "store_pickup" && (
+              <div className="rounded-3xl bg-white p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-gray-900">
+                  🏪 Elige dónde y cuándo recoger
+                </h2>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  Ve al punto seleccionado dentro de la franja horaria.
+                </p>
+
+                {/* Puntos de recojo */}
+                {pickupLocations.length === 0 ? (
+                  <div className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm text-amber-800">
+                    Esta tienda aún no tiene puntos de recojo configurados.
+                  </div>
+                ) : (
+                  <div className="mt-5 space-y-3">
+                    {pickupLocations.map((location) => {
+                      const active = selectedPickupId === location.id;
+                      return (
+                        <label
+                          key={location.id}
+                          className={`flex cursor-pointer items-start gap-3 rounded-2xl border-2 p-4 transition ${
+                            active
+                              ? "bg-rose-50/50"
+                              : "border-gray-100 hover:border-gray-300"
+                          }`}
+                          style={
+                            active
+                              ? { borderColor: theme.primary_color }
+                              : undefined
+                          }
+                        >
+                          <input
+                            type="radio"
+                            name="pickup"
+                            value={location.id}
+                            checked={active}
+                            onChange={() => setSelectedPickupId(location.id)}
+                            className="sr-only"
+                          />
+                          <div className="text-2xl">📍</div>
+                          <div className="flex-1">
+                            <div className="font-bold text-gray-900">
+                              {location.name}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              {location.street}
+                              {location.district && `, ${location.district}`}
+                              {location.city && `, ${location.city}`}
+                            </div>
+                            {location.reference && (
+                              <div className="text-xs text-gray-400 mt-1">
+                                📌 {location.reference}
+                              </div>
+                            )}
+                            {location.contact_phone && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                📞 {location.contact_phone}
+                              </div>
+                            )}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Franjas horarias */}
+                {selectedPickupId && availableSlots.length > 0 && (
+                  <div className="mt-6">
+                    <label className="block text-sm font-semibold text-gray-700 mb-3">
+                      Elige día y horario
+                    </label>
+
+                    <div className="space-y-3">
+                      {availableSlots.map((daySlot) => (
+                        <div
+                          key={daySlot.date}
+                          className="rounded-2xl border border-gray-100 bg-gray-50 p-3"
+                        >
+                          <div className="text-xs font-bold uppercase tracking-wider text-gray-600 mb-2">
+                            {daySlot.day_name}{" "}
+                            {new Date(daySlot.date + "T00:00:00").getDate()}{" "}
+                            {new Date(daySlot.date + "T00:00:00").toLocaleDateString(
+                              "es-PE",
+                              { month: "short" }
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {daySlot.slots.map((slot) => {
+                              const fullSlot = `${daySlot.date} ${slot}`;
+                              const active = selectedSlot === fullSlot;
+                              return (
+                                <button
+                                  type="button"
+                                  key={slot}
+                                  onClick={() => setSelectedSlot(fullSlot)}
+                                  className={`rounded-full border-2 px-4 py-1.5 text-xs font-semibold transition ${
+                                    active
+                                      ? "text-white"
+                                      : "border-gray-200 bg-white text-gray-700 hover:border-gray-400"
+                                  }`}
+                                  style={
+                                    active
+                                      ? {
+                                          borderColor: theme.primary_color,
+                                          backgroundColor: theme.primary_color,
+                                        }
+                                      : undefined
+                                  }
+                                >
+                                  {slot}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Método de pago */}
             <div className="rounded-3xl bg-white p-6 shadow-sm">
               <h2 className="text-lg font-bold text-gray-900">
                 💳 Método de pago
@@ -720,6 +1006,18 @@ export default function PaymentPage() {
                   ))}
                 </div>
 
+                {/* 🆕 Info del modo de entrega */}
+                <div className="mt-4 rounded-xl bg-gray-50 p-3 text-xs">
+                  <div className="font-semibold text-gray-700">
+                    {deliveryMode === "home_delivery"
+                      ? "🛵 Entrega a domicilio"
+                      : "🏪 Recojo en tienda"}
+                  </div>
+                  {deliveryMode === "store_pickup" && selectedSlot && (
+                    <div className="mt-1 text-gray-500">📅 {selectedSlot}</div>
+                  )}
+                </div>
+
                 <div className="my-5 border-t border-dashed border-gray-200" />
 
                 <div className="flex items-baseline justify-between">
@@ -765,14 +1063,14 @@ export default function PaymentPage() {
         </form>
       </div>
       {/* Botón flotante de WhatsApp durante el pago */}
-{store?.whatsapp && (
-  <WhatsappFloatingButton
-    phone={store.whatsapp}
-    tooltip="¿Dudas con el pago?"
-    subtitle="Te ayudamos a completar tu compra"
-    message={`Hola! Tengo una consulta sobre mi pedido en ${store.name} 💳`}
-  />
-)}
+      {store?.whatsapp && (
+        <WhatsappFloatingButton
+          phone={store.whatsapp}
+          tooltip="¿Dudas con el pago?"
+          subtitle="Te ayudamos a completar tu compra"
+          message={`Hola! Tengo una consulta sobre mi pedido en ${store.name} 💳`}
+        />
+      )}
     </div>
   );
 }

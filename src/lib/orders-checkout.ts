@@ -6,11 +6,19 @@ import type {
   DbStorePaymentMethod,
 } from "../types/database";
 
+// 🆕 v16 FASE 3 - Modo de entrega
+export type DeliveryMode = "home_delivery" | "store_pickup";
+
 export interface CheckoutInput {
   storeId: string;
   customer_name: string;
   customer_email: string;
   customer_phone: string;
+
+  // 🆕 v16 FASE 3
+  delivery_mode: DeliveryMode;
+
+  // Solo si delivery_mode === "home_delivery"
   shipping_address: {
     full_name: string;
     phone: string;
@@ -18,7 +26,12 @@ export interface CheckoutInput {
     district: string;
     city: string;
     reference: string | null;
-  };
+  } | null;
+
+  // 🆕 Solo si delivery_mode === "store_pickup"
+  pickup_location_id?: string | null;
+  pickup_time_slot?: string | null;
+
   items: CartItem[];
   total: number;
   payment_method: PaymentMethodType;
@@ -96,7 +109,6 @@ export async function validateStock(items: CartItem[]): Promise<string[]> {
 // ⚠️ FUNCIÓN discountStock() ELIMINADA
 // El descuento de stock ahora lo hace el trigger SQL:
 //   → trg_reduce_stock_on_order (AFTER INSERT en orders)
-// Esto evita la doble reducción y garantiza atomicidad.
 
 export async function createOrder(input: CheckoutInput): Promise<DbOrder> {
   if (!input.items.length) throw new Error("El carrito está vacío.");
@@ -104,11 +116,27 @@ export async function createOrder(input: CheckoutInput): Promise<DbOrder> {
     throw new Error("Ingresa tu nombre completo.");
   if (!input.customer_phone.trim()) throw new Error("Ingresa tu celular.");
 
+  // 🆕 v16 FASE 3 - Validar según modo de entrega
+  if (input.delivery_mode === "home_delivery") {
+    if (!input.shipping_address) {
+      throw new Error("Falta la dirección de entrega.");
+    }
+    if (!input.shipping_address.street?.trim()) {
+      throw new Error("Ingresa tu dirección.");
+    }
+  } else if (input.delivery_mode === "store_pickup") {
+    if (!input.pickup_location_id) {
+      throw new Error("Selecciona un punto de recojo.");
+    }
+    if (!input.pickup_time_slot) {
+      throw new Error("Selecciona una franja horaria para recoger.");
+    }
+  }
+
   await validatePaymentMethod(input.storeId, input.payment_method);
   const errors = await validateStock(input.items);
   if (errors.length > 0) throw new Error(errors.join("\n"));
 
-  // Sincronizado milimétricamente con AdminOrdersPage.tsx:
   const orderItems = input.items.map((item) => ({
     product_id: item.productId,
     name: item.name,
@@ -122,6 +150,7 @@ export async function createOrder(input: CheckoutInput): Promise<DbOrder> {
   const has_catalog_items = input.items.some(
     (item) => item.source === "catalog"
   );
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -134,7 +163,18 @@ export async function createOrder(input: CheckoutInput): Promise<DbOrder> {
       customer_name: input.customer_name,
       customer_email: input.customer_email,
       customer_phone: input.customer_phone,
-      shipping_address: input.shipping_address,
+
+      // Dirección solo si es home_delivery
+      shipping_address:
+        input.delivery_mode === "home_delivery"
+          ? input.shipping_address
+          : null,
+
+      // 🆕 v16 FASE 3
+      delivery_mode: input.delivery_mode,
+      pickup_location_id: input.pickup_location_id ?? null,
+      pickup_time_slot: input.pickup_time_slot ?? null,
+
       items: orderItems,
       subtotal: input.total,
       total: input.total,
@@ -148,9 +188,6 @@ export async function createOrder(input: CheckoutInput): Promise<DbOrder> {
 
   if (error)
     throw new Error("Error en el motor de base de datos: " + error.message);
-
-  // ✅ Stock reducido automáticamente por trigger SQL
-  //    (trg_reduce_stock_on_order)
 
   return data as DbOrder;
 }
