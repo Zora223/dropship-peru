@@ -3,28 +3,106 @@
 
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { supabase } from "../../lib/supabase";
 import { useToast } from "../../contexts/ToastContext";
 import { getMySupplierProfile, type SupplierProfile } from "../../lib/suppliers";
+
+// ============================================
+// TIPOS
+// ============================================
+
+interface DashboardStats {
+  pendingOrders: number;     // pedidos nuevos por atender
+  confirmedToday: number;    // confirmados hoy
+  pendingEarnings: number;   // 🔥 total por cobrar (pendiente)
+  totalProducts: number;     // productos publicados
+}
 
 export default function SupplierDashboard() {
   const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<SupplierProfile | null>(null);
+  const [stats, setStats] = useState<DashboardStats>({
+    pendingOrders: 0,
+    confirmedToday: 0,
+    pendingEarnings: 0,
+    totalProducts: 0,
+  });
 
   useEffect(() => {
-    loadProfile();
+    loadAll();
   }, []);
 
-  async function loadProfile() {
+  async function loadAll() {
     try {
       setLoading(true);
       const data = await getMySupplierProfile();
+      console.log("🔍 [Dashboard] Profile cargado:", data);
       setProfile(data);
+
+      // Solo cargar stats si está aprobado
+      if (data?.is_active) {
+        await loadStats(data.id);
+      }
     } catch (err: any) {
+      console.error("❌ [Dashboard] Error:", err);
       toast.error("Error", err.message);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function loadStats(supplierId: string) {
+    console.log("🔍 [Dashboard] Cargando stats para supplier:", supplierId);
+
+    // Fecha de hoy (inicio y fin)
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    // 🔹 1. Pedidos pendientes (por atender)
+    const { count: pendingOrders, error: e1 } = await supabase
+      .from("supplier_orders")
+      .select("*", { count: "exact", head: true })
+      .eq("supplier_id", supplierId)
+      .eq("status", "pending");
+    console.log("📦 [Dashboard] Pending orders:", pendingOrders, "Error:", e1);
+
+    // 🔹 2. Confirmados hoy
+    const { count: confirmedToday, error: e2 } = await supabase
+      .from("supplier_orders")
+      .select("*", { count: "exact", head: true })
+      .eq("supplier_id", supplierId)
+      .eq("status", "confirmed")
+      .gte("confirmed_at", todayStart.toISOString())
+      .lte("confirmed_at", todayEnd.toISOString());
+    console.log("✅ [Dashboard] Confirmed today:", confirmedToday, "Error:", e2);
+
+    // 🔹 3. Ganancias pendientes (todo lo que le deben)
+    const { data: pendingEarningsData, error: e3 } = await supabase
+      .from("supplier_earnings")
+      .select("amount")
+      .eq("supplier_id", supplierId)
+      .eq("status", "pending");
+    console.log("💰 [Dashboard] Pending earnings:", pendingEarningsData, "Error:", e3);
+
+    const totalPending =
+      pendingEarningsData?.reduce((acc, e) => acc + Number(e.amount), 0) || 0;
+
+    // 🔹 4. Total productos
+    const { count: totalProducts, error: e4 } = await supabase
+      .from("catalog_products")
+      .select("*", { count: "exact", head: true })
+      .eq("supplier_id", supplierId);
+    console.log("🛒 [Dashboard] Total products:", totalProducts, "Error:", e4);
+
+    setStats({
+      pendingOrders: pendingOrders || 0,
+      confirmedToday: confirmedToday || 0,
+      pendingEarnings: totalPending,
+      totalProducts: totalProducts || 0,
+    });
   }
 
   if (loading) {
@@ -60,28 +138,28 @@ export default function SupplierDashboard() {
       {/* Stats de hoy */}
       <div>
         <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-gray-500">
-          📊 Hoy
+          📊 Resumen
         </h2>
         <div className="grid grid-cols-3 gap-3">
           <StatCard
             icon="🆕"
             label="Por atender"
-            value={0}
+            value={stats.pendingOrders}
             hint="pedidos nuevos"
             color="amber"
           />
           <StatCard
             icon="✅"
             label="Confirmados"
-            value={0}
+            value={stats.confirmedToday}
             hint="hoy"
             color="emerald"
           />
           <StatCard
             icon="💰"
-            label="Cobrado"
-            value="S/. 0"
-            hint="hoy"
+            label="Por cobrar"
+            value={`S/. ${stats.pendingEarnings.toFixed(2)}`}
+            hint="pendiente"
             color="blue"
           />
         </div>
@@ -98,13 +176,13 @@ export default function SupplierDashboard() {
             icon="📦"
             title="Pedidos"
             description="Ver pedidos pendientes de atender"
-            badge={0}
+            badge={stats.pendingOrders}
           />
           <QuickAction
             to="/supplier/products"
             icon="🛒"
             title="Mis productos"
-            description="Gestiona tu catálogo"
+            description={`${stats.totalProducts} producto${stats.totalProducts !== 1 ? "s" : ""} publicado${stats.totalProducts !== 1 ? "s" : ""}`}
           />
           <QuickAction
             to="/supplier/earnings"
@@ -121,8 +199,8 @@ export default function SupplierDashboard() {
         </div>
       </div>
 
-      {/* Tips iniciales */}
-      {profile?.total_products === 0 && (
+      {/* Tips iniciales — solo si NO tiene productos */}
+      {stats.totalProducts === 0 && (
         <div className="rounded-2xl border-2 border-dashed border-amber-200 bg-amber-50 p-6">
           <h3 className="text-sm font-bold text-amber-900">
             🎯 ¡Empieza a vender!
