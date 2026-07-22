@@ -1,9 +1,11 @@
 // src/components/vendor/PickupOrdersSection.tsx
 // 🆕 v17 - Sección de pedidos pickup en el dashboard del vendor
+// 🆕 v19 - Botón "Notificar cliente" (dispara WhatsApp con código)
 import { useEffect, useState } from "react";
 import {
   listMyPickupOrders,
   completePickup,
+  markAsReadyForPickup,
   type VendorPickupOrder,
 } from "../../lib/vendor-pickup-orders";
 import { useToast } from "../../contexts/ToastContext";
@@ -13,6 +15,7 @@ export default function PickupOrdersSection({ storeId }: { storeId: string }) {
   const [orders, setOrders] = useState<VendorPickupOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [verifying, setVerifying] = useState<string | null>(null);
+  const [notifying, setNotifying] = useState<string | null>(null);
   const [codeInputs, setCodeInputs] = useState<Record<string, string>>({});
 
   async function loadOrders() {
@@ -55,6 +58,26 @@ export default function PickupOrdersSection({ storeId }: { storeId: string }) {
     }
   }
 
+  async function handleNotifyReady(order: VendorPickupOrder) {
+    if (!confirm(`¿Notificar a ${order.customer_name} que su pedido está listo? Se le enviará un WhatsApp con el código de recojo.`)) {
+      return;
+    }
+
+    try {
+      setNotifying(order.id);
+      await markAsReadyForPickup(order.id);
+      toast.success(
+        "📱 Cliente notificado",
+        `Se envió WhatsApp a ${order.customer_name} con el código`
+      );
+      loadOrders();
+    } catch (err: any) {
+      toast.error("Error", err.message ?? "No se pudo notificar al cliente");
+    } finally {
+      setNotifying(null);
+    }
+  }
+
   if (loading) return null;
   if (orders.length === 0) return null;
 
@@ -72,7 +95,7 @@ export default function PickupOrdersSection({ storeId }: { storeId: string }) {
             </span>
           </h2>
           <p className="mt-1 text-sm text-gray-500">
-            Verifica el código del cliente y marca como entregado
+            Notifica al cliente cuando esté listo y verifica el código al entregar
           </p>
         </div>
         <button
@@ -96,12 +119,12 @@ export default function PickupOrdersSection({ storeId }: { storeId: string }) {
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-mono text-xs font-bold text-gray-500">
                       {order.order_number}
                     </span>
                     <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white">
-                      LISTO
+                      LISTO · CLIENTE NOTIFICADO
                     </span>
                   </div>
                   <h3 className="mt-1 font-bold text-gray-900">
@@ -168,21 +191,48 @@ export default function PickupOrdersSection({ storeId }: { storeId: string }) {
           {preparingOrders.map((order) => (
             <div
               key={order.id}
-              className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm"
+              className="rounded-2xl border border-amber-200 bg-amber-50 p-4"
             >
-              <div className="flex items-center justify-between gap-3">
-                <div>
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="min-w-0 flex-1">
                   <span className="font-mono text-xs text-gray-500">
                     {order.order_number}
                   </span>
-                  <p className="font-bold text-gray-900">
+                  <p className="font-bold text-gray-900 mt-0.5">
                     👤 {order.customer_name}
                   </p>
+                  <p className="text-xs text-gray-600">
+                    📞 {order.customer_phone}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-gray-900">
+                    💰 S/ {Number(order.total).toFixed(2)} ·{" "}
+                    {order.items?.length ?? 0} items
+                  </p>
+                  {order.pickup_time_slot && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      🕒 {order.pickup_time_slot}
+                    </p>
+                  )}
                 </div>
-                <p className="font-semibold text-gray-900">
-                  S/ {Number(order.total).toFixed(2)}
-                </p>
               </div>
+
+              {/* 🆕 v19 - Botón para notificar al cliente */}
+              <button
+                onClick={() => handleNotifyReady(order)}
+                disabled={notifying === order.id}
+                className="mt-3 w-full rounded-xl bg-purple-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-purple-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {notifying === order.id ? (
+                  "Enviando notificación..."
+                ) : (
+                  <>
+                    📱 Notificar cliente (listo para recojo)
+                  </>
+                )}
+              </button>
+              <p className="mt-1.5 text-[11px] text-center text-gray-500">
+                Se enviará WhatsApp al cliente con el código de recojo
+              </p>
             </div>
           ))}
         </div>

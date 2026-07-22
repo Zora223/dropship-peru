@@ -1,5 +1,6 @@
 // src/lib/vendor-pickup-orders.ts
 // 🆕 v17 - Gestión de pedidos pickup del vendor
+// 🆕 v19 - Agrega markAsReadyForPickup (dispara WhatsApp)
 import { supabase } from "./supabase";
 
 export interface VendorPickupOrder {
@@ -49,6 +50,22 @@ export async function listMyPickupOrders(
 
   if (error) throw error;
   return (data || []) as VendorPickupOrder[];
+}
+
+/**
+ * 🆕 v19 - Marca el pedido como "listo para recoger".
+ * Setea pickup_ready_at → dispara trigger WhatsApp al cliente con el código.
+ */
+export async function markAsReadyForPickup(orderId: string): Promise<void> {
+  const { error } = await supabase
+    .from("orders")
+    .update({
+      pickup_ready_at: new Date().toISOString(),
+    })
+    .eq("id", orderId)
+    .is("pickup_ready_at", null); // Solo si no está ya listo
+
+  if (error) throw error;
 }
 
 /**
