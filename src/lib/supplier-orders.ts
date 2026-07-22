@@ -1,7 +1,7 @@
 // src/lib/supplier-orders.ts
 // 🆕 v16 FASE 3 - Gestión de órdenes del proveedor
-// 🔥 v17 FIX: pending_revenue ahora viene de supplier_earnings (real)
-// 🔍 v17 DEBUG: logs para verificar JOIN
+// 🔥 v17 FIX: pending_revenue viene de supplier_earnings (real)
+// 🔥 v17 FIX: JOIN manual para evitar problemas de RLS
 import { supabase } from "./supabase";
 
 // ============================================
@@ -51,7 +51,7 @@ export interface SupplierOrder {
   created_at: string;
   updated_at: string;
 
-  // Relaciones (joins)
+  // Relaciones (joins manuales)
   order?: {
     id: string;
     order_number: string;
@@ -97,6 +97,7 @@ export interface SupplierOrderStats {
 
 /**
  * Lista órdenes del proveedor autenticado.
+ * 🔥 v17: JOIN MANUAL para evitar problemas de RLS
  */
 export async function listMySupplierOrders(filters?: {
   status?: SupplierOrderStatus | "all";
@@ -108,30 +109,12 @@ export async function listMySupplierOrders(filters?: {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("No autenticado");
 
+  // 1️⃣ Traer supplier_orders + store (que sí funciona)
   let query = supabase
     .from("supplier_orders")
     .select(
       `
       *,
-      order:orders!supplier_orders_order_id_fkey(
-        id,
-        order_number,
-        customer_name,
-        customer_phone,
-        delivery_mode,
-        delivery_date,
-        delivery_time_slot,
-        shipping_address,
-        pickup_time_slot,
-        status,
-        created_at
-      ),
-      vendor:profiles!supplier_orders_vendor_id_fkey(
-        id,
-        full_name,
-        email,
-        phone
-      ),
       store:stores!supplier_orders_store_id_fkey(
         id,
         name,
@@ -152,26 +135,67 @@ export async function listMySupplierOrders(filters?: {
     query = query.limit(100);
   }
 
-  const { data, error } = await query;
-
-  // 🔍 DEBUG LOGS
-  console.log("🔍 [SupplierOrders] Data recibida:", data);
-  console.log("🔍 [SupplierOrders] Cantidad:", data?.length);
-  console.log("🔍 [SupplierOrders] Primer registro completo:", data?.[0]);
-  console.log("🔍 [SupplierOrders] Primer order relacionado:", data?.[0]?.order);
-  console.log("🔍 [SupplierOrders] Primer vendor relacionado:", data?.[0]?.vendor);
-  console.log("🔍 [SupplierOrders] Primer store relacionado:", data?.[0]?.store);
-  if (error) {
-    console.error("❌ [SupplierOrders] Error:", error);
-  }
+  const { data: supplierOrders, error } = await query;
 
   if (error) {
     console.error("Error listando supplier orders:", error);
     throw error;
   }
 
-  let results = (data ?? []) as SupplierOrder[];
+  if (!supplierOrders || supplierOrders.length === 0) {
+    return [];
+  }
 
+  // 2️⃣ Extraer IDs únicos de orders y vendors
+  const orderIds = [
+    ...new Set(supplierOrders.map((so) => so.order_id).filter(Boolean)),
+  ];
+  const vendorIds = [
+    ...new Set(supplierOrders.map((so) => so.vendor_id).filter(Boolean)),
+  ];
+
+  // 3️⃣ Traer orders por separado (bypass del JOIN)
+  const { data: ordersData } = await supabase
+    .from("orders")
+    .select(
+      `
+      id,
+      order_number,
+      customer_name,
+      customer_phone,
+      delivery_mode,
+      delivery_date,
+      delivery_time_slot,
+      shipping_address,
+      pickup_time_slot,
+      status,
+      created_at
+    `
+    )
+    .in("id", orderIds);
+
+  // 4️⃣ Traer vendors por separado
+  const { data: vendorsData } = await supabase
+    .from("profiles")
+    .select("id, full_name, email, phone")
+    .in("id", vendorIds);
+
+  // 5️⃣ Crear mapas para búsqueda rápida
+  const ordersMap = new Map(
+    (ordersData || []).map((o) => [o.id, o])
+  );
+  const vendorsMap = new Map(
+    (vendorsData || []).map((v) => [v.id, v])
+  );
+
+  // 6️⃣ Combinar todo
+  let results = supplierOrders.map((so) => ({
+    ...so,
+    order: so.order_id ? ordersMap.get(so.order_id) || null : null,
+    vendor: so.vendor_id ? vendorsMap.get(so.vendor_id) || null : null,
+  })) as SupplierOrder[];
+
+  // 7️⃣ Filtro de búsqueda
   if (filters?.search) {
     const search = filters.search.toLowerCase().trim();
     results = results.filter(
@@ -229,7 +253,7 @@ export async function getMySupplierStats(): Promise<SupplierOrderStats> {
     (o) => o.status === "cancelled" || o.status === "out_of_stock"
   ).length;
 
-  // 2️⃣ 🔥 FIX: Revenue viene de supplier_earnings (dinero real)
+  // 2️⃣ Revenue desde supplier_earnings (dinero real)
   const { data: earningsData } = await supabase
     .from("supplier_earnings")
     .select("amount, status")
