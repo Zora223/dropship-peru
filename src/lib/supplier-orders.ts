@@ -1,7 +1,7 @@
 // src/lib/supplier-orders.ts
 // 🆕 v16 FASE 3 - Gestión de órdenes del proveedor
 // 🔥 v17 FIX: pending_revenue viene de supplier_earnings (real)
-// 🔥 v17 FIX: JOIN manual para evitar problemas de RLS
+// 🔥 v17 FIX: Usa RPC get_supplier_orders_full() para evitar RLS
 import { supabase } from "./supabase";
 
 // ============================================
@@ -51,7 +51,7 @@ export interface SupplierOrder {
   created_at: string;
   updated_at: string;
 
-  // Relaciones (joins manuales)
+  // Relaciones
   order?: {
     id: string;
     order_number: string;
@@ -97,7 +97,7 @@ export interface SupplierOrderStats {
 
 /**
  * Lista órdenes del proveedor autenticado.
- * 🔥 v17: JOIN MANUAL para evitar problemas de RLS
+ * 🔥 v17: Usa RPC para evitar RLS
  */
 export async function listMySupplierOrders(filters?: {
   status?: SupplierOrderStatus | "all";
@@ -109,93 +109,83 @@ export async function listMySupplierOrders(filters?: {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("No autenticado");
 
-  // 1️⃣ Traer supplier_orders + store (que sí funciona)
-  let query = supabase
-    .from("supplier_orders")
-    .select(
-      `
-      *,
-      store:stores!supplier_orders_store_id_fkey(
-        id,
-        name,
-        slug
-      )
-    `
-    )
-    .eq("supplier_id", user.id)
-    .order("created_at", { ascending: false });
-
-  if (filters?.status && filters.status !== "all") {
-    query = query.eq("status", filters.status);
-  }
-
-  if (filters?.limit) {
-    query = query.limit(filters.limit);
-  } else {
-    query = query.limit(100);
-  }
-
-  const { data: supplierOrders, error } = await query;
+  // 🔥 Llamar función RPC (bypass RLS)
+  const { data, error } = await supabase.rpc("get_supplier_orders_full");
 
   if (error) {
     console.error("Error listando supplier orders:", error);
     throw error;
   }
 
-  if (!supplierOrders || supplierOrders.length === 0) {
+  if (!data || data.length === 0) {
     return [];
   }
 
-  // 2️⃣ Extraer IDs únicos de orders y vendors
-  const orderIds = [
-    ...new Set(supplierOrders.map((so) => so.order_id).filter(Boolean)),
-  ];
-  const vendorIds = [
-    ...new Set(supplierOrders.map((so) => so.vendor_id).filter(Boolean)),
-  ];
+  // Mapear resultado plano a estructura anidada
+  let results: SupplierOrder[] = data.map((row: any) => ({
+    id: row.id,
+    order_id: row.order_id,
+    supplier_id: row.supplier_id,
+    product_id: row.product_id,
+    catalog_product_id: row.catalog_product_id,
+    vendor_id: row.vendor_id,
+    store_id: row.store_id,
+    product_name: row.product_name,
+    product_image: row.product_image,
+    sku: row.sku,
+    quantity: row.quantity,
+    base_price: Number(row.base_price),
+    total_amount: Number(row.total_amount),
+    status: row.status,
+    delivery_destination: row.delivery_destination,
+    pickup_address: row.pickup_address,
+    supplier_notes: row.supplier_notes,
+    cancel_reason: row.cancel_reason,
+    confirmed_at: row.confirmed_at,
+    ready_at: row.ready_at,
+    picked_up_at: row.picked_up_at,
+    delivered_at: row.delivered_at,
+    cancelled_at: row.cancelled_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    order: row.order_id
+      ? {
+          id: row.order_id,
+          order_number: row.order_number,
+          customer_name: row.customer_name,
+          customer_phone: row.customer_phone,
+          delivery_mode: row.delivery_mode,
+          delivery_date: row.delivery_date,
+          delivery_time_slot: row.delivery_time_slot,
+          shipping_address: row.shipping_address,
+          pickup_time_slot: row.pickup_time_slot,
+          status: row.order_status,
+          created_at: row.order_created_at,
+        }
+      : null,
+    vendor: row.vendor_id
+      ? {
+          id: row.vendor_id,
+          full_name: row.vendor_full_name,
+          email: row.vendor_email,
+          phone: row.vendor_phone,
+        }
+      : null,
+    store: row.store_id
+      ? {
+          id: row.store_id,
+          name: row.store_name,
+          slug: row.store_slug,
+        }
+      : null,
+  }));
 
-  // 3️⃣ Traer orders por separado (bypass del JOIN)
-  const { data: ordersData } = await supabase
-    .from("orders")
-    .select(
-      `
-      id,
-      order_number,
-      customer_name,
-      customer_phone,
-      delivery_mode,
-      delivery_date,
-      delivery_time_slot,
-      shipping_address,
-      pickup_time_slot,
-      status,
-      created_at
-    `
-    )
-    .in("id", orderIds);
+  // Filtro por status
+  if (filters?.status && filters.status !== "all") {
+    results = results.filter((o) => o.status === filters.status);
+  }
 
-  // 4️⃣ Traer vendors por separado
-  const { data: vendorsData } = await supabase
-    .from("profiles")
-    .select("id, full_name, email, phone")
-    .in("id", vendorIds);
-
-  // 5️⃣ Crear mapas para búsqueda rápida
-  const ordersMap = new Map(
-    (ordersData || []).map((o) => [o.id, o])
-  );
-  const vendorsMap = new Map(
-    (vendorsData || []).map((v) => [v.id, v])
-  );
-
-  // 6️⃣ Combinar todo
-  let results = supplierOrders.map((so) => ({
-    ...so,
-    order: so.order_id ? ordersMap.get(so.order_id) || null : null,
-    vendor: so.vendor_id ? vendorsMap.get(so.vendor_id) || null : null,
-  })) as SupplierOrder[];
-
-  // 7️⃣ Filtro de búsqueda
+  // Filtro búsqueda
   if (filters?.search) {
     const search = filters.search.toLowerCase().trim();
     results = results.filter(
@@ -207,12 +197,16 @@ export async function listMySupplierOrders(filters?: {
     );
   }
 
+  // Límite
+  if (filters?.limit) {
+    results = results.slice(0, filters.limit);
+  }
+
   return results;
 }
 
 /**
  * Obtiene estadísticas de las órdenes del proveedor.
- * 🔥 v17: pending_revenue ahora viene de supplier_earnings (real)
  */
 export async function getMySupplierStats(): Promise<SupplierOrderStats> {
   const {
