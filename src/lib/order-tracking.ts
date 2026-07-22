@@ -331,4 +331,4 @@ export function timeAgo(dateString: string): string {
   const days = Math.floor(hours / 24);
   if (days < 30) return `hace ${days} día${days > 1 ? "s" : ""}`;
   return date.toLocaleDateString("es-PE");
-}
+} 
