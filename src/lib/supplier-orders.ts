@@ -1,6 +1,7 @@
 // src/lib/supplier-orders.ts
 // 🆕 v16 FASE 3 - Gestión de órdenes del proveedor
 // 🔥 v17 FIX: pending_revenue ahora viene de supplier_earnings (real)
+// 🔍 v17 DEBUG: logs para verificar JOIN
 import { supabase } from "./supabase";
 
 // ============================================
@@ -86,8 +87,8 @@ export interface SupplierOrderStats {
   ready: number;
   delivered: number;
   cancelled: number;
-  total_revenue: number;      // Ya cobrado (paid)
-  pending_revenue: number;    // 🔥 Por cobrar (earnings pending)
+  total_revenue: number;
+  pending_revenue: number;
 }
 
 // ============================================
@@ -152,6 +153,17 @@ export async function listMySupplierOrders(filters?: {
   }
 
   const { data, error } = await query;
+
+  // 🔍 DEBUG LOGS
+  console.log("🔍 [SupplierOrders] Data recibida:", data);
+  console.log("🔍 [SupplierOrders] Cantidad:", data?.length);
+  console.log("🔍 [SupplierOrders] Primer registro completo:", data?.[0]);
+  console.log("🔍 [SupplierOrders] Primer order relacionado:", data?.[0]?.order);
+  console.log("🔍 [SupplierOrders] Primer vendor relacionado:", data?.[0]?.vendor);
+  console.log("🔍 [SupplierOrders] Primer store relacionado:", data?.[0]?.store);
+  if (error) {
+    console.error("❌ [SupplierOrders] Error:", error);
+  }
 
   if (error) {
     console.error("Error listando supplier orders:", error);
