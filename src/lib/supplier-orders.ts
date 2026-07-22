@@ -1,5 +1,6 @@
 // src/lib/supplier-orders.ts
 // 🆕 v16 FASE 3 - Gestión de órdenes del proveedor
+// 🔥 v17 FIX: pending_revenue ahora viene de supplier_earnings (real)
 import { supabase } from "./supabase";
 
 // ============================================
@@ -53,14 +54,15 @@ export interface SupplierOrder {
   order?: {
     id: string;
     order_number: string;
-    customer_name: string;
-    customer_phone: string;
-    delivery_mode: string;
+    customer_name: string | null;
+    customer_phone: string | null;
+    delivery_mode: string | null;
     delivery_date: string | null;
     delivery_time_slot: string | null;
     shipping_address: any | null;
     pickup_time_slot: string | null;
     status: string;
+    created_at: string;
   } | null;
 
   vendor?: {
@@ -84,8 +86,8 @@ export interface SupplierOrderStats {
   ready: number;
   delivered: number;
   cancelled: number;
-  total_revenue: number;
-  pending_revenue: number;
+  total_revenue: number;      // Ya cobrado (paid)
+  pending_revenue: number;    // 🔥 Por cobrar (earnings pending)
 }
 
 // ============================================
@@ -120,7 +122,8 @@ export async function listMySupplierOrders(filters?: {
         delivery_time_slot,
         shipping_address,
         pickup_time_slot,
-        status
+        status,
+        created_at
       ),
       vendor:profiles!supplier_orders_vendor_id_fkey(
         id,
@@ -173,6 +176,7 @@ export async function listMySupplierOrders(filters?: {
 
 /**
  * Obtiene estadísticas de las órdenes del proveedor.
+ * 🔥 v17: pending_revenue ahora viene de supplier_earnings (real)
  */
 export async function getMySupplierStats(): Promise<SupplierOrderStats> {
   const {
@@ -180,13 +184,14 @@ export async function getMySupplierStats(): Promise<SupplierOrderStats> {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("No autenticado");
 
-  const { data, error } = await supabase
+  // 1️⃣ Stats de órdenes
+  const { data: ordersData, error: ordersError } = await supabase
     .from("supplier_orders")
     .select("status, total_amount")
     .eq("supplier_id", user.id);
 
-  if (error) {
-    console.error("Error obteniendo stats:", error);
+  if (ordersError) {
+    console.error("Error obteniendo stats:", ordersError);
     return {
       total: 0,
       pending: 0,
@@ -199,31 +204,34 @@ export async function getMySupplierStats(): Promise<SupplierOrderStats> {
     };
   }
 
-  const total = data.length;
-  const pending = data.filter((o) => o.status === "pending").length;
-  const confirmed = data.filter(
+  const total = ordersData.length;
+  const pending = ordersData.filter((o) => o.status === "pending").length;
+  const confirmed = ordersData.filter(
     (o) => o.status === "confirmed" || o.status === "preparing"
   ).length;
-  const ready = data.filter(
+  const ready = ordersData.filter(
     (o) => o.status === "ready_for_pickup" || o.status === "picked_up"
   ).length;
-  const delivered = data.filter((o) => o.status === "delivered").length;
-  const cancelled = data.filter(
+  const delivered = ordersData.filter((o) => o.status === "delivered").length;
+  const cancelled = ordersData.filter(
     (o) => o.status === "cancelled" || o.status === "out_of_stock"
   ).length;
 
-  const total_revenue = data
-    .filter((o) => o.status === "delivered")
-    .reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+  // 2️⃣ 🔥 FIX: Revenue viene de supplier_earnings (dinero real)
+  const { data: earningsData } = await supabase
+    .from("supplier_earnings")
+    .select("amount, status")
+    .eq("supplier_id", user.id);
 
-  const pending_revenue = data
-    .filter(
-      (o) =>
-        o.status !== "delivered" &&
-        o.status !== "cancelled" &&
-        o.status !== "out_of_stock"
-    )
-    .reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+  const total_revenue =
+    earningsData
+      ?.filter((e) => e.status === "paid")
+      .reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
+
+  const pending_revenue =
+    earningsData
+      ?.filter((e) => e.status === "pending")
+      .reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
 
   return {
     total,
