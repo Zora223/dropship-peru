@@ -8,15 +8,16 @@ const navItems = [
   { to: "/admin/suppliers", label: "Proveedores", icon: "🏭" },
   { to: "/admin/users", label: "Usuarios", icon: "👥" },
   { to: "/admin/deliveries", label: "Deliveries", icon: "🛵" },
-  { to: "/admin/delivery-payments", label: "Liquidaciones", icon: "💰" },
+  { to: "/admin/delivery-payments", label: "Liq. Deliveries", icon: "💰" },
+  { to: "/admin/supplier-payouts", label: "Pagos a Proveedores", icon: "💵" }, // 🆕 v19
   { to: "/admin/stores", label: "Tiendas", icon: "🏪" },
   { to: "/admin/orders", label: "Pedidos", icon: "🧾" },
   { to: "/admin/payments", label: "Métodos de pago", icon: "💳" },
-  { to: "/admin/payment-validations", label: "Validaciones OCR", icon: "🤖" }, // 🆕 v16 - OCR
+  { to: "/admin/payment-validations", label: "Validaciones OCR", icon: "🤖" },
   { to: "/admin/theme", label: "Temas y branding", icon: "🎨" },
-  { to: "/admin/whatsapp", label: "WhatsApp Bot", icon: "💬" }, // 🆕 FASE 5B
-  { to: "/admin/whatsapp-templates", label: "WA Templates", icon: "📝" }, // 🆕 FASE 5B Etapa 4
-  { to: "/admin/whatsapp-logs", label: "WA Logs", icon: "📋" }, // 🆕 v13
+  { to: "/admin/whatsapp", label: "WhatsApp Bot", icon: "💬" },
+  { to: "/admin/whatsapp-templates", label: "WA Templates", icon: "📝" },
+  { to: "/admin/whatsapp-logs", label: "WA Logs", icon: "📋" },
 ];
 
 function isActivePath(pathname: string, to: string, exact?: boolean) {
