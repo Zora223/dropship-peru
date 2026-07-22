@@ -6,6 +6,7 @@ import StatCard from "../../components/StatCard";
 import MiniChart from "../../components/MiniChart";
 import { useMyStore } from "../../hooks/useMyStore";
 import { fetchVendorOrders } from "../../lib/vendor-orders";
+import PickupOrdersSection from "../../components/vendor/PickupOrdersSection";
 import {
   fetchVendorStatsSummary,
   fetchVendorSalesLastDays,
@@ -210,6 +211,8 @@ export default function VendorDashboard() {
           {error}
         </div>
       )}
+       {/* 🆕 v17: Pedidos pickup */}
+      <PickupOrdersSection storeId={store.id} />
 
       {productCreated && (
         <div className="rounded-2xl border-l-4 border-emerald-500 bg-emerald-50 p-4">

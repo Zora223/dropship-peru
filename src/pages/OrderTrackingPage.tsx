@@ -1,7 +1,7 @@
 // src/pages/OrderTrackingPage.tsx
 // Página pública de tracking de pedido - FASE 4A
+// 🔥 v17: Agregado card pickup con código 6 dígitos
 // URL: /pedido/:orderNumber
-// Funciona para invitados y registrados por igual
 
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
@@ -13,6 +13,7 @@ import {
   type OrderTrackingData,
 } from "../lib/order-tracking";
 import { openWhatsapp, msgDeliveryContact } from "../lib/whatsapp";
+
 const VEHICLE_LABELS: Record<string, string> = {
   moto: "🏍️ Moto",
   bici: "🚴 Bicicleta",
@@ -32,15 +33,28 @@ function formatAddress(address: any) {
 }
 
 /**
- * Timeline visual con 4 pasos
+ * Timeline visual con 4 pasos (adaptativo pickup/delivery)
  */
-function TrackingTimeline({ step }: { step: number }) {
-  const steps = [
-    { label: "Pedido recibido", icon: "📦" },
-    { label: "Delivery asignado", icon: "🛵" },
-    { label: "En camino", icon: "🚚" },
-    { label: "Entregado", icon: "🎉" },
-  ];
+function TrackingTimeline({
+  step,
+  isPickup,
+}: {
+  step: number;
+  isPickup: boolean;
+}) {
+  const steps = isPickup
+    ? [
+        { label: "Pedido recibido", icon: "📦" },
+        { label: "Preparando tu pedido", icon: "👨‍🍳" },
+        { label: "Listo para recoger", icon: "🏪" },
+        { label: "Recogido", icon: "🎉" },
+      ]
+    : [
+        { label: "Pedido recibido", icon: "📦" },
+        { label: "Delivery asignado", icon: "🛵" },
+        { label: "En camino", icon: "🚚" },
+        { label: "Entregado", icon: "🎉" },
+      ];
 
   return (
     <div className="space-y-3">
@@ -83,6 +97,145 @@ function TrackingTimeline({ step }: { step: number }) {
   );
 }
 
+/**
+ * 🆕 v17: Card destacada de PICKUP con código 6 dígitos
+ */
+function PickupCard({ data }: { data: OrderTrackingData }) {
+  const [codeCopied, setCodeCopied] = useState(false);
+
+  const isReady = !!data.pickup_ready_at && !data.pickup_completed_at;
+  const isCompleted = !!data.pickup_completed_at;
+
+  async function copyCode() {
+    if (!data.pickup_confirmation_code) return;
+    try {
+      await navigator.clipboard.writeText(data.pickup_confirmation_code);
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2000);
+    } catch {
+      // ignorar
+    }
+  }
+
+  return (
+    <div className="mt-6 overflow-hidden rounded-3xl border-2 border-purple-200 bg-white shadow-sm">
+      <div className="bg-linear-to-r from-purple-500 to-fuchsia-500 px-6 py-3 text-white">
+        <div className="text-xs font-bold uppercase tracking-wider">
+          🏪 Recojo en tienda
+        </div>
+      </div>
+
+      <div className="p-6 space-y-4">
+        {/* Estado */}
+        {isCompleted ? (
+          <div className="rounded-2xl bg-emerald-50 p-4 text-center">
+            <div className="text-3xl">✅</div>
+            <p className="mt-2 text-sm font-bold text-emerald-900">
+              ¡Ya recogiste tu pedido!
+            </p>
+          </div>
+        ) : isReady ? (
+          <div className="rounded-2xl bg-linear-to-br from-emerald-500 to-teal-500 p-5 text-white text-center shadow-lg">
+            <div className="text-4xl">🎉</div>
+            <p className="mt-2 text-sm font-bold">
+              ¡Tu pedido está LISTO!
+            </p>
+            <p className="mt-1 text-xs opacity-90">
+              Puedes pasar a recogerlo cuando quieras
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-2xl bg-amber-50 p-4 text-center">
+            <div className="text-3xl">⏳</div>
+            <p className="mt-2 text-sm font-bold text-amber-900">
+              Preparando tu pedido
+            </p>
+            <p className="mt-1 text-xs text-amber-700">
+              Te avisaremos cuando esté listo
+            </p>
+          </div>
+        )}
+
+        {/* Código 6 dígitos - solo si listo o completado */}
+        {data.pickup_confirmation_code && (isReady || isCompleted) && (
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2 text-center">
+              🔐 Código de recojo
+            </p>
+            <div className="rounded-2xl bg-linear-to-br from-purple-500 to-fuchsia-600 p-6 text-white text-center shadow-lg">
+              <div className="text-5xl font-black tracking-[0.4em] font-mono">
+                {data.pickup_confirmation_code}
+              </div>
+              <p className="mt-3 text-xs opacity-90">
+                Muestra este código al llegar a la tienda
+              </p>
+            </div>
+            <button
+              onClick={copyCode}
+              className="mt-2 w-full rounded-xl bg-gray-100 py-2 text-xs font-bold text-gray-700 transition hover:bg-gray-200"
+            >
+              {codeCopied ? "✅ Copiado" : "📋 Copiar código"}
+            </button>
+          </div>
+        )}
+
+        {/* Ubicación */}
+        {data.pickup_location && (
+          <div className="rounded-2xl bg-gray-50 p-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
+              📍 Dirección de recojo
+            </p>
+            <p className="text-sm font-bold text-gray-900">
+              {data.pickup_location.name}
+            </p>
+            <p className="mt-1 text-sm text-gray-700">
+              {data.pickup_location.address}
+            </p>
+            {(data.pickup_location.district || data.pickup_location.city) && (
+              <p className="text-sm text-gray-600">
+                {[
+                  data.pickup_location.district,
+                  data.pickup_location.city,
+                ]
+                  .filter(Boolean)
+                  .join(", ")}
+              </p>
+            )}
+            {data.pickup_location.reference && (
+              <p className="mt-1 text-xs text-gray-500">
+                💡 {data.pickup_location.reference}
+              </p>
+            )}
+            {data.pickup_location.phone && (
+              <p className="mt-2 text-sm">
+                📞{" "}
+                <a
+                  href={`tel:${data.pickup_location.phone}`}
+                  className="font-semibold text-purple-600 hover:underline"
+                >
+                  {data.pickup_location.phone}
+                </a>
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Franja horaria */}
+        {data.pickup_time_slot && (
+          <div className="rounded-2xl bg-blue-50 p-3 text-center text-sm">
+            <p className="text-xs font-bold uppercase tracking-wider text-blue-600">
+              🕒 Franja seleccionada
+            </p>
+            <p className="mt-1 font-semibold text-blue-900">
+              {data.pickup_time_slot}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function OrderTrackingPage() {
   const { orderNumber } = useParams<{ orderNumber: string }>();
   const [data, setData] = useState<OrderTrackingData | null>(null);
@@ -110,24 +263,19 @@ export default function OrderTrackingPage() {
 
   useEffect(() => {
     load();
-    // Refrescar cada 30 segundos para ver cambios en vivo
     const interval = setInterval(load, 30000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderNumber]);
 
-  // Copiar link al portapapeles
   async function copyLink() {
     try {
       await navigator.clipboard.writeText(window.location.href);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // ignorar
-    }
+    } catch {}
   }
 
-  // Compartir por WhatsApp
   function shareByWhatsapp() {
     if (!data) return;
     const message = [
@@ -144,7 +292,6 @@ export default function OrderTrackingPage() {
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
-  // Contactar al delivery
   function contactDelivery() {
     if (!data?.delivery) return;
     const message = msgDeliveryContact({
@@ -158,7 +305,6 @@ export default function OrderTrackingPage() {
     }
   }
 
-  // Contactar a la tienda
   function contactStore() {
     if (!data?.store?.whatsapp) return;
     const message = `¡Hola ${data.store.name}! 👋\n\nTengo una consulta sobre mi pedido *${data.order_number}*.`;
@@ -200,6 +346,7 @@ export default function OrderTrackingPage() {
   const label = getTrackingLabel(data);
   const isCancelled = data.status === "cancelled";
   const isDelivered = data.status === "delivered";
+  const isPickup = data.delivery_mode === "store_pickup"; // 🆕 v17
 
   return (
     <div className="min-h-screen bg-linear-to-br from-rose-50 via-white to-orange-50">
@@ -246,12 +393,14 @@ export default function OrderTrackingPage() {
               ? "bg-linear-to-br from-red-500 to-rose-600"
               : isDelivered
               ? "bg-linear-to-br from-emerald-500 to-teal-600"
+              : isPickup
+              ? "bg-linear-to-br from-purple-500 to-fuchsia-600"
               : "bg-linear-to-br from-blue-500 to-indigo-600"
           } text-white`}
         >
           <div className="p-6 sm:p-8">
             <div className="text-xs font-bold uppercase tracking-wider opacity-80">
-              Pedido
+              Pedido {isPickup && "· 🏪 Recojo en tienda"}
             </div>
             <div className="mt-1 font-mono text-lg font-black">
               {data.order_number}
@@ -287,13 +436,16 @@ export default function OrderTrackingPage() {
               📍 Estado del envío
             </h2>
             <div className="mt-5">
-              <TrackingTimeline step={step} />
+              <TrackingTimeline step={step} isPickup={isPickup} />
             </div>
           </div>
         )}
 
-        {/* Card del delivery */}
-        {data.delivery && !isCancelled && (
+        {/* 🆕 v17: Card destacada de PICKUP */}
+        {isPickup && !isCancelled && <PickupCard data={data} />}
+
+        {/* Card del delivery (solo si NO es pickup) */}
+        {!isPickup && data.delivery && !isCancelled && (
           <div className="mt-6 overflow-hidden rounded-3xl border-2 border-emerald-200 bg-white shadow-sm">
             <div className="bg-linear-to-r from-emerald-500 to-teal-500 px-6 py-3 text-white">
               <div className="text-xs font-bold uppercase tracking-wider">
@@ -361,41 +513,52 @@ export default function OrderTrackingPage() {
           </div>
         )}
 
-        {/* Sin delivery aún */}
-        {!data.delivery && !isCancelled && data.status !== "pending_payment" && (
-          <div className="mt-6 rounded-3xl border-2 border-dashed border-gray-200 bg-white p-6 text-center">
-            <div className="text-4xl">⏳</div>
-            <p className="mt-2 text-sm font-semibold text-gray-700">
-              Esperando asignación de delivery
-            </p>
-            <p className="mt-1 text-xs text-gray-500">
-              La tienda te asignará un delivery pronto.
-            </p>
+        {/* Sin delivery aún (solo si NO es pickup) */}
+        {!isPickup &&
+          !data.delivery &&
+          !isCancelled &&
+          data.status !== "pending_payment" && (
+            <div className="mt-6 rounded-3xl border-2 border-dashed border-gray-200 bg-white p-6 text-center">
+              <div className="text-4xl">⏳</div>
+              <p className="mt-2 text-sm font-semibold text-gray-700">
+                Esperando asignación de delivery
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
+                La tienda te asignará un delivery pronto.
+              </p>
+            </div>
+          )}
+
+        {/* Dirección de entrega (solo delivery) */}
+        {!isPickup && (
+          <div className="mt-6 rounded-3xl bg-white p-6 shadow-sm">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+              📍 Dirección de entrega
+            </h2>
+            <div className="mt-3 rounded-2xl bg-gray-50 p-4 text-sm">
+              <div className="font-bold text-gray-900">
+                {data.shipping_address.full_name}
+              </div>
+              <div className="mt-1 text-gray-700">
+                {formatAddress(data.shipping_address)}
+              </div>
+              <div className="mt-1 text-gray-600">
+                📞 {data.shipping_address.phone}
+              </div>
+              {data.shipping_address.reference && (
+                <div className="mt-1 text-xs text-gray-500">
+                  💡 {data.shipping_address.reference}
+                </div>
+              )}
+              {data.delivery_date && (
+                <div className="mt-2 border-t border-gray-200 pt-2 text-xs font-semibold text-gray-700">
+                  📅 {data.delivery_date}{" "}
+                  {data.delivery_time_slot && `· ${data.delivery_time_slot}`}
+                </div>
+              )}
+            </div>
           </div>
         )}
-
-        {/* Dirección de entrega */}
-        <div className="mt-6 rounded-3xl bg-white p-6 shadow-sm">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
-            📍 Dirección de entrega
-          </h2>
-          <div className="mt-3 rounded-2xl bg-gray-50 p-4 text-sm">
-            <div className="font-bold text-gray-900">
-              {data.shipping_address.full_name}
-            </div>
-            <div className="mt-1 text-gray-700">
-              {formatAddress(data.shipping_address)}
-            </div>
-            <div className="mt-1 text-gray-600">
-              📞 {data.shipping_address.phone}
-            </div>
-            {data.shipping_address.reference && (
-              <div className="mt-1 text-xs text-gray-500">
-                💡 {data.shipping_address.reference}
-              </div>
-            )}
-          </div>
-        </div>
 
         {/* Productos */}
         <div className="mt-6 rounded-3xl bg-white p-6 shadow-sm">
@@ -473,9 +636,7 @@ export default function OrderTrackingPage() {
 
         {/* Footer */}
         <div className="mt-8 text-center text-xs text-gray-400">
-          <p>
-            Esta página se actualiza automáticamente cada 30 segundos.
-          </p>
+          <p>Esta página se actualiza automáticamente cada 30 segundos.</p>
           <p className="mt-2">
             <Link to="/" className="hover:text-gray-600">
               Dropship Perú

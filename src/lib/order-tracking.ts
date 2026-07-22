@@ -1,5 +1,6 @@
 // src/lib/order-tracking.ts
 // Tracking público de pedidos - FASE 4A
+// 🔥 v17: Agregado pickup fields + pickup location
 // Cualquiera con el order_number puede ver el estado del pedido
 
 import { supabase } from "./supabase";
@@ -37,6 +38,18 @@ export interface OrderTrackingDelivery {
   total_deliveries: number;
 }
 
+// 🆕 v17: Ubicación de pickup
+export interface OrderTrackingPickupLocation {
+  id: string;
+  name: string;
+  address: string;
+  district: string | null;
+  city: string | null;
+  phone: string | null;
+  reference: string | null;
+  opening_hours: any | null;
+}
+
 export interface OrderTrackingData {
   // Orden
   id: string;
@@ -61,9 +74,20 @@ export interface OrderTrackingData {
   delivery_assigned_at: string | null;
   delivery_delivered_at: string | null;
 
+  // 🆕 v17: Pickup / Delivery mode
+  delivery_mode: "home_delivery" | "store_pickup" | null;
+  delivery_date: string | null;
+  delivery_time_slot: string | null;
+  pickup_location_id: string | null;
+  pickup_time_slot: string | null;
+  pickup_confirmation_code: string | null;
+  pickup_ready_at: string | null;
+  pickup_completed_at: string | null;
+
   // Relaciones
   store: OrderTrackingStore | null;
   delivery: OrderTrackingDelivery | null;
+  pickup_location: OrderTrackingPickupLocation | null; // 🆕 v17
 }
 
 // ============================================
@@ -72,7 +96,6 @@ export interface OrderTrackingData {
 
 /**
  * Obtiene la información pública de tracking de un pedido por su order_number.
- * Funciona para invitados y registrados (RLS ya permite customer_id IS NULL).
  */
 export async function fetchOrderTracking(
   orderNumber: string
@@ -103,6 +126,14 @@ export async function fetchOrderTracking(
       delivery_status,
       delivery_assigned_at,
       delivery_delivered_at,
+      delivery_mode,
+      delivery_date,
+      delivery_time_slot,
+      pickup_location_id,
+      pickup_time_slot,
+      pickup_confirmation_code,
+      pickup_ready_at,
+      pickup_completed_at,
       store:stores (
         id,
         name,
@@ -160,7 +191,33 @@ export async function fetchOrderTracking(
     }
   }
 
-  // 3️⃣ Aplanar el store
+  // 3️⃣ 🆕 v17: Si tiene pickup_location_id, obtener ubicación
+  let pickup_location: OrderTrackingPickupLocation | null = null;
+
+  if (order.pickup_location_id) {
+    const { data: pickupData } = await supabase
+      .from("vendor_pickup_locations")
+      .select(
+        "id, name, address, district, city, phone, reference, opening_hours"
+      )
+      .eq("id", order.pickup_location_id)
+      .maybeSingle();
+
+    if (pickupData) {
+      pickup_location = {
+        id: pickupData.id,
+        name: pickupData.name,
+        address: pickupData.address,
+        district: pickupData.district,
+        city: pickupData.city,
+        phone: pickupData.phone,
+        reference: pickupData.reference,
+        opening_hours: pickupData.opening_hours,
+      };
+    }
+  }
+
+  // 4️⃣ Aplanar el store
   const storeData = (order as any).store ?? null;
   const store: OrderTrackingStore | null = storeData
     ? {
@@ -194,8 +251,18 @@ export async function fetchOrderTracking(
     delivery_status: order.delivery_status,
     delivery_assigned_at: order.delivery_assigned_at,
     delivery_delivered_at: order.delivery_delivered_at,
+    // 🆕 v17 Pickup
+    delivery_mode: order.delivery_mode as any,
+    delivery_date: order.delivery_date,
+    delivery_time_slot: order.delivery_time_slot,
+    pickup_location_id: order.pickup_location_id,
+    pickup_time_slot: order.pickup_time_slot,
+    pickup_confirmation_code: order.pickup_confirmation_code,
+    pickup_ready_at: order.pickup_ready_at,
+    pickup_completed_at: order.pickup_completed_at,
     store,
     delivery,
+    pickup_location,
   };
 }
 
@@ -207,15 +274,16 @@ export async function fetchOrderTracking(
  * Devuelve el paso actual del tracking (0-3) para el timeline visual
  */
 export function getTrackingStep(data: OrderTrackingData): number {
-  // 0 = Pedido registrado
-  // 1 = Delivery asignado
-  // 2 = En camino (picked_up)
-  // 3 = Entregado
+  // 🆕 v17: Si es pickup, usa lógica diferente
+  if (data.delivery_mode === "store_pickup") {
+    if (data.status === "delivered" || data.pickup_completed_at) return 3;
+    if (data.pickup_ready_at) return 2;
+    if (data.status === "confirmed") return 1;
+    return 0;
+  }
 
-  if (
-    data.status === "delivered" ||
-    data.delivery_status === "delivered"
-  ) {
+  // Delivery normal
+  if (data.status === "delivered" || data.delivery_status === "delivered") {
     return 3;
   }
   if (data.delivery_status === "picked_up") {
@@ -233,6 +301,16 @@ export function getTrackingStep(data: OrderTrackingData): number {
 export function getTrackingLabel(data: OrderTrackingData): string {
   if (data.status === "cancelled") return "Pedido cancelado";
   if (data.status === "delivered") return "¡Entregado!";
+
+  // 🆕 v17: Labels específicos para pickup
+  if (data.delivery_mode === "store_pickup") {
+    if (data.pickup_completed_at) return "¡Recogido!";
+    if (data.pickup_ready_at) return "¡Listo para recoger! 🏪";
+    if (data.status === "confirmed") return "Preparando tu pedido";
+    return "Pedido recibido";
+  }
+
+  // Delivery normal
   if (data.delivery_status === "picked_up") return "En camino 🛵";
   if (data.delivery_status === "assigned") return "Delivery asignado";
   if (data.status === "confirmed") return "Preparando pedido";
