@@ -676,32 +676,74 @@ export default function OrderSuccessPage() {
               </div>
             </div>
 
+            {/* 🆕 v20 - Dirección o pickup dinámico */}
             <div className="rounded-3xl bg-white p-6 shadow-sm">
               <h2 className="text-lg font-bold text-gray-900">
-                Dirección de envío
+                {order.delivery_mode === "store_pickup"
+                  ? "🏪 Recojo en tienda"
+                  : "📍 Dirección de envío"}
               </h2>
 
-              <div className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm text-gray-700">
-                <div className="font-bold text-gray-900">
-                  {order.shipping_address.full_name}
-                </div>
-
-                <div className="mt-1">
-                  {order.shipping_address.street},{" "}
-                  {order.shipping_address.district},{" "}
-                  {order.shipping_address.city}
-                </div>
-
-                <div className="mt-1">
-                  Teléfono: {order.shipping_address.phone}
-                </div>
-
-                {order.shipping_address.reference && (
-                  <div className="mt-1 text-gray-500">
-                    Referencia: {order.shipping_address.reference}
+              {order.delivery_mode === "store_pickup" ? (
+                <div className="mt-4 rounded-2xl bg-purple-50 border border-purple-200 p-4 text-sm text-purple-900">
+                  <div className="font-bold text-purple-900">
+                    🏪 Retira tu pedido en la tienda
                   </div>
-                )}
-              </div>
+                  <div className="mt-2 text-purple-800">
+                    Cliente: <strong>{order.customer_name}</strong>
+                  </div>
+                  <div className="mt-1 text-purple-800">
+                    Teléfono: <strong>{order.customer_phone}</strong>
+                  </div>
+                  {order.pickup_time_slot && (
+                    <div className="mt-3 rounded-xl bg-white/60 px-3 py-2">
+                      <div className="text-[10px] font-bold uppercase text-purple-600">
+                        Fecha y hora de recojo
+                      </div>
+                      <div className="mt-0.5 font-bold text-purple-900">
+                        📅 {order.pickup_time_slot}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : order.shipping_address ? (
+                <div className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm text-gray-700">
+                  <div className="font-bold text-gray-900">
+                    {order.shipping_address.full_name}
+                  </div>
+
+                  <div className="mt-1">
+                    {order.shipping_address.street},{" "}
+                    {order.shipping_address.district},{" "}
+                    {order.shipping_address.city}
+                  </div>
+
+                  <div className="mt-1">
+                    Teléfono: {order.shipping_address.phone}
+                  </div>
+
+                  {order.shipping_address.reference && (
+                    <div className="mt-1 text-gray-500">
+                      Referencia: {order.shipping_address.reference}
+                    </div>
+                  )}
+
+                  {order.delivery_date && order.delivery_time_slot && (
+                    <div className="mt-3 rounded-xl bg-white border border-gray-200 px-3 py-2">
+                      <div className="text-[10px] font-bold uppercase text-gray-500">
+                        Fecha de entrega
+                      </div>
+                      <div className="mt-0.5 font-bold text-gray-900">
+                        📅 {order.delivery_date} · {order.delivery_time_slot}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-4 rounded-2xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">
+                  ⚠️ No hay información de entrega registrada
+                </div>
+              )}
 
               {order.notes && (
                 <div className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm text-amber-900">

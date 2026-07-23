@@ -5,6 +5,15 @@ export type OrderStatus = "pending_payment" | "confirmed" | "shipped" | "deliver
 export type PaymentMethodType = "yape" | "plin" | "card" | "transfer" | "cash_on_delivery";
 export type SubscriptionStatus = "trial" | "active" | "expired" | "cancelled";
 
+// 🆕 v16 - Modo de entrega
+export type DeliveryMode = "home_delivery" | "store_pickup";
+
+// 🆕 v20 - Tipo de carrito (escrow)
+export type CartType = "catalog" | "vendor_own" | "mixed";
+
+// 🆕 v20 - Receptor del pago
+export type PaymentReceiver = "platform" | "vendor";
+
 export interface DbProfile {
   id: string;
   email: string;
@@ -127,7 +136,10 @@ export interface DbOrder {
   customer_name: string;
   customer_email: string;
   customer_phone: string;
-  shipping_address: DbShippingAddress;
+
+  // 🆕 v16 - shipping_address ahora puede ser null (pickup)
+  shipping_address: DbShippingAddress | null;
+
   items: DbOrderItem[];
   subtotal: number;
   total: number;
@@ -140,7 +152,6 @@ export interface DbOrder {
   updated_at: string;
 
   // 🆕 Campos de delivery (Sesión 6 - FASE 1)
-  // delivery_status es text libre en BD, valores válidos abajo:
   delivery_id: string | null;
   delivery_status:
     | "unassigned"
@@ -152,6 +163,28 @@ export interface DbOrder {
   delivery_assigned_at: string | null;
   delivery_delivered_at: string | null;
   delivery_notes: string | null;
+
+  // 🆕 v16 FASE 3 - Modo de entrega + fechas/franjas
+  delivery_mode: DeliveryMode | null;
+  delivery_date: string | null;
+  delivery_time_slot: string | null;
+  delivery_fee: number;
+  pickup_location_id: string | null;
+  pickup_time_slot: string | null;
+
+  // 🆕 v18 - Código pickup
+  pickup_code: string | null;
+  pickup_verified_at: string | null;
+
+  // 🆕 v19 - Descuentos gamificados
+  discount_amount: number;
+  discount_pct: number;
+  discount_tier: string | null;
+
+  // 🆕 v20 - Sistema de pagos escrow
+  cart_type: CartType | null;
+  payment_receiver: PaymentReceiver;
+  delivery_debt: number;
 }
 
 export interface DbCustomerAddress {
@@ -218,7 +251,3 @@ export interface DbProductReview {
   avg_rating: number;
   review_count: number;
 }
-
-// Agregar estos campos a DbProduct (busca tu interface DbProduct y añade estas 2 líneas):
-// avg_rating: number;
-// review_count: number;
