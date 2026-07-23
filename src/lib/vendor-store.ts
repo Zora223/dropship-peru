@@ -1,6 +1,7 @@
 import { supabase } from "./supabase";
 import { uploadFile } from "./storage";
 import type { DbStore, DbStoreTheme, DbStorePaymentMethod } from "../types/database";
+import { upsertPaymentQr, uploadQrImage, deletePaymentQr, getVendorQrs } from "./payment-qrs";
 
 /**
  * Obtiene la tienda del vendor actualmente logueado.
@@ -139,4 +140,70 @@ export async function isSlugAvailable(slug: string, excludeStoreId?: string): Pr
   const { data, error } = await query.maybeSingle();
   if (error) throw error;
   return data === null;
+}
+
+// ============================================
+// 🆕 v20 - Sistema unificado payment_qrs
+// ============================================
+
+/**
+ * 🆕 Sube imagen de QR del vendor a bucket y retorna URL.
+ */
+export async function uploadVendorQrImage(
+  storeId: string,
+  file: File,
+  paymentMethod: "yape" | "plin" | "transfer"
+): Promise<string> {
+  return uploadQrImage(file, "vendor", storeId, paymentMethod);
+}
+
+/**
+ * 🆕 Sincroniza los métodos de pago con la tabla payment_qrs.
+ * Esto permite al sistema unificado usar los QRs del vendor.
+ */
+export async function syncVendorPaymentQrs(
+  storeId: string,
+  paymentMethods: DbStorePaymentMethod[]
+): Promise<void> {
+  // Obtener QRs existentes del vendor
+  const existingQrs = await getVendorQrs(storeId);
+
+  // Solo sincronizar yape, plin, transfer (los que tienen QR)
+  const methodsToSync = paymentMethods.filter(
+    (m) => m.id === "yape" || m.id === "plin" || m.id === "transfer"
+  );
+
+  for (const method of methodsToSync) {
+    const existing = existingQrs.find(
+      (q) => q.payment_method === method.id
+    );
+
+    // Si está deshabilitado, marcar como inactivo o eliminar
+    if (!method.enabled) {
+      if (existing) {
+        await deletePaymentQr(existing.id);
+      }
+      continue;
+    }
+
+    // Si está habilitado, upsertear
+    const config = method.config ?? {};
+
+    await upsertPaymentQr(
+      {
+        owner_type: "vendor",
+        owner_id: storeId,
+        payment_method: method.id as "yape" | "plin" | "transfer",
+        holder_name: (config.holder_name as string) || (config.account_holder as string) || "Vendor",
+        phone: (config.phone as string) || null,
+        account_number: (config.account_number as string) || null,
+        cci: (config.cci as string) || null,
+        bank_name: (config.bank_name as string) || null,
+        qr_image_url: (config.qr_url as string) || null,
+        notes: (config.instructions as string) || null,
+        is_active: true,
+      },
+      existing?.id
+    );
+  }
 }

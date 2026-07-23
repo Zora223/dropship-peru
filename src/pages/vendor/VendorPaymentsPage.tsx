@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMyStore } from "../../hooks/useMyStore";
-import { updateStorePaymentMethods } from "../../lib/vendor-store";
+import {
+  updateStorePaymentMethods,
+  uploadVendorQrImage,
+  syncVendorPaymentQrs,
+} from "../../lib/vendor-store";
 import type {
   DbStorePaymentMethod,
   PaymentMethodType,
@@ -88,6 +92,7 @@ const DEFAULT_METHODS: PaymentConfigState = {
       account_number: "",
       cci: "",
       document_number: "",
+      qr_url: "",
       instructions: "",
     },
   },
@@ -132,19 +137,11 @@ function cloneDefaultMethods(): PaymentConfigState {
   };
 }
 
-/**
- * Normaliza los payment_methods venidos de la BD.
- * Soporta:
- *   - Array (formato nuevo)  ✅
- *   - Objeto con keys (formato viejo)  🩹 auto-migrado en runtime
- *   - null / undefined  → defaults
- */
 function normalizePaymentMethods(existing: unknown): PaymentConfigState {
   const base = cloneDefaultMethods();
 
   if (!existing) return base;
 
-  // ✅ Caso normal: array (formato nuevo)
   if (Array.isArray(existing)) {
     for (const method of existing) {
       if (!method || typeof method !== "object") continue;
@@ -163,7 +160,6 @@ function normalizePaymentMethods(existing: unknown): PaymentConfigState {
     return base;
   }
 
-  // 🩹 Fallback: objeto con keys (formato viejo migrable en runtime)
   if (typeof existing === "object") {
     const obj = existing as Record<string, unknown>;
 
@@ -182,7 +178,6 @@ function normalizePaymentMethods(existing: unknown): PaymentConfigState {
         enabled: Boolean(m.enabled),
         config: {
           ...base[id].config,
-          // Mapea keys viejas a nuevas de forma segura
           phone: (m.number ?? m.phone ?? base[id].config.phone) as string,
           holder_name: (m.holder ??
             m.holder_name ??
@@ -217,6 +212,9 @@ export default function VendorPaymentsPage() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 🆕 v20 - Estados de subida de imagen QR
+  const [uploadingQr, setUploadingQr] = useState<PaymentMethodType | null>(null);
+
   useEffect(() => {
     if (store) {
       setMethods(normalizePaymentMethods(store.payment_methods));
@@ -248,6 +246,38 @@ export default function VendorPaymentsPage() {
         },
       },
     }));
+  }
+
+  // 🆕 v20 - Subida de imagen QR
+  async function handleQrImageUpload(
+    id: PaymentMethodType,
+    file: File
+  ) {
+    if (!store) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      setError("La imagen debe ser menor a 2MB");
+      return;
+    }
+
+    if (id !== "yape" && id !== "plin" && id !== "transfer") return;
+
+    setUploadingQr(id);
+    setError(null);
+
+    try {
+      const url = await uploadVendorQrImage(store.id, file, id);
+      updateConfig(id, "qr_url", url);
+    } catch (err) {
+      console.error(err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Error al subir imagen del QR"
+      );
+    } finally {
+      setUploadingQr(null);
+    }
   }
 
   function validateMethods() {
@@ -300,7 +330,11 @@ export default function VendorPaymentsPage() {
         config: methods[id].config,
       }));
 
+      // 1. Guardar en stores.payment_methods (sistema viejo)
       await updateStorePaymentMethods(store.id, payload);
+
+      // 🆕 2. Sincronizar con payment_qrs (sistema nuevo v20)
+      await syncVendorPaymentQrs(store.id, payload);
 
       setStore({
         ...store,
@@ -396,6 +430,20 @@ export default function VendorPaymentsPage() {
         >
           {saving ? "Guardando..." : "Guardar cambios"}
         </button>
+      </div>
+
+      {/* 🆕 v20 - Banner explicativo */}
+      <div className="rounded-2xl bg-linear-to-br from-purple-50 to-fuchsia-50 border border-purple-200 p-4">
+        <div className="flex items-start gap-3">
+          <div className="text-2xl">💡</div>
+          <div className="flex-1 text-sm text-purple-900">
+            <div className="font-bold mb-1">¿Cuándo se usa tu QR?</div>
+            <p className="text-purple-800">
+              Los clientes verán <strong>tu QR</strong> cuando compren productos de <strong>tu inventario propio</strong>.
+              Cuando compren del catálogo maestro, verán el QR de Dropship (el delivery se descuenta después de tus ganancias).
+            </p>
+          </div>
+        </div>
       </div>
 
       {success && (
@@ -535,20 +583,15 @@ export default function VendorPaymentsPage() {
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700">
-                        URL de QR opcional
-                      </label>
-                      <input
-                        disabled={!method.enabled}
-                        value={method.config.qr_url ?? ""}
-                        onChange={(event) =>
-                          updateConfig(id, "qr_url", event.target.value)
-                        }
-                        className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-                        placeholder="https://..."
-                      />
-                    </div>
+                    {/* 🆕 v20 - Subidor de imagen QR */}
+                    <QrImageUploader
+                      id="yape"
+                      enabled={method.enabled}
+                      qrUrl={method.config.qr_url as string | undefined}
+                      uploading={uploadingQr === "yape"}
+                      onUpload={handleQrImageUpload}
+                      onRemove={() => updateConfig(id, "qr_url", "")}
+                    />
                   </div>
                 )}
 
@@ -584,20 +627,15 @@ export default function VendorPaymentsPage() {
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700">
-                        URL de QR opcional
-                      </label>
-                      <input
-                        disabled={!method.enabled}
-                        value={method.config.qr_url ?? ""}
-                        onChange={(event) =>
-                          updateConfig(id, "qr_url", event.target.value)
-                        }
-                        className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-                        placeholder="https://..."
-                      />
-                    </div>
+                    {/* 🆕 v20 - Subidor de imagen QR */}
+                    <QrImageUploader
+                      id="plin"
+                      enabled={method.enabled}
+                      qrUrl={method.config.qr_url as string | undefined}
+                      uploading={uploadingQr === "plin"}
+                      onUpload={handleQrImageUpload}
+                      onRemove={() => updateConfig(id, "qr_url", "")}
+                    />
                   </div>
                 )}
 
@@ -693,6 +731,16 @@ export default function VendorPaymentsPage() {
                         placeholder="Documento del titular"
                       />
                     </div>
+
+                    {/* 🆕 v20 - QR opcional para transfer */}
+                    <QrImageUploader
+                      id="transfer"
+                      enabled={method.enabled}
+                      qrUrl={method.config.qr_url as string | undefined}
+                      uploading={uploadingQr === "transfer"}
+                      onUpload={handleQrImageUpload}
+                      onRemove={() => updateConfig(id, "qr_url", "")}
+                    />
                   </div>
                 )}
 
@@ -742,6 +790,91 @@ export default function VendorPaymentsPage() {
           {saving ? "Guardando..." : "Guardar métodos de cobro"}
         </button>
       </div>
+    </div>
+  );
+}
+
+// 🆕 v20 - Componente reutilizable para subir QR
+function QrImageUploader({
+  id,
+  enabled,
+  qrUrl,
+  uploading,
+  onUpload,
+  onRemove,
+}: {
+  id: PaymentMethodType;
+  enabled: boolean;
+  qrUrl: string | undefined;
+  uploading: boolean;
+  onUpload: (id: PaymentMethodType, file: File) => void;
+  onRemove: () => void;
+}) {
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) onUpload(id, file);
+  };
+
+  return (
+    <div>
+      <label className="block text-sm font-semibold text-gray-700 mb-2">
+        Imagen del QR {id === "transfer" && "(opcional)"}
+      </label>
+
+      {qrUrl ? (
+        <div className="flex items-start gap-4">
+          <img
+            src={qrUrl}
+            alt="QR"
+            className="h-32 w-32 rounded-2xl border-2 border-gray-100 object-contain bg-white p-2"
+          />
+          <div className="flex-1 space-y-2">
+            <label
+              className={`block cursor-pointer rounded-full bg-purple-100 px-4 py-2 text-center text-xs font-semibold text-purple-700 hover:bg-purple-200 ${
+                !enabled ? "cursor-not-allowed opacity-60" : ""
+              }`}
+            >
+              📸 Cambiar imagen
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFile}
+                disabled={!enabled || uploading}
+                className="hidden"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={onRemove}
+              disabled={!enabled}
+              className="w-full rounded-full bg-red-100 px-4 py-2 text-xs font-semibold text-red-700 hover:bg-red-200 disabled:opacity-60"
+            >
+              🗑️ Quitar imagen
+            </button>
+          </div>
+        </div>
+      ) : (
+        <label
+          className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 p-6 hover:border-purple-400 hover:bg-purple-50 ${
+            !enabled ? "cursor-not-allowed opacity-60" : ""
+          }`}
+        >
+          <div className="text-4xl">📸</div>
+          <div className="mt-2 text-sm font-semibold text-gray-700">
+            {uploading ? "Subiendo..." : "Sube tu QR aquí"}
+          </div>
+          <div className="mt-1 text-xs text-gray-500">
+            PNG, JPG (máx 2MB)
+          </div>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleFile}
+            disabled={!enabled || uploading}
+            className="hidden"
+          />
+        </label>
+      )}
     </div>
   );
 }
