@@ -1,5 +1,5 @@
 // src/components/DiscountProgressBar.tsx
-// 🆕 v19 - Barra de progreso gamificada de descuentos
+// 🆕 v19.1 - Muestra créditos ganados (no descuento inmediato)
 import { useEffect, useState } from "react";
 import { calculateDiscount, type DiscountResult } from "../lib/discounts";
 
@@ -25,7 +25,6 @@ export default function DiscountProgressBar({
       setResult(r);
       onDiscountChange?.(r);
 
-      // Detectar cambio de tier → animación
       const currentTierName = r.current_tier?.tier_name ?? null;
       if (prevTier && currentTierName && currentTierName !== prevTier) {
         setShowCelebration(true);
@@ -40,7 +39,7 @@ export default function DiscountProgressBar({
 
   if (!result || itemCount === 0) return null;
 
-  const { current_tier, next_tier, discount_amount, progress_pct, message } = result;
+  const { current_tier, next_tier, credit_earned, progress_pct, message } = result;
 
   return (
     <div className="relative rounded-2xl border-2 border-purple-200 bg-linear-to-br from-purple-50 to-fuchsia-50 p-4">
@@ -50,31 +49,31 @@ export default function DiscountProgressBar({
           <div className="text-center text-white">
             <div className="text-5xl animate-bounce">{current_tier.tier_emoji}</div>
             <div className="mt-2 text-2xl font-black">¡NIVEL {current_tier.tier_label}!</div>
-            <div className="mt-1 text-sm opacity-90">{current_tier.tier_tagline}</div>
+            <div className="mt-1 text-sm opacity-90">Ganarás S/ {credit_earned} en créditos 🎁</div>
           </div>
         </div>
       )}
 
-      {/* Tier actual */}
+      {/* Tier actual con crédito ganado */}
       {current_tier && (
         <div className="flex items-center gap-3 mb-3">
           <div className="text-3xl">{current_tier.tier_emoji}</div>
           <div className="flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm font-black text-purple-700">
                 NIVEL {current_tier.tier_label}
               </span>
-              <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white">
-                DESCUENTO ACTIVO
+              <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                🎁 CRÉDITO
               </span>
             </div>
             <p className="text-xs text-gray-600">{current_tier.tier_tagline}</p>
           </div>
           <div className="text-right">
-            <div className="text-lg font-black text-emerald-600">
-              -S/ {discount_amount.toFixed(2)}
+            <div className="text-lg font-black text-amber-600">
+              +S/ {credit_earned.toFixed(2)}
             </div>
-            <div className="text-[10px] text-gray-500">de descuento</div>
+            <div className="text-[10px] text-gray-500">para próxima compra</div>
           </div>
         </div>
       )}
@@ -99,9 +98,6 @@ export default function DiscountProgressBar({
           <p className="mt-2 text-center text-xs font-semibold text-purple-700">
             💡 {message}
           </p>
-          <p className="mt-0.5 text-center text-[10px] text-gray-500">
-            Ahorrarás S/ {next_tier.discount_amount.toFixed(2)} en total
-          </p>
         </div>
       )}
 
@@ -109,10 +105,17 @@ export default function DiscountProgressBar({
       {!next_tier && current_tier && (
         <div className="mt-2 rounded-xl bg-linear-to-r from-yellow-100 to-amber-100 p-2 text-center">
           <span className="text-sm font-bold text-amber-700">
-            🏆 ¡Máximo nivel desbloqueado!
+            🏆 ¡Nivel máximo! Ganarás S/ {credit_earned} en créditos
           </span>
         </div>
       )}
+
+      {/* Info explicativa */}
+      <div className="mt-3 rounded-xl bg-white/60 p-2 text-center">
+        <p className="text-[11px] text-gray-600">
+          💡 <b>Los créditos</b> se activan al confirmar tu pago y sirven para tu próxima compra
+        </p>
+      </div>
     </div>
   );
 }

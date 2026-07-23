@@ -1,16 +1,16 @@
 // src/lib/discounts.ts
-// 🆕 v19 - Sistema de descuentos gamificados (SMART/PRO/EXPERT/LEGEND)
+// 🆕 v19.1 - Sistema HÍBRIDO: sin descuento directo, con créditos futuros
 import { supabase } from "./supabase";
 
 export interface DiscountRule {
   id: string;
-  tier_name: string;        // 'smart', 'pro', 'expert', 'legend'
-  tier_label: string;       // 'SMART', 'PRO', 'EXPERT', 'LEGEND'
-  tier_emoji: string;       // '🥉', '🥈', '🥇', '💎'
+  tier_name: string;
+  tier_label: string;
+  tier_emoji: string;
   tier_tagline: string;
   min_items: number;
   min_total: number;
-  discount_amount: number;
+  discount_amount: number;      // ahora es CRÉDITO otorgado
   discount_pct: number;
   active: boolean;
   sort_order: number;
@@ -20,21 +20,18 @@ export interface DiscountResult {
   applied: boolean;
   current_tier: DiscountRule | null;
   next_tier: DiscountRule | null;
-  discount_amount: number;
+  credit_earned: number;         // 🆕 crédito que gana (no descuento inmediato)
+  discount_amount: number;       // legacy, siempre 0 ahora
   final_total: number;
   items_to_next: number;
-  progress_pct: number;      // 0-100, para barra de progreso
+  progress_pct: number;
   message: string;
 }
 
-// Cache de reglas (5 min)
 let cachedRules: DiscountRule[] | null = null;
 let cacheTime = 0;
 const CACHE_TTL = 5 * 60 * 1000;
 
-/**
- * Obtiene todas las reglas activas ordenadas.
- */
 export async function getDiscountRules(force = false): Promise<DiscountRule[]> {
   const now = Date.now();
   if (!force && cachedRules && now - cacheTime < CACHE_TTL) {
@@ -58,12 +55,7 @@ export async function getDiscountRules(force = false): Promise<DiscountRule[]> {
 }
 
 /**
- * 🎯 CEREBRO: Calcula el descuento aplicable al carrito actual.
- * 
- * Reglas:
- * - Se aplica la regla más beneficiosa (mayor descuento)
- * - Considera tanto discount_amount como discount_pct
- * - Devuelve info del NEXT tier para gamificación
+ * 🆕 v19.1 - Ahora calcula CRÉDITOS ganados (no descuento inmediato)
  */
 export async function calculateDiscount(
   itemCount: number,
@@ -76,6 +68,7 @@ export async function calculateDiscount(
       applied: false,
       current_tier: null,
       next_tier: null,
+      credit_earned: 0,
       discount_amount: 0,
       final_total: subtotal,
       items_to_next: 0,
@@ -84,32 +77,30 @@ export async function calculateDiscount(
     };
   }
 
-  // Encontrar la regla ACTUAL (la de mayor tier que cumple)
+  // Encontrar tier actual
   let currentTier: DiscountRule | null = null;
-  let bestDiscount = 0;
+  let bestCredit = 0;
 
   for (const rule of rules) {
     const meetsItems = itemCount >= rule.min_items;
     const meetsTotal = subtotal >= rule.min_total;
 
     if (meetsItems && meetsTotal) {
-      // Calcular descuento (usa el mayor entre fijo y %)
-      const discFromAmount = rule.discount_amount;
-      const discFromPct = (subtotal * rule.discount_pct) / 100;
-      const thisDiscount = Math.max(discFromAmount, discFromPct);
-
-      if (thisDiscount >= bestDiscount) {
-        bestDiscount = thisDiscount;
+      const credit = Math.max(
+        rule.discount_amount,
+        (subtotal * rule.discount_pct) / 100
+      );
+      if (credit >= bestCredit) {
+        bestCredit = credit;
         currentTier = rule;
       }
     }
   }
 
-  // Encontrar SIGUIENTE tier (para gamificación)
+  // Siguiente tier
   const nextTier = rules.find((r) => r.min_items > itemCount) ?? null;
   const itemsToNext = nextTier ? nextTier.min_items - itemCount : 0;
 
-  // Progreso hacia siguiente tier (para barra visual)
   let progressPct = 0;
   if (nextTier) {
     const prevItems = currentTier?.min_items ?? 0;
@@ -117,36 +108,31 @@ export async function calculateDiscount(
     const progress = itemCount - prevItems;
     progressPct = range > 0 ? Math.min(100, (progress / range) * 100) : 0;
   } else if (currentTier) {
-    progressPct = 100; // Ya en el máximo
+    progressPct = 100;
   }
 
-  const finalTotal = Math.max(0, subtotal - bestDiscount);
-
-  // Mensaje personalizado
   let message = "";
   if (currentTier && nextTier) {
-    message = `Agrega ${itemsToNext} producto${itemsToNext > 1 ? "s" : ""} más para ${nextTier.tier_emoji} ${nextTier.tier_label}`;
+    message = `Agrega ${itemsToNext} producto${itemsToNext > 1 ? "s" : ""} más y gana S/ ${nextTier.discount_amount} de crédito`;
   } else if (currentTier && !nextTier) {
-    message = `¡Estás en el nivel máximo ${currentTier.tier_emoji} ${currentTier.tier_label}!`;
+    message = `¡Máximo nivel! Ganarás S/ ${currentTier.discount_amount} en créditos`;
   } else if (!currentTier && nextTier) {
-    message = `Agrega ${itemsToNext} producto${itemsToNext > 1 ? "s" : ""} para desbloquear ${nextTier.tier_emoji} ${nextTier.tier_label}`;
+    message = `Agrega ${itemsToNext} producto${itemsToNext > 1 ? "s" : ""} y gana S/ ${nextTier.discount_amount} de crédito Dropship`;
   }
 
   return {
-    applied: bestDiscount > 0,
+    applied: bestCredit > 0,
     current_tier: currentTier,
     next_tier: nextTier,
-    discount_amount: Number(bestDiscount.toFixed(2)),
-    final_total: Number(finalTotal.toFixed(2)),
+    credit_earned: Number(bestCredit.toFixed(2)),
+    discount_amount: 0, // 🆕 Ya NO se aplica descuento inmediato
+    final_total: subtotal, // 🆕 Total NO cambia
     items_to_next: itemsToNext,
     progress_pct: Math.round(progressPct),
     message,
   };
 }
 
-/**
- * Limpia cache (útil si admin cambia reglas).
- */
 export function clearDiscountCache() {
   cachedRules = null;
   cacheTime = 0;

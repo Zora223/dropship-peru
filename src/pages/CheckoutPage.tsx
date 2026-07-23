@@ -1,5 +1,6 @@
 // src/pages/CheckoutPage.tsx
-// 🆕 v19 - Sistema de descuentos gamificado + envío gratis
+// 🆕 v19.1 - Modelo HÍBRIDO CEO: envío gratis + créditos futuros
+// El cliente paga el precio completo, pero gana créditos para su próxima compra
 import { useCart } from "../contexts/CartContext";
 import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
@@ -14,7 +15,7 @@ export default function CheckoutPage() {
   const storeName = items[0]?.storeName ?? "esta tienda";
   const backToStoreUrl = storeSlug ? `/tienda/${storeSlug}` : "/";
 
-  // 🆕 v19 - Calcular descuento cuando cambia el carrito
+  // 🆕 v19.1 - Calcular CRÉDITOS ganados (no descuento inmediato)
   useEffect(() => {
     if (count === 0) {
       setDiscount(null);
@@ -23,8 +24,7 @@ export default function CheckoutPage() {
     calculateDiscount(count, total).then(setDiscount);
   }, [count, total]);
 
-  const discountAmount = discount?.discount_amount ?? 0;
-  const finalTotal = Math.max(0, total - discountAmount);
+  const creditEarned = discount?.credit_earned ?? 0;
 
   if (count === 0) {
     return (
@@ -77,7 +77,7 @@ export default function CheckoutPage() {
 
         <div className="grid gap-8 lg:grid-cols-3">
           <div className="space-y-3 lg:col-span-2">
-            {/* 🆕 v19 - Barra de progreso gamificada */}
+            {/* 🆕 v19.1 - Barra gamificada de CRÉDITOS */}
             <DiscountProgressBar
               itemCount={count}
               subtotal={total}
@@ -207,18 +207,6 @@ export default function CheckoutPage() {
                     <span className="text-gray-600">IGV</span>
                     <span className="font-semibold text-gray-900">Incluido</span>
                   </div>
-
-                  {/* 🆕 v19 - Descuento aplicado */}
-                  {discountAmount > 0 && discount?.current_tier && (
-                    <div className="flex justify-between text-sm rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2">
-                      <span className="font-bold text-emerald-700">
-                        {discount.current_tier.tier_emoji} Dscto {discount.current_tier.tier_label}
-                      </span>
-                      <span className="font-black tabular-nums text-emerald-700">
-                        -S/ {discountAmount.toFixed(2)}
-                      </span>
-                    </div>
-                  )}
                 </div>
 
                 <div className="my-5 border-t border-dashed border-gray-200" />
@@ -229,22 +217,31 @@ export default function CheckoutPage() {
                   </span>
 
                   <div className="text-right">
-                    {/* 🆕 v19 - Precio tachado si hay descuento */}
-                    {discountAmount > 0 && (
-                      <div className="text-sm line-through text-gray-400 tabular-nums">
-                        S/ {total.toFixed(2)}
-                      </div>
-                    )}
                     <div className="text-3xl font-extrabold tabular-nums text-gray-900">
-                      S/ {finalTotal.toFixed(2)}
+                      S/ {total.toFixed(2)}
                     </div>
-                    {discountAmount > 0 && (
-                      <div className="mt-0.5 text-[10px] font-bold text-emerald-600">
-                        ¡Ahorras S/ {discountAmount.toFixed(2)}! 🎉
-                      </div>
-                    )}
                   </div>
                 </div>
+
+                {/* 🆕 v19.1 - Card de créditos ganados */}
+                {creditEarned > 0 && (
+                  <div className="mt-4 rounded-xl bg-linear-to-br from-amber-50 to-yellow-50 border-2 border-amber-200 p-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">🎁</span>
+                      <div className="flex-1">
+                        <p className="text-xs font-bold text-amber-700">
+                          Ganarás en créditos:
+                        </p>
+                        <p className="text-lg font-black text-amber-600">
+                          +S/ {creditEarned.toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="mt-1 text-[10px] text-center text-amber-600">
+                      Para usar en tu próxima compra 🛍️
+                    </p>
+                  </div>
+                )}
 
                 <Link
                   to="/payment"
