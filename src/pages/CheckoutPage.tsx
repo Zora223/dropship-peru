@@ -1,6 +1,5 @@
 // src/pages/CheckoutPage.tsx
-// 🆕 v19 - Sistema de descuentos gamificado + envío gratis
-// Costeado con el ahorro real de delivery (S/5-20, tope S/70)
+// 🆕 v19.3 - Descuentos porcentuales con tope
 import { useCart } from "../contexts/CartContext";
 import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
@@ -24,21 +23,19 @@ export default function CheckoutPage() {
   }, [count, total]);
 
   const discountAmount = discount?.discount_amount ?? 0;
+  const discountPct = discount?.discount_pct_display ?? 0;
   const finalTotal = Math.max(0, total - discountAmount);
 
   if (count === 0) {
     return (
       <div className="flex min-h-[calc(100vh-140px)] flex-col items-center justify-center bg-linear-to-br from-rose-50 via-white to-orange-50 px-6 text-center">
         <div className="text-7xl">🛍️</div>
-
         <h1 className="mt-6 text-3xl font-bold tracking-tight text-gray-900">
           Tu carrito está vacío
         </h1>
-
         <p className="mt-3 max-w-sm text-gray-500">
           Para comprar, ingresa desde el enlace directo que te compartió tu vendedor.
         </p>
-
         <Link
           to="/"
           className="mt-8 rounded-full bg-gray-900 px-8 py-3.5 text-sm font-semibold text-white shadow-lg transition hover:bg-gray-800 hover:shadow-xl"
@@ -65,11 +62,9 @@ export default function CheckoutPage() {
           >
             ← Volver a la tienda
           </Link>
-
           <h1 className="mt-3 text-4xl font-bold tracking-tight text-gray-900">
             Casi listo 🎉
           </h1>
-
           <p className="mt-2 text-gray-500">
             Revisa tu pedido antes de confirmar.
           </p>
@@ -77,7 +72,6 @@ export default function CheckoutPage() {
 
         <div className="grid gap-8 lg:grid-cols-3">
           <div className="space-y-3 lg:col-span-2">
-            {/* Barra gamificada de descuentos */}
             <DiscountProgressBar
               itemCount={count}
               subtotal={total}
@@ -91,11 +85,7 @@ export default function CheckoutPage() {
               >
                 <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-linear-to-br from-gray-100 to-gray-200 text-3xl">
                   {item.image ? (
-                    <img
-                      src={item.image}
-                      alt={item.name}
-                      className="h-full w-full object-cover"
-                    />
+                    <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
                   ) : (
                     "📦"
                   )}
@@ -108,34 +98,26 @@ export default function CheckoutPage() {
                     </h3>
                     <FreeShippingBadge size="sm" />
                   </div>
-
                   <p className="mt-0.5 text-sm text-gray-500">
                     S/ {item.price.toFixed(2)} por unidad
                   </p>
 
                   <div className="mt-3 flex items-center gap-2">
                     <button
-                      onClick={() =>
-                        updateQuantity(item.productId, item.quantity - 1)
-                      }
+                      onClick={() => updateQuantity(item.productId, item.quantity - 1)}
                       className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition hover:border-gray-900 hover:bg-gray-900 hover:text-white"
                     >
                       −
                     </button>
-
                     <span className="w-6 text-center text-sm font-semibold tabular-nums">
                       {item.quantity}
                     </span>
-
                     <button
-                      onClick={() =>
-                        updateQuantity(item.productId, item.quantity + 1)
-                      }
+                      onClick={() => updateQuantity(item.productId, item.quantity + 1)}
                       className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition hover:border-gray-900 hover:bg-gray-900 hover:text-white"
                     >
                       +
                     </button>
-
                     <button
                       onClick={() => removeItem(item.productId)}
                       className="ml-3 text-xs font-medium text-gray-400 transition hover:text-red-500"
@@ -156,23 +138,15 @@ export default function CheckoutPage() {
             <div className="mt-8 grid grid-cols-3 gap-3">
               <div className="rounded-2xl bg-white/60 p-4 text-center backdrop-blur">
                 <div className="text-2xl">🚚</div>
-                <div className="mt-1 text-xs font-semibold text-gray-700">
-                  Envío GRATIS
-                </div>
+                <div className="mt-1 text-xs font-semibold text-gray-700">Envío GRATIS</div>
               </div>
-
               <div className="rounded-2xl bg-white/60 p-4 text-center backdrop-blur">
                 <div className="text-2xl">🔒</div>
-                <div className="mt-1 text-xs font-semibold text-gray-700">
-                  Compra protegida
-                </div>
+                <div className="mt-1 text-xs font-semibold text-gray-700">Compra protegida</div>
               </div>
-
               <div className="rounded-2xl bg-white/60 p-4 text-center backdrop-blur">
                 <div className="text-2xl">🏪</div>
-                <div className="mt-1 text-xs font-semibold text-gray-700">
-                  Tienda verificada
-                </div>
+                <div className="mt-1 text-xs font-semibold text-gray-700">Tienda verificada</div>
               </div>
             </div>
           </div>
@@ -181,7 +155,6 @@ export default function CheckoutPage() {
             <div className="sticky top-24 overflow-hidden rounded-3xl bg-white shadow-xl">
               <div className="bg-linear-to-br from-gray-900 to-gray-800 px-6 py-5 text-white">
                 <h2 className="text-lg font-bold">Tu resumen</h2>
-
                 <p className="text-xs text-gray-300">
                   {count} {count === 1 ? "producto" : "productos"} en el carrito
                 </p>
@@ -195,24 +168,20 @@ export default function CheckoutPage() {
                       S/ {total.toFixed(2)}
                     </span>
                   </div>
-
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Envío</span>
-                    <span className="font-semibold text-emerald-600">
-                      🚚 GRATIS
-                    </span>
+                    <span className="font-semibold text-emerald-600">🚚 GRATIS</span>
                   </div>
-
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">IGV</span>
                     <span className="font-semibold text-gray-900">Incluido</span>
                   </div>
 
-                  {/* Descuento aplicado */}
+                  {/* 🆕 v19.3 - Descuento con % */}
                   {discountAmount > 0 && discount?.current_tier && (
                     <div className="flex justify-between text-sm rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2">
                       <span className="font-bold text-emerald-700">
-                        {discount.current_tier.tier_emoji} Dscto {discount.current_tier.tier_label}
+                        {discount.current_tier.tier_emoji} Dscto {discount.current_tier.tier_label} (-{discountPct}%)
                       </span>
                       <span className="font-black tabular-nums text-emerald-700">
                         -S/ {discountAmount.toFixed(2)}
@@ -224,12 +193,9 @@ export default function CheckoutPage() {
                 <div className="my-5 border-t border-dashed border-gray-200" />
 
                 <div className="flex items-baseline justify-between">
-                  <span className="text-base font-bold text-gray-900">
-                    Total a pagar
-                  </span>
+                  <span className="text-base font-bold text-gray-900">Total a pagar</span>
 
                   <div className="text-right">
-                    {/* Precio tachado si hay descuento */}
                     {discountAmount > 0 && (
                       <div className="text-sm line-through text-gray-400 tabular-nums">
                         S/ {total.toFixed(2)}
@@ -240,7 +206,7 @@ export default function CheckoutPage() {
                     </div>
                     {discountAmount > 0 && (
                       <div className="mt-0.5 text-[10px] font-bold text-emerald-600">
-                        ¡Ahorras S/ {discountAmount.toFixed(2)}! 🎉
+                        ¡Ahorras {discountPct}% (S/ {discountAmount.toFixed(2)})! 🎉
                       </div>
                     )}
                   </div>
