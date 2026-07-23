@@ -1,6 +1,7 @@
 // src/pages/delivery/DeliveryOrderDetailPage.tsx
 // v13: WhatsApp automáticos ahora los envían triggers de Supabase
 // + Sección de "Punto de recojo" del pedido
+// 🆕 v20: Soporte para pickup en tienda (shipping_address puede ser null)
 
 import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
@@ -64,10 +65,6 @@ export default function DeliveryOrderDetailPage() {
     }
   }
 
-  // ============================================
-  // ✅ ACCIONES — WhatsApp los envían los triggers
-  // ============================================
-
   async function handlePickup() {
     if (!id) return;
     try {
@@ -107,10 +104,6 @@ export default function DeliveryOrderDetailPage() {
     }
   }
 
-  // ============================================
-  // 📱 CONTACTO MANUAL
-  // ============================================
-
   function getOrderContext() {
     return {
       orderNumber: order?.order_number ?? "",
@@ -136,7 +129,6 @@ export default function DeliveryOrderDetailPage() {
     }
   }
 
-  // Contactar al contacto del pickup (proveedor/persona que entrega)
   function contactPickupContact(phone: string, name?: string | null) {
     const msg = `Hola${name ? ` ${name}` : ""}, soy tu delivery. Voy a recoger el pedido #${order?.order_number}. ¿En qué momento puedo pasar?`;
     const opened = openWhatsapp(phone, msg);
@@ -163,6 +155,9 @@ export default function DeliveryOrderDetailPage() {
   const isAssigned = assignment.status === "assigned";
   const isPickedUp = assignment.status === "picked_up";
   const isDelivered = assignment.status === "delivered";
+
+  // 🆕 v20 - Detectar si es pickup en tienda (no requiere delivery)
+  const isStorePickup = order?.delivery_mode === "store_pickup";
 
   const clientePhoneValido = isValidPhone(order?.customer_phone);
   const tiendaWhatsappValido = isValidPhone(store?.whatsapp);
@@ -191,6 +186,11 @@ export default function DeliveryOrderDetailPage() {
             >
               {getStatusLabel(assignment.status)}
             </span>
+            {isStorePickup && (
+              <span className="rounded-full bg-purple-100 border border-purple-300 px-3 py-1 text-xs font-bold text-purple-700">
+                🏪 PICKUP
+              </span>
+            )}
           </div>
           <p className="mt-1 text-sm text-gray-600">
             Total: <b>S/. {Number(order?.total ?? 0).toFixed(2)}</b>
@@ -198,12 +198,32 @@ export default function DeliveryOrderDetailPage() {
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════ */}
-      {/* 🏪 PUNTO DE RECOJO — NUEVO */}
-      {/* ═══════════════════════════════════════════════════════ */}
+      {/* 🆕 v20 - Alerta si es pickup en tienda */}
+      {isStorePickup && (
+        <div className="rounded-2xl border-2 border-purple-300 bg-linear-to-br from-purple-50 to-fuchsia-50 p-4 sm:p-6">
+          <div className="flex items-start gap-3">
+            <span className="text-3xl">🏪</span>
+            <div>
+              <h3 className="text-sm font-bold text-purple-900">
+                Este pedido es de RECOJO EN TIENDA
+              </h3>
+              <p className="mt-1 text-sm text-purple-800">
+                El cliente lo recogerá directamente en la tienda. No requiere delivery a domicilio.
+              </p>
+              {order?.pickup_time_slot && (
+                <div className="mt-2 rounded-xl bg-white/60 px-3 py-2 text-xs">
+                  <span className="font-bold text-purple-700">📅 Horario:</span>{" "}
+                  <span className="text-purple-900">{order.pickup_time_slot}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🏪 PUNTO DE RECOJO */}
       {pickup && pickup.street && (
         <div className="overflow-hidden rounded-2xl border-2 border-amber-200 bg-linear-to-br from-amber-50 to-orange-50 shadow-sm">
-          {/* Header con badge */}
           <div className="flex items-center justify-between border-b border-amber-200/60 bg-amber-100/40 px-4 py-3 sm:px-6">
             <div className="flex items-center gap-2">
               <span className="text-2xl">🏪</span>
@@ -226,9 +246,7 @@ export default function DeliveryOrderDetailPage() {
             )}
           </div>
 
-          {/* Body */}
           <div className="space-y-3 p-4 sm:p-6">
-            {/* Nombre del punto */}
             {pickup.name && (
               <div className="flex items-center gap-2">
                 <span className="text-2xl">{guessPickupEmoji(pickup.name)}</span>
@@ -236,7 +254,6 @@ export default function DeliveryOrderDetailPage() {
               </div>
             )}
 
-            {/* Dirección */}
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-amber-700">
                 📍 Dirección
@@ -246,7 +263,6 @@ export default function DeliveryOrderDetailPage() {
               </p>
             </div>
 
-            {/* Referencia */}
             {pickup.reference && (
               <div className="rounded-lg bg-white/60 p-3">
                 <p className="text-xs font-semibold uppercase tracking-wider text-amber-700">
@@ -256,7 +272,6 @@ export default function DeliveryOrderDetailPage() {
               </div>
             )}
 
-            {/* Contacto */}
             {(pickup.contact_name || pickup.contact_phone) && (
               <div className="rounded-lg bg-white/60 p-3">
                 <p className="text-xs font-semibold uppercase tracking-wider text-amber-700">
@@ -265,24 +280,15 @@ export default function DeliveryOrderDetailPage() {
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <div className="min-w-0 grow">
                     {pickup.contact_name && (
-                      <p className="font-semibold text-gray-900">
-                        {pickup.contact_name}
-                      </p>
+                      <p className="font-semibold text-gray-900">{pickup.contact_name}</p>
                     )}
                     {pickup.contact_phone && (
-                      <p className="text-sm text-gray-600">
-                        📞 {pickup.contact_phone}
-                      </p>
+                      <p className="text-sm text-gray-600">📞 {pickup.contact_phone}</p>
                     )}
                   </div>
                   {pickupContactValido && pickup.contact_phone && (
                     <button
-                      onClick={() =>
-                        contactPickupContact(
-                          pickup.contact_phone!,
-                          pickup.contact_name
-                        )
-                      }
+                      onClick={() => contactPickupContact(pickup.contact_phone!, pickup.contact_name)}
                       className="rounded-lg bg-emerald-500 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-600"
                     >
                       💬 Coordinar
@@ -292,7 +298,6 @@ export default function DeliveryOrderDetailPage() {
               </div>
             )}
 
-            {/* Notas */}
             {pickup.notes && (
               <div className="rounded-lg bg-yellow-100 p-3">
                 <p className="text-xs font-semibold uppercase tracking-wider text-yellow-800">
@@ -306,7 +311,7 @@ export default function DeliveryOrderDetailPage() {
       )}
 
       {/* Fallback: sin pickup asignado, mostrar coordinar con tienda */}
-      {(!pickup || !pickup.street) && store && (
+      {(!pickup || !pickup.street) && store && !isStorePickup && (
         <div className="rounded-2xl border-2 border-amber-200 bg-amber-50 p-4 sm:p-6">
           <div className="flex items-start gap-3">
             <span className="text-2xl">⚠️</span>
@@ -315,33 +320,26 @@ export default function DeliveryOrderDetailPage() {
                 Sin punto de recojo definido
               </h3>
               <p className="mt-1 text-sm text-amber-800">
-                Coordina directamente con la tienda{" "}
-                <b>{store.name}</b> para saber dónde recoger este pedido.
+                Coordina directamente con la tienda <b>{store.name}</b> para saber dónde recoger este pedido.
               </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════ */}
       {/* 👤 INFO DEL CLIENTE (DESTINO) */}
-      {/* ═══════════════════════════════════════════════════════ */}
       <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
         <div className="flex items-center gap-2">
           <span className="text-xl">🎯</span>
           <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
-            Entregar a
+            {isStorePickup ? "Cliente que recogerá" : "Entregar a"}
           </h2>
         </div>
         <div className="mt-3 space-y-2">
-          <p className="text-lg font-bold text-gray-900">
-            {order?.customer_name}
-          </p>
+          <p className="text-lg font-bold text-gray-900">{order?.customer_name}</p>
           {order?.customer_phone && (
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm text-gray-600">
-                📞 {order.customer_phone}
-              </span>
+              <span className="text-sm text-gray-600">📞 {order.customer_phone}</span>
               {clientePhoneValido && (
                 <button
                   onClick={contactCustomer}
@@ -354,22 +352,36 @@ export default function DeliveryOrderDetailPage() {
           )}
         </div>
 
-        <div className="mt-4 rounded-xl bg-gray-50 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-            📍 Dirección de entrega
-          </p>
-          <p className="mt-2 text-sm font-semibold text-gray-900">
-            {formatShippingAddress(order?.shipping_address)}
-          </p>
-          <p className="text-sm text-gray-600">
-            {getDistrict(order?.shipping_address)}
-          </p>
-          {reference && (
-            <p className="mt-2 text-xs text-gray-500">
-              💡 Referencia: {reference}
+        {/* 🆕 v20 - Solo mostrar dirección si NO es pickup */}
+        {!isStorePickup && order?.shipping_address ? (
+          <div className="mt-4 rounded-xl bg-gray-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+              📍 Dirección de entrega
             </p>
-          )}
-        </div>
+            <p className="mt-2 text-sm font-semibold text-gray-900">
+              {formatShippingAddress(order?.shipping_address)}
+            </p>
+            <p className="text-sm text-gray-600">{getDistrict(order?.shipping_address)}</p>
+            {reference && (
+              <p className="mt-2 text-xs text-gray-500">💡 Referencia: {reference}</p>
+            )}
+          </div>
+        ) : isStorePickup ? (
+          <div className="mt-4 rounded-xl bg-purple-50 border border-purple-200 p-4">
+            <p className="text-sm font-bold text-purple-900">
+              🏪 Este pedido no requiere delivery
+            </p>
+            <p className="mt-1 text-xs text-purple-700">
+              El cliente lo recogerá directamente en la tienda.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-4 rounded-xl bg-amber-50 border border-amber-200 p-4">
+            <p className="text-sm text-amber-800">
+              ⚠️ Sin dirección de entrega registrada
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Info de la tienda */}
@@ -412,17 +424,12 @@ export default function DeliveryOrderDetailPage() {
         </div>
         <div className="divide-y divide-gray-100">
           {items.map((item: any, idx: number) => (
-            <div
-              key={idx}
-              className="flex items-center justify-between p-4 sm:p-6"
-            >
+            <div key={idx} className="flex items-center justify-between p-4 sm:p-6">
               <div className="min-w-0 grow">
                 <p className="truncate text-sm font-semibold text-gray-900">
                   {item.product_name ?? item.name ?? "Producto"}
                 </p>
-                <p className="text-xs text-gray-500">
-                  Cantidad: {item.quantity ?? 1}
-                </p>
+                <p className="text-xs text-gray-500">Cantidad: {item.quantity ?? 1}</p>
               </div>
               <div className="text-sm font-bold text-gray-900">
                 S/. {Number(item.subtotal ?? item.price ?? 0).toFixed(2)}
@@ -435,28 +442,20 @@ export default function DeliveryOrderDetailPage() {
       {/* Notas del vendor */}
       {assignment.vendor_notes && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-6">
-          <h3 className="text-sm font-bold text-amber-900">
-            📝 Notas del vendor
-          </h3>
-          <p className="mt-2 text-sm text-amber-800">
-            {assignment.vendor_notes}
-          </p>
+          <h3 className="text-sm font-bold text-amber-900">📝 Notas del vendor</h3>
+          <p className="mt-2 text-sm text-amber-800">{assignment.vendor_notes}</p>
         </div>
       )}
 
       {/* Acciones */}
-      {!isDelivered && (
+      {!isDelivered && !isStorePickup && (
         <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-4 sm:p-6">
-          <h3 className="text-sm font-bold text-emerald-900">
-            🎯 Próxima acción
-          </h3>
+          <h3 className="text-sm font-bold text-emerald-900">🎯 Próxima acción</h3>
 
           {isAssigned && (
             <>
               <p className="mt-2 text-sm text-emerald-800">
-                Recoge el pedido en el punto indicado y márcalo como{" "}
-                <b>recogido</b> para iniciar la ruta. El cliente será
-                notificado automáticamente por WhatsApp 📲
+                Recoge el pedido en el punto indicado y márcalo como <b>recogido</b> para iniciar la ruta. El cliente será notificado automáticamente por WhatsApp 📲
               </p>
               <button
                 onClick={handlePickup}
@@ -471,8 +470,7 @@ export default function DeliveryOrderDetailPage() {
           {isPickedUp && (
             <>
               <p className="mt-2 text-sm text-emerald-800">
-                Al entregar al cliente, confirma la entrega para completar el
-                pedido. Se le enviará un mensaje automático de agradecimiento 📲
+                Al entregar al cliente, confirma la entrega para completar el pedido. Se le enviará un mensaje automático de agradecimiento 📲
               </p>
               <button
                 onClick={() => setShowConfirmModal(true)}
@@ -489,12 +487,9 @@ export default function DeliveryOrderDetailPage() {
       {/* Panel post-entrega */}
       {isDelivered && (
         <div className="rounded-2xl border-2 border-blue-200 bg-blue-50 p-4 sm:p-6">
-          <h3 className="text-sm font-bold text-blue-900">
-            🎉 Pedido entregado
-          </h3>
+          <h3 className="text-sm font-bold text-blue-900">🎉 Pedido entregado</h3>
           <p className="mt-2 text-sm text-blue-800">
-            ¡Excelente trabajo! El cliente ya recibió su notificación de
-            agradecimiento automáticamente por WhatsApp.
+            ¡Excelente trabajo! El cliente ya recibió su notificación de agradecimiento automáticamente por WhatsApp.
           </p>
         </div>
       )}
@@ -503,9 +498,7 @@ export default function DeliveryOrderDetailPage() {
       {showConfirmModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <h3 className="text-xl font-bold text-gray-900">
-              ✅ Confirmar entrega
-            </h3>
+            <h3 className="text-xl font-bold text-gray-900">✅ Confirmar entrega</h3>
             <p className="mt-2 text-sm text-gray-600">
               ¿Confirmas que entregaste el pedido a {order?.customer_name}?
             </p>

@@ -1,6 +1,7 @@
 // src/pages/OrderTrackingPage.tsx
 // Página pública de tracking de pedido - FASE 4A
 // 🔥 v17: Agregado card pickup con código 6 dígitos
+// 🆕 v20: Fix crash cuando shipping_address es null (pickup)
 // URL: /pedido/:orderNumber
 
 import { useEffect, useState } from "react";
@@ -25,16 +26,14 @@ function formatCurrency(value: number) {
   return `S/ ${Number(value || 0).toFixed(2)}`;
 }
 
-function formatAddress(address: any) {
+// 🆕 v20 - Acepta null
+function formatAddress(address: any): string {
   if (!address) return "";
   return [address.street, address.district, address.city]
     .filter(Boolean)
     .join(", ");
 }
 
-/**
- * Timeline visual con 4 pasos (adaptativo pickup/delivery)
- */
 function TrackingTimeline({
   step,
   isPickup,
@@ -97,9 +96,6 @@ function TrackingTimeline({
   );
 }
 
-/**
- * 🆕 v17: Card destacada de PICKUP con código 6 dígitos
- */
 function PickupCard({ data }: { data: OrderTrackingData }) {
   const [codeCopied, setCodeCopied] = useState(false);
 
@@ -126,7 +122,6 @@ function PickupCard({ data }: { data: OrderTrackingData }) {
       </div>
 
       <div className="p-6 space-y-4">
-        {/* Estado */}
         {isCompleted ? (
           <div className="rounded-2xl bg-emerald-50 p-4 text-center">
             <div className="text-3xl">✅</div>
@@ -137,9 +132,7 @@ function PickupCard({ data }: { data: OrderTrackingData }) {
         ) : isReady ? (
           <div className="rounded-2xl bg-linear-to-br from-emerald-500 to-teal-500 p-5 text-white text-center shadow-lg">
             <div className="text-4xl">🎉</div>
-            <p className="mt-2 text-sm font-bold">
-              ¡Tu pedido está LISTO!
-            </p>
+            <p className="mt-2 text-sm font-bold">¡Tu pedido está LISTO!</p>
             <p className="mt-1 text-xs opacity-90">
               Puedes pasar a recogerlo cuando quieras
             </p>
@@ -156,7 +149,6 @@ function PickupCard({ data }: { data: OrderTrackingData }) {
           </div>
         )}
 
-        {/* Código 6 dígitos - solo si listo o completado */}
         {data.pickup_confirmation_code && (isReady || isCompleted) && (
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2 text-center">
@@ -179,7 +171,6 @@ function PickupCard({ data }: { data: OrderTrackingData }) {
           </div>
         )}
 
-        {/* Ubicación */}
         {data.pickup_location && (
           <div className="rounded-2xl bg-gray-50 p-4">
             <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
@@ -193,10 +184,7 @@ function PickupCard({ data }: { data: OrderTrackingData }) {
             </p>
             {(data.pickup_location.district || data.pickup_location.city) && (
               <p className="text-sm text-gray-600">
-                {[
-                  data.pickup_location.district,
-                  data.pickup_location.city,
-                ]
+                {[data.pickup_location.district, data.pickup_location.city]
                   .filter(Boolean)
                   .join(", ")}
               </p>
@@ -220,7 +208,6 @@ function PickupCard({ data }: { data: OrderTrackingData }) {
           </div>
         )}
 
-        {/* Franja horaria */}
         {data.pickup_time_slot && (
           <div className="rounded-2xl bg-blue-50 p-3 text-center text-sm">
             <p className="text-xs font-bold uppercase tracking-wider text-blue-600">
@@ -346,11 +333,10 @@ export default function OrderTrackingPage() {
   const label = getTrackingLabel(data);
   const isCancelled = data.status === "cancelled";
   const isDelivered = data.status === "delivered";
-  const isPickup = data.delivery_mode === "store_pickup"; // 🆕 v17
+  const isPickup = data.delivery_mode === "store_pickup";
 
   return (
     <div className="min-h-screen bg-linear-to-br from-rose-50 via-white to-orange-50">
-      {/* Banner superior */}
       <div className="bg-linear-to-r from-rose-500 to-orange-500 text-white">
         <div className="container mx-auto px-6 py-3 text-center text-sm font-medium">
           📦 Seguimiento de pedido en tiempo real
@@ -429,7 +415,6 @@ export default function OrderTrackingPage() {
           </div>
         </div>
 
-        {/* Timeline */}
         {!isCancelled && (
           <div className="mt-6 rounded-3xl bg-white p-6 shadow-sm">
             <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
@@ -441,10 +426,8 @@ export default function OrderTrackingPage() {
           </div>
         )}
 
-        {/* 🆕 v17: Card destacada de PICKUP */}
         {isPickup && !isCancelled && <PickupCard data={data} />}
 
-        {/* Card del delivery (solo si NO es pickup) */}
         {!isPickup && data.delivery && !isCancelled && (
           <div className="mt-6 overflow-hidden rounded-3xl border-2 border-emerald-200 bg-white shadow-sm">
             <div className="bg-linear-to-r from-emerald-500 to-teal-500 px-6 py-3 text-white">
@@ -513,7 +496,6 @@ export default function OrderTrackingPage() {
           </div>
         )}
 
-        {/* Sin delivery aún (solo si NO es pickup) */}
         {!isPickup &&
           !data.delivery &&
           !isCancelled &&
@@ -529,8 +511,8 @@ export default function OrderTrackingPage() {
             </div>
           )}
 
-        {/* Dirección de entrega (solo delivery) */}
-        {!isPickup && (
+        {/* 🆕 v20 - Dirección de entrega (solo si NO es pickup Y tiene dirección) */}
+        {!isPickup && data.shipping_address && (
           <div className="mt-6 rounded-3xl bg-white p-6 shadow-sm">
             <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
               📍 Dirección de entrega
@@ -594,7 +576,6 @@ export default function OrderTrackingPage() {
           </div>
         </div>
 
-        {/* Botones de contacto tienda */}
         {data.store?.whatsapp && (
           <div className="mt-6 rounded-3xl bg-white p-6 shadow-sm">
             <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
@@ -609,7 +590,6 @@ export default function OrderTrackingPage() {
           </div>
         )}
 
-        {/* Compartir tracking */}
         <div className="mt-6 rounded-3xl bg-white p-6 shadow-sm">
           <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
             🔗 Compartir seguimiento
@@ -634,7 +614,6 @@ export default function OrderTrackingPage() {
           </div>
         </div>
 
-        {/* Footer */}
         <div className="mt-8 text-center text-xs text-gray-400">
           <p>Esta página se actualiza automáticamente cada 30 segundos.</p>
           <p className="mt-2">

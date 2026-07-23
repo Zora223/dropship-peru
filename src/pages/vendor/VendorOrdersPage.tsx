@@ -1,5 +1,6 @@
 // src/pages/vendor/VendorOrdersPage.tsx
 // Gestión de pedidos del vendor con asignación de delivery + WhatsApp (FASE 3 + 5A)
+// 🆕 v20 - Soporte para pickup + shipping_address null
 
 import { useEffect, useMemo, useState } from "react";
 import { useMyStore } from "../../hooks/useMyStore";
@@ -62,7 +63,6 @@ const FILTERS: { value: OrderFilter; label: string }[] = [
   { value: "cancelled", label: "Cancelados" },
 ];
 
-// Etiquetas para el estado del delivery (coinciden con delivery.ts)
 const DELIVERY_STATUS_LABELS: Record<
   string,
   { label: string; color: string }
@@ -94,16 +94,15 @@ function formatShortDate(value: string) {
   }).format(new Date(value));
 }
 
-function formatAddress(address: DbShippingAddress) {
+// 🆕 v20 - Ahora acepta null
+function formatAddress(address: DbShippingAddress | null): string {
+  if (!address) return "🏪 Recojo en tienda";
   const parts = [address.street, address.district, address.city].filter(
     Boolean
   );
   return parts.join(", ");
 }
 
-/**
- * ¿El pedido es de las últimas 24h? (para badge "nuevo")
- */
 function isNewOrder(dateString: string): boolean {
   const orderDate = new Date(dateString).getTime();
   const now = Date.now();
@@ -124,9 +123,6 @@ function getNextStatusLabel(status: OrderStatus) {
   return null;
 }
 
-/**
- * Construye URL de WhatsApp para contactar al cliente.
- */
 function getCustomerWhatsappUrl(order: DbOrder): string {
   const digits = order.customer_phone.replace(/[^0-9]/g, "");
   const normalized = digits.startsWith("51")
@@ -145,9 +141,6 @@ function getCustomerWhatsappUrl(order: DbOrder): string {
   return `https://wa.me/${normalized}?text=${encodeURIComponent(message)}`;
 }
 
-/**
- * Badge que muestra el estado actual del delivery de un pedido
- */
 function DeliveryStatusBadge({ order }: { order: DbOrder }) {
   if (!order.delivery_id) return null;
 
@@ -177,7 +170,6 @@ export default function VendorOrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState<DbOrder | null>(null);
   const [trackingInput, setTrackingInput] = useState("");
 
-  // Estado del modal de asignación (con TODA la info para enviar WhatsApp)
   const [assignModal, setAssignModal] = useState<{
     orderId: string;
     orderNumber: string;
@@ -219,11 +211,9 @@ export default function VendorOrdersPage() {
     const query = searchQuery.trim().toLowerCase();
 
     return orders.filter((order) => {
-      // Filtro por estado
       const matchesFilter =
         activeFilter === "all" || order.status === activeFilter;
 
-      // Filtro por búsqueda (número de pedido o nombre de cliente)
       const matchesSearch =
         !query ||
         order.order_number.toLowerCase().includes(query) ||
@@ -252,9 +242,8 @@ export default function VendorOrdersPage() {
     setTrackingInput(order.tracking_number ?? "");
   }
 
-  // Abrir modal de asignación de delivery con info completa para WhatsApp
   function openAssignModal(order: DbOrder, event: React.MouseEvent) {
-    event.stopPropagation(); // Evita abrir el modal de detalle
+    event.stopPropagation();
     setAssignModal({
       orderId: order.id,
       orderNumber: order.order_number,
@@ -308,11 +297,9 @@ export default function VendorOrdersPage() {
     await handleUpdateStatus(order, "cancelled", order.tracking_number);
   }
 
-  // Callback cuando se asigna un delivery exitosamente → refresca todo
   async function handleDeliveryAssigned() {
     await loadOrders();
 
-    // Si el modal de detalle está abierto, actualizar con la versión fresca
     if (selectedOrder) {
       setTimeout(() => {
         setOrders((prev) => {
@@ -326,19 +313,17 @@ export default function VendorOrdersPage() {
     }
   }
 
-  // ¿Puede asignarse delivery a esta orden?
-  // Regla: solo si status=confirmed, no tiene delivery_id
-  // y el delivery_status NO está en assigned/picked_up
+  // 🆕 v20 - Solo delivery a domicilio puede asignar delivery
   function canAssignDelivery(order: DbOrder): boolean {
     return (
       order.status === "confirmed" &&
+      order.delivery_mode === "home_delivery" &&
       !order.delivery_id &&
       order.delivery_status !== "assigned" &&
       order.delivery_status !== "picked_up"
     );
   }
 
-  // ¿Ya tiene delivery asignado?
   function hasDelivery(order: DbOrder): boolean {
     return !!order.delivery_id;
   }
@@ -388,7 +373,6 @@ export default function VendorOrdersPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-gray-900">
@@ -413,7 +397,6 @@ export default function VendorOrdersPage() {
         </div>
       )}
 
-      {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-2xl bg-white p-5 shadow-sm">
           <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
@@ -452,7 +435,6 @@ export default function VendorOrdersPage() {
         </div>
       </div>
 
-      {/* Buscador + filtros */}
       <div className="flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-sm sm:flex-row sm:items-center">
         <input
           type="text"
@@ -479,7 +461,7 @@ export default function VendorOrdersPage() {
         </div>
       </div>
 
-      {/* 🖥️ VISTA DESKTOP: Tabla (oculta en <lg) */}
+      {/* VISTA DESKTOP */}
       <div className="hidden overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm lg:block">
         <div className="overflow-x-auto">
           <table className="w-full min-w-212.5 text-left text-sm">
@@ -490,7 +472,7 @@ export default function VendorOrdersPage() {
                 <th className="px-6 py-4 font-medium">Total</th>
                 <th className="px-6 py-4 font-medium">Pago</th>
                 <th className="px-6 py-4 font-medium">Estado</th>
-                <th className="px-6 py-4 font-medium">Delivery</th>
+                <th className="px-6 py-4 font-medium">Entrega</th>
                 <th className="px-6 py-4 font-medium"></th>
               </tr>
             </thead>
@@ -502,6 +484,7 @@ export default function VendorOrdersPage() {
                 );
                 const status = STATUS_CONFIG[order.status];
                 const isNew = isNewOrder(order.created_at);
+                const isPickup = order.delivery_mode === "store_pickup";
 
                 return (
                   <tr key={order.id} className="transition hover:bg-gray-50">
@@ -523,6 +506,15 @@ export default function VendorOrdersPage() {
                             className="text-xs"
                           >
                             🏭
+                          </span>
+                        )}
+
+                        {isPickup && (
+                          <span
+                            title="Recojo en tienda"
+                            className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700"
+                          >
+                            🏪 PICKUP
                           </span>
                         )}
                       </div>
@@ -563,9 +555,13 @@ export default function VendorOrdersPage() {
                       </span>
                     </td>
 
-                    {/* Columna Delivery */}
+                    {/* 🆕 v20 - Columna Entrega (delivery o pickup) */}
                     <td className="px-6 py-4">
-                      {hasDelivery(order) ? (
+                      {isPickup ? (
+                        <span className="text-xs font-semibold text-purple-600">
+                          🏪 Recojo en tienda
+                        </span>
+                      ) : hasDelivery(order) ? (
                         <DeliveryStatusBadge order={order} />
                       ) : canAssignDelivery(order) ? (
                         <button
@@ -623,7 +619,7 @@ export default function VendorOrdersPage() {
         </div>
       </div>
 
-      {/* 📱 VISTA MÓVIL: Cards (oculta en ≥lg) */}
+      {/* VISTA MÓVIL */}
       <div className="space-y-3 lg:hidden">
         {filteredOrders.map((order) => {
           const hasCatalog = order.items?.some(
@@ -632,13 +628,13 @@ export default function VendorOrdersPage() {
           const status = STATUS_CONFIG[order.status];
           const isNew = isNewOrder(order.created_at);
           const itemsCount = order.items?.length ?? 0;
+          const isPickup = order.delivery_mode === "store_pickup";
 
           return (
             <div
               key={order.id}
               className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm"
             >
-              {/* Barra superior del estado */}
               <div
                 className={`px-4 py-2 text-xs font-bold ${status.bg} ${status.text}`}
               >
@@ -648,6 +644,11 @@ export default function VendorOrdersPage() {
                   </span>
 
                   <div className="flex items-center gap-1.5">
+                    {isPickup && (
+                      <span className="rounded-full bg-purple-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                        🏪 PICKUP
+                      </span>
+                    )}
                     {isNew && (
                       <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white">
                         NUEVO
@@ -658,9 +659,7 @@ export default function VendorOrdersPage() {
                 </div>
               </div>
 
-              {/* Body */}
               <div className="p-4">
-                {/* Número de pedido + fecha */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="font-mono text-sm font-bold text-gray-900">
@@ -681,7 +680,6 @@ export default function VendorOrdersPage() {
                   </div>
                 </div>
 
-                {/* Cliente */}
                 <div className="mt-3 rounded-xl bg-gray-50 p-3">
                   <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
                     Cliente
@@ -694,7 +692,6 @@ export default function VendorOrdersPage() {
                   </div>
                 </div>
 
-                {/* Pago */}
                 <div className="mt-3 flex items-center gap-2 text-xs text-gray-600">
                   <span className="text-base">
                     {PAYMENT_ICONS[order.payment_method]}
@@ -705,7 +702,6 @@ export default function VendorOrdersPage() {
                   </span>
                 </div>
 
-                {/* Badge delivery si tiene */}
                 {hasDelivery(order) && (
                   <div className="mt-3 flex items-center gap-2 rounded-xl bg-emerald-50 p-3">
                     <span className="text-base">🛵</span>
@@ -713,7 +709,6 @@ export default function VendorOrdersPage() {
                   </div>
                 )}
 
-                {/* Acciones */}
                 <div className="mt-4 flex flex-wrap gap-2">
                   <a
                     href={getCustomerWhatsappUrl(order)}
@@ -724,7 +719,6 @@ export default function VendorOrdersPage() {
                     💬 WhatsApp
                   </a>
 
-                  {/* Botón Asignar Delivery en móvil */}
                   {canAssignDelivery(order) && (
                     <button
                       onClick={(e) => openAssignModal(order, e)}
@@ -768,7 +762,6 @@ export default function VendorOrdersPage() {
             className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
-            {/* Header sticky */}
             <div className="sticky top-0 z-10 flex items-start justify-between border-b border-gray-100 bg-white p-6">
               <div className="min-w-0">
                 <div className="text-xs font-semibold uppercase tracking-wider text-gray-400">
@@ -789,7 +782,12 @@ export default function VendorOrdersPage() {
                     {STATUS_LABELS[selectedOrder.status]}
                   </span>
 
-                  {/* Badge delivery en header */}
+                  {selectedOrder.delivery_mode === "store_pickup" && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-semibold text-purple-700">
+                      🏪 Recojo en tienda
+                    </span>
+                  )}
+
                   {hasDelivery(selectedOrder) && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
                       🛵 Delivery asignado
@@ -808,7 +806,6 @@ export default function VendorOrdersPage() {
             </div>
 
             <div className="space-y-4 p-6">
-              {/* Botón rápido de WhatsApp */}
               <a
                 href={getCustomerWhatsappUrl(selectedOrder)}
                 target="_blank"
@@ -818,7 +815,6 @@ export default function VendorOrdersPage() {
                 💬 Contactar al cliente por WhatsApp
               </a>
 
-              {/* Botón Asignar Delivery en modal */}
               {canAssignDelivery(selectedOrder) && (
                 <button
                   onClick={(e) => openAssignModal(selectedOrder, e)}
@@ -847,27 +843,71 @@ export default function VendorOrdersPage() {
                 </div>
               </div>
 
-              {/* Dirección */}
+              {/* 🆕 v20 - Dirección o pickup dinámico */}
               <div className="rounded-2xl bg-gray-50 p-4">
                 <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Dirección de envío
+                  {selectedOrder.delivery_mode === "store_pickup"
+                    ? "🏪 Recojo en tienda"
+                    : "📍 Dirección de envío"}
                 </div>
 
-                <div className="mt-2 text-sm text-gray-700">
-                  📍 {formatAddress(selectedOrder.shipping_address)}
-                </div>
+                {selectedOrder.delivery_mode === "store_pickup" ? (
+                  <div className="mt-2 space-y-2">
+                    <div className="rounded-xl bg-purple-50 border border-purple-200 p-3">
+                      <div className="font-bold text-purple-900 text-sm">
+                        🏪 El cliente recogerá en la tienda
+                      </div>
+                      {selectedOrder.pickup_time_slot && (
+                        <div className="mt-1 text-xs text-purple-700">
+                          📅 {selectedOrder.pickup_time_slot}
+                        </div>
+                      )}
+                    </div>
+                    {selectedOrder.pickup_code && (
+                      <div className="rounded-xl bg-linear-to-br from-purple-600 to-fuchsia-600 p-4 text-center text-white">
+                        <div className="text-xs font-bold uppercase tracking-wider opacity-90">
+                          Código de verificación
+                        </div>
+                        <div className="mt-1 font-mono text-3xl font-black tracking-widest">
+                          {selectedOrder.pickup_code}
+                        </div>
+                        <div className="mt-2 text-[10px] opacity-80">
+                          Pide este código al cliente cuando venga a recoger
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : selectedOrder.shipping_address ? (
+                  <>
+                    <div className="mt-2 text-sm text-gray-700">
+                      📍 {formatAddress(selectedOrder.shipping_address)}
+                    </div>
 
-                <div className="mt-1 text-sm text-gray-700">
-                  👤 {selectedOrder.shipping_address.full_name}
-                </div>
+                    <div className="mt-1 text-sm text-gray-700">
+                      👤 {selectedOrder.shipping_address.full_name}
+                    </div>
 
-                <div className="mt-1 text-sm text-gray-700">
-                  📞 {selectedOrder.shipping_address.phone}
-                </div>
+                    <div className="mt-1 text-sm text-gray-700">
+                      📞 {selectedOrder.shipping_address.phone}
+                    </div>
 
-                {selectedOrder.shipping_address.reference && (
-                  <div className="mt-1 text-sm text-gray-500">
-                    Referencia: {selectedOrder.shipping_address.reference}
+                    {selectedOrder.shipping_address.reference && (
+                      <div className="mt-1 text-sm text-gray-500">
+                        Referencia: {selectedOrder.shipping_address.reference}
+                      </div>
+                    )}
+
+                    {selectedOrder.delivery_date &&
+                      selectedOrder.delivery_time_slot && (
+                        <div className="mt-2 rounded-lg bg-white border border-gray-200 px-3 py-2 text-xs">
+                          📅 Entrega: {selectedOrder.delivery_date} ·{" "}
+                          {selectedOrder.delivery_time_slot}
+                        </div>
+                      )}
+                  </>
+                ) : (
+                  <div className="mt-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
+                    ⚠️ Sin información de entrega
                   </div>
                 )}
 
@@ -931,6 +971,13 @@ export default function VendorOrdersPage() {
                     <span>{formatCurrency(selectedOrder.subtotal)}</span>
                   </div>
 
+                  {selectedOrder.discount_amount > 0 && (
+                    <div className="flex justify-between text-sm text-emerald-700 font-semibold">
+                      <span>Descuento ({selectedOrder.discount_tier})</span>
+                      <span>-{formatCurrency(selectedOrder.discount_amount)}</span>
+                    </div>
+                  )}
+
                   <div className="flex justify-between text-base font-bold text-gray-900">
                     <span>Total</span>
                     <span>{formatCurrency(selectedOrder.total)}</span>
@@ -970,9 +1017,21 @@ export default function VendorOrdersPage() {
                     </strong>
                   </span>
                 </div>
+
+                {selectedOrder.payment_receiver === "vendor" && (
+                  <div className="mt-2 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-900">
+                    ✅ Este pago fue directo a tu Yape/Plin (no a Dropship)
+                  </div>
+                )}
+
+                {selectedOrder.delivery_debt > 0 && (
+                  <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">
+                    ⚠️ Debes S/ {selectedOrder.delivery_debt.toFixed(2)} a
+                    Dropship por delivery (se descontará de próxima liquidación)
+                  </div>
+                )}
               </div>
 
-              {/* Tracking existente */}
               {selectedOrder.tracking_number && (
                 <div className="rounded-2xl bg-gray-900 p-4 text-center text-white">
                   <div className="text-xs uppercase tracking-wider opacity-70">
@@ -985,23 +1044,22 @@ export default function VendorOrdersPage() {
                 </div>
               )}
 
-              {/* Input tracking (si está por enviarse) */}
-              {selectedOrder.status === "confirmed" && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700">
-                    Tracking de envío
-                  </label>
+              {selectedOrder.status === "confirmed" &&
+                selectedOrder.delivery_mode !== "store_pickup" && (
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700">
+                      Tracking de envío
+                    </label>
 
-                  <input
-                    value={trackingInput}
-                    onChange={(event) => setTrackingInput(event.target.value)}
-                    className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white"
-                    placeholder="Ej: OLVA-123456789"
-                  />
-                </div>
-              )}
+                    <input
+                      value={trackingInput}
+                      onChange={(event) => setTrackingInput(event.target.value)}
+                      className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white"
+                      placeholder="Ej: OLVA-123456789"
+                    />
+                  </div>
+                )}
 
-              {/* Acciones */}
               <div className="space-y-3 pt-2">
                 {getNextStatus(selectedOrder.status) && (
                   <button
@@ -1042,7 +1100,6 @@ export default function VendorOrdersPage() {
         </div>
       )}
 
-      {/* Modal de asignación de delivery — con props completas para WhatsApp */}
       {assignModal && (
         <AssignDeliveryModal
           orderId={assignModal.orderId}
