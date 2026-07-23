@@ -6,6 +6,8 @@ import VendorOnboardingPage from "./pages/vendor/VendorOnboardingPage";
 import SupplierRegisterPage from "./pages/SupplierRegisterPage"; // 🆕 v13 - Registro proveedor
 import { Routes, Route } from "react-router-dom";
 import AdminSupplierPayoutsPage from "./pages/admin/AdminSupplierPayoutsPage"; // 🆕 v19
+import AdminSettingsPage from "./pages/admin/AdminSettingsPage"; // 🆕 v19
+import AdminDiscountsPage from "./pages/admin/AdminDiscountsPage"; // 🆕 v19
 
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -102,14 +104,15 @@ export default function AppRoutes() {
         }
       >
         <Route index element={<AdminDashboard />} />
+        <Route path="settings" element={<AdminSettingsPage />} /> {/* 🆕 v19 */}
+        <Route path="discounts" element={<AdminDiscountsPage />} /> {/* 🆕 v19 */}
         <Route path="theme" element={<AdminThemePage />} />
         <Route path="catalog" element={<AdminCatalogPage />} />
         <Route path="suppliers" element={<AdminSuppliersPage />} />
         <Route path="users" element={<AdminUsersPage />} />
         <Route path="deliveries" element={<AdminDeliveriesPage />} />
         <Route path="delivery-payments" element={<AdminDeliveryPaymentsPage />} />
-        <Route path="delivery-payments" element={<AdminDeliveryPaymentsPage />} />
-<Route path="supplier-payouts" element={<AdminSupplierPayoutsPage />} /> {/* 🆕 v19 */}
+        <Route path="supplier-payouts" element={<AdminSupplierPayoutsPage />} /> {/* 🆕 v19 */}
         <Route path="stores" element={<AdminStoresPage />} />
         <Route path="orders" element={<AdminOrdersPage />} />
         <Route path="payments" element={<AdminPaymentMethodsPage />} />

@@ -4,6 +4,8 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 
 const navItems = [
   { to: "/admin", label: "Resumen", icon: "📊", exact: true },
+  { to: "/admin/settings", label: "Configuración", icon: "⚙️" },      // 🆕 v19
+{ to: "/admin/discounts", label: "Descuentos", icon: "🎁" },        // 🆕 v19
   { to: "/admin/catalog", label: "Catálogo", icon: "📦" },
   { to: "/admin/suppliers", label: "Proveedores", icon: "🏭" },
   { to: "/admin/users", label: "Usuarios", icon: "👥" },

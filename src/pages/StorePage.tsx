@@ -1,5 +1,6 @@
 // src/pages/StorePage.tsx
 import WhatsappFloatingButton from "../components/WhatsappFloatingButton";
+import FreeShippingBadge from "../components/FreeShippingBadge"; // 🆕 v19
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useCart } from "../contexts/CartContext";
@@ -28,7 +29,7 @@ const DEFAULT_STORE_THEME: DbStoreTheme = {
   primary_color: "#e11d48",
   secondary_color: "#fb923c",
   font_family: "Inter",
-  banner_text: "🔥 Envío gratis en compras desde S/ 50",
+  banner_text: "🚚 ENVÍO GRATIS + Descuentos hasta 20% al comprar más 🎁", // 🆕 v19
   show_banner: true,
   store_motto: "Productos seleccionados con amor",
 };
@@ -163,7 +164,6 @@ export default function StorePage() {
   useEffect(() => {
     if (!store?.id) return;
 
-    // Pequeño delay para asegurar que el render inicial ya ocurrió
     const timer = setTimeout(() => {
       trackPageView({
         storeId: store.id,
@@ -391,8 +391,9 @@ export default function StorePage() {
         )}
 
         <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <span className="rounded-full bg-white px-4 py-1.5 text-xs font-semibold text-gray-700 shadow-sm">
-            🚚 Entrega rápida a tu puerta
+          {/* 🆕 v19 - Chip destacado ENVÍO GRATIS */}
+          <span className="rounded-full bg-emerald-500 px-4 py-1.5 text-xs font-bold text-white shadow-sm">
+            🚚 ENVÍO GRATIS incluido
           </span>
           <span className="rounded-full bg-white px-4 py-1.5 text-xs font-semibold text-gray-700 shadow-sm">
             🔒 Compra protegida
@@ -535,6 +536,11 @@ export default function StorePage() {
                       {product.name}
                     </h3>
 
+                    {/* 🆕 v19 - Badge envío gratis */}
+                    <div className="mt-1.5">
+                      <FreeShippingBadge size="sm" />
+                    </div>
+
                     {/* Rating */}
                     <div className="mt-1.5">
                       {reviewCount > 0 ? (
@@ -641,11 +647,12 @@ export default function StorePage() {
           <div className="grid gap-8 text-center md:grid-cols-2">
             <div>
               <div className="text-4xl">🚚</div>
+              {/* 🆕 v19 - Mensaje transparente CEO */}
               <h3 className="mt-3 text-base font-bold text-gray-900">
-                Entrega rápida en la puerta de tu casa
+                Envío GRATIS a tu puerta 🎁
               </h3>
               <p className="mt-1 text-sm text-gray-500">
-                Recibe tu pedido sin moverte. Te lo llevamos a domicilio.
+                Sin costos adicionales al final. El precio que ves es el precio que pagas.
               </p>
             </div>
             <div>
