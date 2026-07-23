@@ -39,7 +39,13 @@ export interface CheckoutInput {
 
   items: CartItem[];
   subtotal: number;   // 🆕 Ahora separamos subtotal y total
-  total: number;      // subtotal + delivery_fee
+  total: number;      // subtotal + delivery_fee - discount_amount
+
+  // 🆕 v20 - Descuento gamificado
+  discount_amount?: number;      // Monto descontado en soles
+  discount_pct?: number;         // Porcentaje aplicado (2.5, 3.5, 4, 5)
+  discount_tier?: string | null; // SMART | PRO | EXPERT | LEGEND | null
+
   payment_method: PaymentMethodType;
   notes: string | null;
 }
@@ -188,6 +194,12 @@ export async function createOrder(input: CheckoutInput): Promise<DbOrder> {
       items: orderItems,
       subtotal: input.subtotal,
       total: input.total,
+
+      // 🆕 v20 - Guardar descuento aplicado
+      discount_amount: input.discount_amount ?? 0,
+      discount_pct: input.discount_pct ?? 0,
+      discount_tier: input.discount_tier ?? null,
+
       payment_method: input.payment_method,
       status: "pending_payment",
       notes: input.notes,

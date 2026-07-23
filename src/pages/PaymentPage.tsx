@@ -4,6 +4,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { useCart } from "../contexts/CartContext";
 import { createOrder } from "../lib/orders-checkout";
 import type { DeliveryMode } from "../lib/orders-checkout";
+import { calculateDiscount, type DiscountResult } from "../lib/discounts";
 import { fetchPublicStoreById } from "../lib/public-store";
 import {
   getStorePickupLocations,
@@ -370,8 +371,23 @@ export default function PaymentPage() {
     return Number(deliverySettings.delivery_cost) || 0;
   }, [deliveryMode, deliverySettings]);
 
-  // 🆕 Total = subtotal (delivery ya viene INCLUIDO en el precio del producto)
-  const total = subtotal;
+  // 🆕 v20 - Descuento gamificado
+  const [discount, setDiscount] = useState<DiscountResult | null>(null);
+
+  useEffect(() => {
+    if (count === 0) {
+      setDiscount(null);
+      return;
+    }
+    calculateDiscount(count, subtotal).then(setDiscount);
+  }, [count, subtotal]);
+
+  const discountAmount = discount?.discount_amount ?? 0;
+  const discountPct = discount?.discount_pct_display ?? 0;
+  const discountTier = discount?.current_tier?.tier_label ?? null;
+
+  // 🆕 Total = subtotal - descuento (delivery ya viene INCLUIDO en el precio del producto)
+  const total = Math.max(0, subtotal - discountAmount);
 
   if (count === 0 || !storeId) {
     return (
@@ -476,6 +492,12 @@ export default function PaymentPage() {
         items,
         subtotal,
         total,
+
+        // 🆕 v20 - Descuento gamificado
+        discount_amount: discountAmount,
+        discount_pct: discountPct,
+        discount_tier: discountTier,
+
         payment_method: selectedMethod,
         notes: form.notes.trim() || null,
       });
@@ -1105,6 +1127,18 @@ export default function PaymentPage() {
                         : "INCLUIDO"}
                     </span>
                   </div>
+
+                  {/* 🆕 v20 - Descuento aplicado */}
+                  {discountAmount > 0 && discount?.current_tier && (
+                    <div className="flex justify-between rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2">
+                      <span className="font-bold text-emerald-700">
+                        {discount.current_tier.tier_emoji} Dscto {discount.current_tier.tier_label} (-{discountPct}%)
+                      </span>
+                      <span className="font-black tabular-nums text-emerald-700">
+                        -S/ {discountAmount.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="my-4 border-t border-dashed border-gray-200" />
@@ -1113,8 +1147,20 @@ export default function PaymentPage() {
                   <span className="text-base font-bold text-gray-900">
                     Total
                   </span>
-                  <div className="text-3xl font-extrabold tabular-nums text-gray-900">
-                    S/ {total.toFixed(2)}
+                  <div className="text-right">
+                    {discountAmount > 0 && (
+                      <div className="text-sm line-through text-gray-400 tabular-nums">
+                        S/ {subtotal.toFixed(2)}
+                      </div>
+                    )}
+                    <div className="text-3xl font-extrabold tabular-nums text-gray-900">
+                      S/ {total.toFixed(2)}
+                    </div>
+                    {discountAmount > 0 && (
+                      <div className="mt-0.5 text-[10px] font-bold text-emerald-600">
+                        ¡Ahorras {discountPct}% (S/ {discountAmount.toFixed(2)})! 🎉
+                      </div>
+                    )}
                   </div>
                 </div>
 
