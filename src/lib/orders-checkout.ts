@@ -5,6 +5,7 @@ import type {
   DbOrder,
   DbStorePaymentMethod,
 } from "../types/database";
+import type { CartType } from "./cart-detection";
 
 // 🆕 v16 FASE 3 - Modo de entrega
 export type DeliveryMode = "home_delivery" | "store_pickup";
@@ -18,7 +19,6 @@ export interface CheckoutInput {
   // 🆕 v16 FASE 3
   delivery_mode: DeliveryMode;
 
-  // Solo si delivery_mode === "home_delivery"
   shipping_address: {
     full_name: string;
     phone: string;
@@ -28,23 +28,26 @@ export interface CheckoutInput {
     reference: string | null;
   } | null;
 
-  // 🆕 Franja para delivery a domicilio
-  delivery_date?: string | null;      // "2026-07-22"
-  delivery_time_slot?: string | null; // "15:00-18:00"
-  delivery_fee?: number;              // Costo del delivery
+  delivery_date?: string | null;
+  delivery_time_slot?: string | null;
+  delivery_fee?: number;
 
-  // 🆕 Solo si delivery_mode === "store_pickup"
   pickup_location_id?: string | null;
   pickup_time_slot?: string | null;
 
   items: CartItem[];
-  subtotal: number;   // 🆕 Ahora separamos subtotal y total
-  total: number;      // subtotal + delivery_fee - discount_amount
+  subtotal: number;
+  total: number;
 
   // 🆕 v20 - Descuento gamificado
-  discount_amount?: number;      // Monto descontado en soles
-  discount_pct?: number;         // Porcentaje aplicado (2.5, 3.5, 4, 5)
-  discount_tier?: string | null; // SMART | PRO | EXPERT | LEGEND | null
+  discount_amount?: number;
+  discount_pct?: number;
+  discount_tier?: string | null;
+
+  // 🆕 v20 - Sistema de pagos
+  cart_type?: CartType;
+  payment_receiver?: "platform" | "vendor";
+  delivery_debt?: number;
 
   payment_method: PaymentMethodType;
   notes: string | null;
@@ -124,7 +127,6 @@ export async function createOrder(input: CheckoutInput): Promise<DbOrder> {
     throw new Error("Ingresa tu nombre completo.");
   if (!input.customer_phone.trim()) throw new Error("Ingresa tu celular.");
 
-  // 🆕 v16 FASE 3 - Validar según modo
   if (input.delivery_mode === "home_delivery") {
     if (!input.shipping_address) {
       throw new Error("Falta la dirección de entrega.");
@@ -183,7 +185,6 @@ export async function createOrder(input: CheckoutInput): Promise<DbOrder> {
           ? input.shipping_address
           : null,
 
-      // 🆕 v16 FASE 3
       delivery_mode: input.delivery_mode,
       delivery_date: input.delivery_date ?? null,
       delivery_time_slot: input.delivery_time_slot ?? null,
@@ -195,10 +196,15 @@ export async function createOrder(input: CheckoutInput): Promise<DbOrder> {
       subtotal: input.subtotal,
       total: input.total,
 
-      // 🆕 v20 - Guardar descuento aplicado
+      // 🆕 v20 - Descuento gamificado
       discount_amount: input.discount_amount ?? 0,
       discount_pct: input.discount_pct ?? 0,
       discount_tier: input.discount_tier ?? null,
+
+      // 🆕 v20 - Sistema de pagos
+      cart_type: input.cart_type ?? null,
+      payment_receiver: input.payment_receiver ?? "platform",
+      delivery_debt: input.delivery_debt ?? 0,
 
       payment_method: input.payment_method,
       status: "pending_payment",
@@ -211,5 +217,27 @@ export async function createOrder(input: CheckoutInput): Promise<DbOrder> {
   if (error)
     throw new Error("Error en el motor de base de datos: " + error.message);
 
-  return data as DbOrder;
+  const order = data as DbOrder;
+
+  // 🆕 v20 - Registrar deuda de delivery si aplica
+  if (
+    input.cart_type === "vendor_own" &&
+    input.delivery_debt &&
+    input.delivery_debt > 0
+  ) {
+    try {
+      await supabase.from("vendor_balance").insert({
+        vendor_id: input.storeId,
+        order_id: order.id,
+        movement_type: "delivery_debt",
+        amount: -Math.abs(input.delivery_debt), // Negativo = deuda
+        description: `Delivery pedido #${order.order_number} (S/ ${input.delivery_debt.toFixed(2)})`,
+      });
+    } catch (balanceErr) {
+      console.warn("No se pudo registrar deuda en vendor_balance:", balanceErr);
+      // No bloqueamos la creación del pedido
+    }
+  }
+
+  return order;
 }

@@ -5,6 +5,13 @@ import { useCart } from "../contexts/CartContext";
 import { createOrder } from "../lib/orders-checkout";
 import type { DeliveryMode } from "../lib/orders-checkout";
 import { calculateDiscount, type DiscountResult } from "../lib/discounts";
+import {
+  detectCartType,
+  getPaymentReceiver,
+  calculateDeliveryDebt,
+  getCartTypeLabel,
+} from "../lib/cart-detection";
+import PaymentQrDisplay from "../components/PaymentQrDisplay";
 import { fetchPublicStoreById } from "../lib/public-store";
 import {
   getStorePickupLocations,
@@ -91,144 +98,6 @@ function getEnabledPaymentMethods(
     );
 }
 
-function PaymentInstructions({
-  method,
-  store,
-}: {
-  method: DbStorePaymentMethod | null;
-  store: DbStore | null;
-}) {
-  if (!method) return null;
-  const config = method.config ?? {};
-  const info = PAYMENT_INFO[method.id];
-
-  return (
-    <div className="mt-5 rounded-2xl border border-gray-100 bg-gray-50 p-4">
-      <div className="flex items-center gap-3">
-        <div className="text-3xl">{info.icon}</div>
-        <div>
-          <h3 className="font-bold text-gray-900">
-            Datos para pagar con {info.name}
-          </h3>
-          <p className="text-xs text-gray-500">
-            Usa esta información para completar tu pago.
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-4 space-y-3 text-sm">
-        {(method.id === "yape" || method.id === "plin") && (
-          <>
-            {config.phone && (
-              <div className="flex justify-between gap-4 rounded-xl bg-white p-3">
-                <span className="text-gray-500">Número</span>
-                <span className="font-bold text-gray-900">{config.phone}</span>
-              </div>
-            )}
-            {config.holder_name && (
-              <div className="flex justify-between gap-4 rounded-xl bg-white p-3">
-                <span className="text-gray-500">Titular</span>
-                <span className="font-bold text-gray-900">
-                  {config.holder_name}
-                </span>
-              </div>
-            )}
-            {config.qr_url && (
-              <div className="rounded-xl bg-white p-3 text-center">
-                <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
-                  QR de pago
-                </div>
-                <img
-                  src={config.qr_url}
-                  alt={`QR ${info.name}`}
-                  className="mx-auto max-h-56 rounded-xl object-contain"
-                />
-              </div>
-            )}
-          </>
-        )}
-
-        {method.id === "transfer" && (
-          <>
-            {config.bank_name && (
-              <div className="flex justify-between gap-4 rounded-xl bg-white p-3">
-                <span className="text-gray-500">Banco</span>
-                <span className="font-bold text-gray-900">
-                  {config.bank_name}
-                </span>
-              </div>
-            )}
-            {config.account_holder && (
-              <div className="flex justify-between gap-4 rounded-xl bg-white p-3">
-                <span className="text-gray-500">Titular</span>
-                <span className="font-bold text-gray-900">
-                  {config.account_holder}
-                </span>
-              </div>
-            )}
-            {config.account_number && (
-              <div className="flex justify-between gap-4 rounded-xl bg-white p-3">
-                <span className="text-gray-500">Cuenta</span>
-                <span className="font-bold text-gray-900">
-                  {config.account_number}
-                </span>
-              </div>
-            )}
-            {config.cci && (
-              <div className="flex justify-between gap-4 rounded-xl bg-white p-3">
-                <span className="text-gray-500">CCI</span>
-                <span className="font-bold text-gray-900">{config.cci}</span>
-              </div>
-            )}
-            {config.document_number && (
-              <div className="flex justify-between gap-4 rounded-xl bg-white p-3">
-                <span className="text-gray-500">DNI/RUC</span>
-                <span className="font-bold text-gray-900">
-                  {config.document_number}
-                </span>
-              </div>
-            )}
-          </>
-        )}
-
-        {method.id === "card" && (
-          <div className="rounded-xl bg-white p-3 text-gray-600">
-            El pago con tarjeta será gestionado por la plataforma o confirmado
-            por la tienda.
-          </div>
-        )}
-
-        {method.id === "cash_on_delivery" && (
-          <div className="rounded-xl bg-white p-3 text-gray-600">
-            Pagarás cuando recibas tu pedido. La tienda coordinará contigo la
-            entrega.
-          </div>
-        )}
-
-        {config.instructions && (
-          <div className="rounded-xl border-l-4 border-amber-400 bg-amber-50 p-3 text-amber-900">
-            <div className="text-xs font-bold uppercase tracking-wider">
-              Instrucciones
-            </div>
-            <p className="mt-1 text-sm">{config.instructions}</p>
-          </div>
-        )}
-
-        {store?.whatsapp && (
-          <a
-            href={getWhatsappUrl(store.whatsapp)}
-            target="_blank"
-            rel="noreferrer"
-            className="block rounded-xl bg-emerald-500 px-4 py-3 text-center text-sm font-bold text-white transition hover:bg-emerald-600"
-          >
-            Enviar comprobante por WhatsApp
-          </a>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function PaymentPage() {
   const { items, total: subtotal, count, clearCart, storeId, storeSlug } = useCart();
   const navigate = useNavigate();
@@ -238,11 +107,9 @@ export default function PaymentPage() {
   const [selectedMethod, setSelectedMethod] =
     useState<PaymentMethodType | null>(null);
 
-  // 🆕 v16 FASE 3 - Modo de entrega
   const [deliveryMode, setDeliveryMode] =
     useState<DeliveryMode>("home_delivery");
 
-  // 🆕 v16 FASE 3 - Delivery settings del vendor
   const [deliverySettings, setDeliverySettings] =
     useState<VendorDeliverySettings | null>(null);
   const [deliverySlots, setDeliverySlots] = useState<DeliveryTimeSlot[]>([]);
@@ -253,7 +120,6 @@ export default function PaymentPage() {
     string | null
   >(null);
 
-  // 🆕 v16 FASE 3 - Pickup locations
   const [pickupLocations, setPickupLocations] = useState<PickupLocation[]>([]);
   const [selectedPickupId, setSelectedPickupId] = useState<string | null>(null);
   const [pickupSlots, setPickupSlots] = useState<TimeSlot[]>([]);
@@ -277,6 +143,14 @@ export default function PaymentPage() {
 
   const theme = getStoreTheme(store);
 
+  // 🆕 v20 - Detectar tipo de carrito
+  const cartType = useMemo(() => detectCartType(items), [items]);
+  const paymentReceiver = useMemo(
+    () => getPaymentReceiver(cartType),
+    [cartType]
+  );
+  const cartTypeInfo = useMemo(() => getCartTypeLabel(cartType), [cartType]);
+
   useEffect(() => {
     async function loadStore() {
       if (!storeId) {
@@ -298,7 +172,6 @@ export default function PaymentPage() {
         const activeMethods = getEnabledPaymentMethods(data.payment_methods);
         setSelectedMethod(activeMethods[0]?.id ?? null);
 
-        // 🆕 Cargar delivery settings del vendor
         try {
           const settings = await getStoreDeliverySettings(storeId);
           setDeliverySettings(settings);
@@ -310,7 +183,6 @@ export default function PaymentPage() {
           console.warn("No se pudo cargar delivery settings:", settingsErr);
         }
 
-        // 🆕 Cargar puntos de recojo
         try {
           const locations = await getStorePickupLocations(storeId);
           setPickupLocations(locations);
@@ -337,7 +209,6 @@ export default function PaymentPage() {
     loadStore();
   }, [storeId]);
 
-  // 🆕 Al cambiar pickup location, actualizar franjas
   useEffect(() => {
     if (!selectedPickupId) {
       setPickupSlots([]);
@@ -357,15 +228,6 @@ export default function PaymentPage() {
     return getEnabledPaymentMethods(store?.payment_methods);
   }, [store]);
 
-  const selectedPaymentMethod = useMemo(() => {
-    if (!selectedMethod) return null;
-    return (
-      enabledPaymentMethods.find((method) => method.id === selectedMethod) ??
-      null
-    );
-  }, [enabledPaymentMethods, selectedMethod]);
-
-  // 🆕 Delivery fee INTERNO (para pagar al delivery). NO se muestra al cliente.
   const deliveryFee = useMemo(() => {
     if (deliveryMode !== "home_delivery" || !deliverySettings) return 0;
     return Number(deliverySettings.delivery_cost) || 0;
@@ -386,8 +248,13 @@ export default function PaymentPage() {
   const discountPct = discount?.discount_pct_display ?? 0;
   const discountTier = discount?.current_tier?.tier_label ?? null;
 
-  // 🆕 Total = subtotal - descuento (delivery ya viene INCLUIDO en el precio del producto)
   const total = Math.max(0, subtotal - discountAmount);
+
+  // 🆕 v20 - Deuda de delivery (si vendor_own)
+  const deliveryDebt = useMemo(
+    () => calculateDeliveryDebt(cartType, deliveryFee),
+    [cartType, deliveryFee]
+  );
 
   if (count === 0 || !storeId) {
     return (
@@ -482,7 +349,7 @@ export default function PaymentPage() {
           deliveryMode === "home_delivery" ? selectedDeliveryDate : null,
         delivery_time_slot:
           deliveryMode === "home_delivery" ? selectedDeliverySlot : null,
-        delivery_fee: deliveryFee, // 🆕 Se guarda internamente aunque no se muestre
+        delivery_fee: deliveryFee,
 
         pickup_location_id:
           deliveryMode === "store_pickup" ? selectedPickupId : null,
@@ -493,10 +360,14 @@ export default function PaymentPage() {
         subtotal,
         total,
 
-        // 🆕 v20 - Descuento gamificado
         discount_amount: discountAmount,
         discount_pct: discountPct,
         discount_tier: discountTier,
+
+        // 🆕 v20 - Sistema de pagos
+        cart_type: cartType,
+        payment_receiver: paymentReceiver,
+        delivery_debt: deliveryDebt,
 
         payment_method: selectedMethod,
         notes: form.notes.trim() || null,
@@ -513,6 +384,11 @@ export default function PaymentPage() {
   };
 
   const hasPickupAvailable = pickupLocations.length > 0;
+
+  // 🆕 v20 - Filtrar métodos que soportan QR (yape/plin/transfer)
+  const qrMethods = enabledPaymentMethods.filter((m) =>
+    ["yape", "plin", "transfer"].includes(m.id)
+  );
 
   return (
     <div
@@ -717,7 +593,6 @@ export default function PaymentPage() {
                   />
                 </div>
 
-                {/* Dirección SOLO si es delivery */}
                 {deliveryMode === "home_delivery" && (
                   <>
                     <div className="sm:col-span-2">
@@ -865,7 +740,7 @@ export default function PaymentPage() {
               </div>
             )}
 
-            {/* Selector de punto de recojo + franja */}
+            {/* Selector de punto de recojo */}
             {deliveryMode === "store_pickup" && (
               <div className="rounded-3xl bg-white p-6 shadow-sm">
                 <h2 className="text-lg font-bold text-gray-900">
@@ -984,6 +859,21 @@ export default function PaymentPage() {
               </div>
             )}
 
+            {/* 🆕 v20 - Info del tipo de carrito */}
+            <div className="rounded-2xl bg-linear-to-br from-purple-50 to-fuchsia-50 border-2 border-purple-200 p-4">
+              <div className="flex items-start gap-3">
+                <div className="text-3xl">{cartTypeInfo.emoji}</div>
+                <div className="flex-1">
+                  <div className="font-bold text-purple-900">
+                    {cartTypeInfo.label}
+                  </div>
+                  <div className="text-xs text-purple-700 mt-0.5">
+                    {cartTypeInfo.description}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Método de pago */}
             <div className="rounded-3xl bg-white p-6 shadow-sm">
               <h2 className="text-lg font-bold text-gray-900">
@@ -991,7 +881,7 @@ export default function PaymentPage() {
               </h2>
 
               <p className="mt-1 text-sm text-gray-500">
-                Elige uno de los métodos activos de esta tienda.
+                Elige uno de los métodos activos.
               </p>
 
               <div className="mt-5 space-y-3">
@@ -1049,10 +939,42 @@ export default function PaymentPage() {
                 })}
               </div>
 
-              <PaymentInstructions
-                method={selectedPaymentMethod}
-                store={store}
-              />
+              {/* 🆕 v20 - QR dinámico según receptor */}
+              {selectedMethod &&
+                qrMethods.some((m) => m.id === selectedMethod) && (
+                  <div className="mt-6">
+                    <PaymentQrDisplay
+                      paymentReceiver={paymentReceiver}
+                      vendorId={paymentReceiver === "vendor" ? storeId : null}
+                      paymentMethod={selectedMethod as "yape" | "plin" | "transfer"}
+                      total={total}
+                      storeName={store?.name}
+                    />
+                  </div>
+                )}
+
+              {/* Mensaje para métodos sin QR */}
+              {selectedMethod === "card" && (
+                <div className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+                  💳 El pago con tarjeta será gestionado por la plataforma.
+                </div>
+              )}
+              {selectedMethod === "cash_on_delivery" && (
+                <div className="mt-6 rounded-2xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800">
+                  📦 Pagarás cuando recibas tu pedido.
+                </div>
+              )}
+
+              {store?.whatsapp && (
+                <a
+                  href={getWhatsappUrl(store.whatsapp)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-4 flex items-center justify-center gap-2 rounded-full bg-emerald-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-600"
+                >
+                  📱 Enviar comprobante por WhatsApp
+                </a>
+              )}
             </div>
           </div>
 
@@ -1088,7 +1010,6 @@ export default function PaymentPage() {
                   ))}
                 </div>
 
-                {/* Info del modo de entrega */}
                 <div className="mt-4 rounded-xl bg-gray-50 p-3 text-xs">
                   <div className="font-semibold text-gray-700">
                     {deliveryMode === "home_delivery"
@@ -1111,7 +1032,6 @@ export default function PaymentPage() {
 
                 <div className="my-4 border-t border-dashed border-gray-200" />
 
-                {/* 🆕 Desglose - Delivery INCLUIDO en el precio */}
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Subtotal</span>
@@ -1124,11 +1044,10 @@ export default function PaymentPage() {
                     <span className="font-semibold tabular-nums text-emerald-600">
                       {deliveryMode === "store_pickup"
                         ? "SIN ENVÍO"
-                        : "INCLUIDO"}
+                        : "🚚 GRATIS"}
                     </span>
                   </div>
 
-                  {/* 🆕 v20 - Descuento aplicado */}
                   {discountAmount > 0 && discount?.current_tier && (
                     <div className="flex justify-between rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2">
                       <span className="font-bold text-emerald-700">
