@@ -1,5 +1,6 @@
 // src/pages/admin/AdminSettingsPage.tsx
 // 🆕 v19 - Configuración global de la plataforma
+// 🆕 v20 - QRs de pago Dropship
 import { useEffect, useState } from "react";
 import {
   getPlatformConfig,
@@ -12,6 +13,12 @@ import {
   analyzePrice,
 } from "../../lib/pricing";
 import { useToast } from "../../contexts/ToastContext";
+import PlatformQrCard from "../../components/admin/PlatformQrCard";
+import {
+  getPlatformQrs,
+  type PaymentQr,
+  type PaymentQrMethod,
+} from "../../lib/payment-qrs";
 
 export default function AdminSettingsPage() {
   const toast = useToast();
@@ -20,12 +27,19 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [testCost, setTestCost] = useState(50);
 
+  // 🆕 v20 - Estado QRs
+  const [platformQrs, setPlatformQrs] = useState<PaymentQr[]>([]);
+
   async function load() {
     try {
       setLoading(true);
       clearConfigCache();
-      const data = await getPlatformConfig(true);
-      setConfig(data);
+      const [configData, qrsData] = await Promise.all([
+        getPlatformConfig(true),
+        getPlatformQrs(),
+      ]);
+      setConfig(configData);
+      setPlatformQrs(qrsData);
     } catch (err: any) {
       toast.error("Error", err.message);
     } finally {
@@ -42,7 +56,6 @@ export default function AdminSettingsPage() {
 
     try {
       setSaving(true);
-      // Actualizar todos los campos
       await Promise.all([
         updatePlatformConfig("commission_pct", config.commission_pct),
         updatePlatformConfig("vendor_margin_pct", config.vendor_margin_pct),
@@ -61,11 +74,15 @@ export default function AdminSettingsPage() {
     }
   }
 
+  // 🆕 v20 - Helper para obtener QR por método
+  function getQrByMethod(method: PaymentQrMethod): PaymentQr | null {
+    return platformQrs.find((q) => q.payment_method === method) ?? null;
+  }
+
   if (loading || !config) {
     return <div className="p-8 text-center text-gray-500">Cargando...</div>;
   }
 
-  // Preview: cálculos en vivo
   const suggested = calculateSuggestedPrice(testCost, {
     commission_pct: config.commission_pct,
     vendor_margin_pct: config.vendor_margin_pct,
@@ -81,11 +98,11 @@ export default function AdminSettingsPage() {
   });
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-6xl">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">⚙️ Configuración global</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Ajusta comisión, márgenes y costos de delivery de toda la plataforma
+          Ajusta comisión, márgenes, delivery y QRs de pago de Dropship
         </p>
       </div>
 
@@ -144,11 +161,11 @@ export default function AdminSettingsPage() {
 
           <hr className="my-6" />
 
-          <h2 className="text-lg font-bold text-gray-900 mb-4">💳 Cuenta Dropship</h2>
+          <h2 className="text-lg font-bold text-gray-900 mb-4">💳 Cuenta Dropship (legacy)</h2>
 
           <div>
             <label className="block text-xs font-bold text-gray-700 mb-1">
-              Número Yape Dropship (admin)
+              Número Yape Dropship (referencia rápida)
             </label>
             <input
               type="text"
@@ -156,11 +173,11 @@ export default function AdminSettingsPage() {
               onChange={(e) =>
                 setConfig({ ...config, platform_yape_number: e.target.value })
               }
-              placeholder="999999999"
+              placeholder="930415718"
               className="w-full rounded-xl border border-gray-200 px-4 py-2 text-sm focus:border-purple-500 focus:outline-none"
             />
             <p className="mt-1 text-xs text-gray-500">
-              Los clientes verán este número al pagar
+              ℹ️ Ahora usa los QRs de abajo para configuración completa
             </p>
           </div>
 
@@ -254,6 +271,48 @@ export default function AdminSettingsPage() {
               Por cada producto de S/ {testCost} mayorista
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* 🆕 v20 - SECCIÓN QRs DE PAGO DROPSHIP */}
+      <div className="mt-10">
+        <div className="mb-6 rounded-3xl bg-linear-to-br from-purple-600 via-fuchsia-600 to-pink-600 p-6 text-white shadow-xl">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-2xl font-black">💳 QRs de Cobro Dropship</h2>
+              <p className="mt-1 text-sm opacity-90">
+                Configura los QRs de pago que verán los clientes al comprar productos del catálogo maestro
+              </p>
+            </div>
+            <div className="hidden sm:block text-6xl opacity-30">📱</div>
+          </div>
+
+          <div className="mt-4 rounded-xl bg-white/10 backdrop-blur px-4 py-3 text-xs">
+            <div className="font-bold mb-1">ℹ️ ¿Cuándo se muestra cada QR?</div>
+            <ul className="space-y-1 opacity-90">
+              <li>• Cliente compra <strong>producto de catálogo</strong> → Ve este QR (pago va a Dropship)</li>
+              <li>• Cliente compra <strong>producto propio del vendor</strong> → Ve QR del vendor</li>
+              <li>• Cliente compra <strong>carrito mixto</strong> → Ve este QR (Dropship redistribuye)</li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <PlatformQrCard
+            paymentMethod="yape"
+            existingQr={getQrByMethod("yape")}
+            onSaved={load}
+          />
+          <PlatformQrCard
+            paymentMethod="plin"
+            existingQr={getQrByMethod("plin")}
+            onSaved={load}
+          />
+          <PlatformQrCard
+            paymentMethod="transfer"
+            existingQr={getQrByMethod("transfer")}
+            onSaved={load}
+          />
         </div>
       </div>
     </div>
