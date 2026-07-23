@@ -1,11 +1,30 @@
+// src/pages/CheckoutPage.tsx
+// 🆕 v19 - Sistema de descuentos gamificado + envío gratis
 import { useCart } from "../contexts/CartContext";
 import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import DiscountProgressBar from "../components/DiscountProgressBar";
+import FreeShippingBadge from "../components/FreeShippingBadge";
+import { calculateDiscount, type DiscountResult } from "../lib/discounts";
 
 export default function CheckoutPage() {
   const { items, removeItem, updateQuantity, total, count, storeSlug } = useCart();
+  const [discount, setDiscount] = useState<DiscountResult | null>(null);
 
   const storeName = items[0]?.storeName ?? "esta tienda";
   const backToStoreUrl = storeSlug ? `/tienda/${storeSlug}` : "/";
+
+  // 🆕 v19 - Calcular descuento cuando cambia el carrito
+  useEffect(() => {
+    if (count === 0) {
+      setDiscount(null);
+      return;
+    }
+    calculateDiscount(count, total).then(setDiscount);
+  }, [count, total]);
+
+  const discountAmount = discount?.discount_amount ?? 0;
+  const finalTotal = Math.max(0, total - discountAmount);
 
   if (count === 0) {
     return (
@@ -58,6 +77,13 @@ export default function CheckoutPage() {
 
         <div className="grid gap-8 lg:grid-cols-3">
           <div className="space-y-3 lg:col-span-2">
+            {/* 🆕 v19 - Barra de progreso gamificada */}
+            <DiscountProgressBar
+              itemCount={count}
+              subtotal={total}
+              onDiscountChange={setDiscount}
+            />
+
             {items.map((item) => (
               <div
                 key={item.productId}
@@ -76,9 +102,12 @@ export default function CheckoutPage() {
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <h3 className="truncate text-base font-semibold text-gray-900">
-                    {item.name}
-                  </h3>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="truncate text-base font-semibold text-gray-900">
+                      {item.name}
+                    </h3>
+                    <FreeShippingBadge size="sm" />
+                  </div>
 
                   <p className="mt-0.5 text-sm text-gray-500">
                     S/ {item.price.toFixed(2)} por unidad
@@ -128,7 +157,7 @@ export default function CheckoutPage() {
               <div className="rounded-2xl bg-white/60 p-4 text-center backdrop-blur">
                 <div className="text-2xl">🚚</div>
                 <div className="mt-1 text-xs font-semibold text-gray-700">
-                  Entrega coordinada
+                  Envío GRATIS
                 </div>
               </div>
 
@@ -169,8 +198,8 @@ export default function CheckoutPage() {
 
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Envío</span>
-                    <span className="font-semibold text-gray-900">
-                      A coordinar
+                    <span className="font-semibold text-emerald-600">
+                      🚚 GRATIS
                     </span>
                   </div>
 
@@ -178,6 +207,18 @@ export default function CheckoutPage() {
                     <span className="text-gray-600">IGV</span>
                     <span className="font-semibold text-gray-900">Incluido</span>
                   </div>
+
+                  {/* 🆕 v19 - Descuento aplicado */}
+                  {discountAmount > 0 && discount?.current_tier && (
+                    <div className="flex justify-between text-sm rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2">
+                      <span className="font-bold text-emerald-700">
+                        {discount.current_tier.tier_emoji} Dscto {discount.current_tier.tier_label}
+                      </span>
+                      <span className="font-black tabular-nums text-emerald-700">
+                        -S/ {discountAmount.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="my-5 border-t border-dashed border-gray-200" />
@@ -188,9 +229,20 @@ export default function CheckoutPage() {
                   </span>
 
                   <div className="text-right">
+                    {/* 🆕 v19 - Precio tachado si hay descuento */}
+                    {discountAmount > 0 && (
+                      <div className="text-sm line-through text-gray-400 tabular-nums">
+                        S/ {total.toFixed(2)}
+                      </div>
+                    )}
                     <div className="text-3xl font-extrabold tabular-nums text-gray-900">
-                      S/ {total.toFixed(2)}
+                      S/ {finalTotal.toFixed(2)}
                     </div>
+                    {discountAmount > 0 && (
+                      <div className="mt-0.5 text-[10px] font-bold text-emerald-600">
+                        ¡Ahorras S/ {discountAmount.toFixed(2)}! 🎉
+                      </div>
+                    )}
                   </div>
                 </div>
 
