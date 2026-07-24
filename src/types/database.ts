@@ -82,11 +82,9 @@ export interface DbStore {
   facebook: string | null;
   whatsapp: string | null;
   is_active: boolean;
-  // 👇 NUEVOS CAMPOS DE SUSCRIPCIÓN
   subscription_status: SubscriptionStatus;
   trial_ends_at: string | null;
   plan_price: number;
-  // 👆
   created_at: string;
   updated_at: string;
 }
@@ -172,9 +170,11 @@ export interface DbOrder {
   pickup_location_id: string | null;
   pickup_time_slot: string | null;
 
-  // 🆕 v18 - Código pickup
-  pickup_code: string | null;
-  pickup_verified_at: string | null;
+  // 🆕 v18 - Código pickup (nombre real BD)
+  pickup_confirmation_code: string | null;
+  pickup_ready_at: string | null;
+  pickup_completed_at: string | null;
+  pickup_address: any | null;
 
   // 🆕 v19 - Descuentos gamificados
   discount_amount: number;
@@ -222,7 +222,6 @@ export interface DbPlatformSettings {
   banner_link: string;
   seasonal_effect: string;
 
-  // 🆕 NUEVOS CAMPOS DEL BANNER
   promo_countdown_date: string | null;
   promo_dismissible: boolean;
   promo_link_text: string;
@@ -230,7 +229,6 @@ export interface DbPlatformSettings {
   promo_show_icon: boolean;
 }
 
-// ========== REVIEWS ==========
 export interface DbProductReview {
   id: string;
   product_id: string;

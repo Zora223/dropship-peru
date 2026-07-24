@@ -1,7 +1,7 @@
 // src/lib/order-tracking.ts
 // Tracking público de pedidos - FASE 4A
 // 🔥 v17: Agregado pickup fields + pickup location
-// Cualquiera con el order_number puede ver el estado del pedido
+// 🆕 v20: Fix - vendor_pickup_locations usa 'street' no 'address'
 
 import { supabase } from "./supabase";
 import type {
@@ -42,7 +42,7 @@ export interface OrderTrackingDelivery {
 export interface OrderTrackingPickupLocation {
   id: string;
   name: string;
-  address: string;
+  address: string; // Se compone desde street en el mapper
   district: string | null;
   city: string | null;
   phone: string | null;
@@ -51,7 +51,6 @@ export interface OrderTrackingPickupLocation {
 }
 
 export interface OrderTrackingData {
-  // Orden
   id: string;
   order_number: string;
   status: OrderStatus;
@@ -60,7 +59,7 @@ export interface OrderTrackingData {
   customer_name: string;
   customer_email: string;
   customer_phone: string;
-  shipping_address: DbShippingAddress;
+  shipping_address: DbShippingAddress | null; // 🆕 v20 - puede ser null (pickup)
   items: DbOrderItem[];
   payment_method: PaymentMethodType;
   notes: string | null;
@@ -68,13 +67,11 @@ export interface OrderTrackingData {
   created_at: string;
   updated_at: string;
 
-  // Delivery
   delivery_id: string | null;
   delivery_status: string | null;
   delivery_assigned_at: string | null;
   delivery_delivered_at: string | null;
 
-  // 🆕 v17: Pickup / Delivery mode
   delivery_mode: "home_delivery" | "store_pickup" | null;
   delivery_date: string | null;
   delivery_time_slot: string | null;
@@ -84,10 +81,9 @@ export interface OrderTrackingData {
   pickup_ready_at: string | null;
   pickup_completed_at: string | null;
 
-  // Relaciones
   store: OrderTrackingStore | null;
   delivery: OrderTrackingDelivery | null;
-  pickup_location: OrderTrackingPickupLocation | null; // 🆕 v17
+  pickup_location: OrderTrackingPickupLocation | null;
 }
 
 // ============================================
@@ -192,28 +188,31 @@ export async function fetchOrderTracking(
   }
 
   // 3️⃣ 🆕 v17: Si tiene pickup_location_id, obtener ubicación
+  // 🆕 v20: FIX - la tabla usa 'street' + 'contact_phone', no 'address' ni 'phone'
   let pickup_location: OrderTrackingPickupLocation | null = null;
 
   if (order.pickup_location_id) {
-    const { data: pickupData } = await supabase
+    const { data: pickupData, error: pickupError } = await supabase
       .from("vendor_pickup_locations")
       .select(
-        "id, name, address, district, city, phone, reference, opening_hours"
+        "id, name, street, district, city, contact_phone, reference, opening_hours"
       )
       .eq("id", order.pickup_location_id)
       .maybeSingle();
 
-    if (pickupData) {
+    if (!pickupError && pickupData) {
       pickup_location = {
         id: pickupData.id,
         name: pickupData.name,
-        address: pickupData.address,
+        address: pickupData.street, // 🆕 v20 - mapeo street → address
         district: pickupData.district,
         city: pickupData.city,
-        phone: pickupData.phone,
+        phone: pickupData.contact_phone, // 🆕 v20 - mapeo contact_phone → phone
         reference: pickupData.reference,
         opening_hours: pickupData.opening_hours,
       };
+    } else if (pickupError) {
+      console.warn("Error cargando pickup location:", pickupError);
     }
   }
 
@@ -240,7 +239,7 @@ export async function fetchOrderTracking(
     customer_name: order.customer_name,
     customer_email: order.customer_email,
     customer_phone: order.customer_phone,
-    shipping_address: order.shipping_address as DbShippingAddress,
+    shipping_address: order.shipping_address as DbShippingAddress | null, // 🆕 v20
     items: (order.items as DbOrderItem[]) ?? [],
     payment_method: order.payment_method as PaymentMethodType,
     notes: order.notes,
@@ -251,7 +250,6 @@ export async function fetchOrderTracking(
     delivery_status: order.delivery_status,
     delivery_assigned_at: order.delivery_assigned_at,
     delivery_delivered_at: order.delivery_delivered_at,
-    // 🆕 v17 Pickup
     delivery_mode: order.delivery_mode as any,
     delivery_date: order.delivery_date,
     delivery_time_slot: order.delivery_time_slot,
@@ -331,4 +329,4 @@ export function timeAgo(dateString: string): string {
   const days = Math.floor(hours / 24);
   if (days < 30) return `hace ${days} día${days > 1 ? "s" : ""}`;
   return date.toLocaleDateString("es-PE");
-} 
+}

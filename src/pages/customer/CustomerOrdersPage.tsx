@@ -419,13 +419,13 @@ export default function CustomerOrdersPage() {
                         📅 {selectedOrder.pickup_time_slot}
                       </div>
                     )}
-                    {selectedOrder.pickup_code && (
+                    {selectedOrder.pickup_confirmation_code && (
                       <div className="mt-3 rounded-lg bg-linear-to-br from-purple-600 to-fuchsia-600 p-3 text-center text-white">
                         <div className="text-[10px] font-bold uppercase opacity-90">
                           Código de recojo
                         </div>
                         <div className="mt-1 font-mono text-2xl font-black tracking-widest">
-                          {selectedOrder.pickup_code}
+                          {selectedOrder.pickup_confirmation_code}
                         </div>
                       </div>
                     )}
