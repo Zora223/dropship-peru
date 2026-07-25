@@ -3,11 +3,20 @@ import { Link } from "react-router-dom";
 export default function HomePage() {
   return (
     <div className="space-y-16">
-      {/* Hero: Captación de vendedores */}
-      <section className="relative overflow-hidden rounded-3xl bg-linear-to-br from-gray-900 via-gray-800 to-rose-900 text-white shadow-2xl">
-        <div className="px-8 py-20 text-center md:px-16 md:py-28">
-          <div className="mx-auto mb-6 inline-flex rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-white/80 backdrop-blur">
-            Tiendas privadas por enlace
+      {/* Hero: Captación de vendedores con identidad iquiteña */}
+      <section className="relative overflow-hidden rounded-3xl bg-linear-to-br from-gray-900 via-emerald-900 to-rose-900 text-white shadow-2xl">
+        {/* Decoración de hojas amazónicas */}
+        <div className="absolute -right-16 -top-16 text-[200px] opacity-10">
+          🌴
+        </div>
+        <div className="absolute -bottom-16 -left-16 text-[200px] opacity-10">
+          🌿
+        </div>
+
+        <div className="relative px-8 py-20 text-center md:px-16 md:py-28">
+          <div className="mx-auto mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/20 px-4 py-2 text-xs font-bold uppercase tracking-wider text-emerald-200 backdrop-blur">
+            <span>🌴</span>
+            <span>Hecho en Iquitos, para todo el Perú</span>
           </div>
 
           <h1 className="text-4xl font-extrabold tracking-tight md:text-6xl">
@@ -17,8 +26,8 @@ export default function HomePage() {
           </h1>
 
           <p className="mx-auto mt-6 max-w-xl text-lg text-gray-300 md:text-xl">
-            Crea tu catálogo, comparte tu link personalizado y recibe pedidos.
-            Sin comisiones abusivas, sin competencia dentro de tu propia vitrina.
+            El primer marketplace peruano <strong className="text-emerald-300">nacido en la Amazonía</strong>.
+            Crea tu catálogo, comparte tu link y recibe pedidos. Sin comisiones abusivas.
           </p>
 
           <div className="mt-10 flex flex-col justify-center gap-4 sm:flex-row">
@@ -38,9 +47,43 @@ export default function HomePage() {
           </div>
 
           <p className="mx-auto mt-6 max-w-lg text-xs leading-relaxed text-white/50">
-            Los clientes acceden a cada tienda mediante el enlace directo que
-            comparte el vendedor. No mostramos un directorio público de tiendas.
+            🌴 Cobertura principal en Iquitos · 🏙️ Expansión a Lima Metropolitana · 🚀 Próximamente todo el Perú
           </p>
+        </div>
+      </section>
+
+      {/* 🆕 Sección orgullosa iquiteña */}
+      <section className="rounded-3xl bg-linear-to-br from-emerald-50 via-teal-50 to-cyan-50 p-8 shadow-sm md:p-10">
+        <div className="grid gap-8 md:grid-cols-3 md:items-center">
+          <div className="text-center md:text-left">
+            <div className="mb-2 text-6xl md:text-7xl">🌴</div>
+            <h3 className="text-2xl font-black text-emerald-900">
+              Somos de Iquitos
+            </h3>
+            <p className="mt-1 text-sm font-semibold text-emerald-700">
+              Loreto, Perú 🇵🇪
+            </p>
+          </div>
+          <div className="md:col-span-2">
+            <h2 className="text-2xl font-black tracking-tight text-gray-900 md:text-3xl">
+              Cansados de que todo se centralice en Lima 😤
+            </h2>
+            <p className="mt-3 text-gray-700">
+              Sabemos que en <strong>Iquitos hay talento, emprendimiento y ganas</strong>,
+              pero pocas herramientas tecnológicas hechas pensando en nuestra realidad.
+            </p>
+            <p className="mt-3 text-gray-700">
+              Por eso creamos <strong>Dropship Perú</strong>: primero para nuestra ciudad
+              🌴, con delivery real en Iquitos y expansión creciente a Lima. 
+              <strong className="text-emerald-700"> Sin excusas, sin fronteras.</strong>
+            </p>
+            <Link
+              to="/nosotros"
+              className="mt-4 inline-flex items-center gap-1 text-sm font-bold text-emerald-700 hover:text-emerald-900"
+            >
+              Conoce nuestra historia →
+            </Link>
+          </div>
         </div>
       </section>
 
@@ -182,10 +225,9 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 🆕 SECCIÓN PROVEEDORES MAYORISTAS */}
+      {/* SECCIÓN PROVEEDORES MAYORISTAS */}
       <section className="overflow-hidden rounded-3xl bg-linear-to-br from-amber-50 via-orange-50 to-amber-100 shadow-sm">
         <div className="grid gap-8 p-8 md:grid-cols-2 md:items-center md:gap-12 md:p-12">
-          {/* Lado izquierdo: contenido */}
           <div>
             <div className="inline-flex items-center gap-2 rounded-full bg-amber-500/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-amber-700">
               <span>🏭</span>
@@ -267,10 +309,8 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Lado derecho: mockup visual */}
           <div className="relative">
             <div className="rounded-3xl bg-white p-6 shadow-2xl">
-              {/* Simulación de un dashboard proveedor */}
               <div className="mb-4">
                 <div className="text-xs font-bold uppercase tracking-wider text-gray-400">
                   Panel Proveedor
@@ -280,7 +320,6 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Stats */}
               <div className="grid grid-cols-3 gap-2">
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
                   <div className="text-xl">🆕</div>
@@ -307,7 +346,6 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Mock pedido */}
               <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-3">
                 <div className="flex items-center justify-between">
                   <div>
@@ -335,37 +373,51 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Decoración */}
             <div className="absolute -right-4 -top-4 h-16 w-16 rounded-full bg-amber-400/30 blur-2xl" />
             <div className="absolute -bottom-4 -left-4 h-20 w-20 rounded-full bg-orange-400/30 blur-2xl" />
           </div>
         </div>
       </section>
 
-      {/* CTA final */}
-      <section className="rounded-3xl bg-gray-900 px-8 py-16 text-center text-white">
-        <h2 className="text-3xl font-bold md:text-4xl">
-          Empieza a vender hoy
-        </h2>
+      {/* CTA final con identidad iquiteña */}
+      <section className="relative overflow-hidden rounded-3xl bg-linear-to-br from-gray-900 via-emerald-900 to-gray-900 px-8 py-16 text-center text-white">
+        {/* Decoración */}
+        <div className="absolute -right-8 top-4 text-[120px] opacity-10">
+          🌴
+        </div>
+        <div className="absolute -left-8 bottom-4 text-[120px] opacity-10">
+          🌿
+        </div>
 
-        <p className="mx-auto mt-4 max-w-lg text-gray-400">
-          Crea una tienda privada por enlace y empieza a recibir pedidos sin
-          mandar a tus clientes a vitrinas de la competencia.
-        </p>
+        <div className="relative">
+          <div className="mx-auto mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/20 px-3 py-1 text-xs font-bold uppercase tracking-wider text-emerald-200 backdrop-blur">
+            <span>🌴</span>
+            <span>Desde la selva para el Perú</span>
+          </div>
 
-        <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-          <Link
-            to="/register"
-            className="inline-block rounded-full bg-rose-500 px-10 py-4 text-base font-semibold text-white shadow-lg transition hover:bg-rose-600 hover:shadow-xl"
-          >
-            Crear mi tienda ahora
-          </Link>
-          <Link
-            to="/registro-proveedor"
-            className="inline-block rounded-full border-2 border-amber-400/40 bg-amber-500/10 px-10 py-4 text-base font-semibold text-amber-300 backdrop-blur transition hover:border-amber-400 hover:bg-amber-500/20"
-          >
-            🏭 Soy proveedor
-          </Link>
+          <h2 className="text-3xl font-bold md:text-4xl">
+            Empieza a vender hoy
+          </h2>
+
+          <p className="mx-auto mt-4 max-w-lg text-gray-300">
+            Únete a la comunidad de emprendedores que están rompiendo la
+            centralización. Vende sin fronteras, desde donde estés.
+          </p>
+
+          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+            <Link
+              to="/register"
+              className="inline-block rounded-full bg-rose-500 px-10 py-4 text-base font-semibold text-white shadow-lg transition hover:bg-rose-600 hover:shadow-xl"
+            >
+              Crear mi tienda ahora
+            </Link>
+            <Link
+              to="/registro-proveedor"
+              className="inline-block rounded-full border-2 border-amber-400/40 bg-amber-500/10 px-10 py-4 text-base font-semibold text-amber-300 backdrop-blur transition hover:border-amber-400 hover:bg-amber-500/20"
+            >
+              🏭 Soy proveedor
+            </Link>
+          </div>
         </div>
       </section>
     </div>

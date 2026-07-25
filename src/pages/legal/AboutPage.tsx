@@ -1,6 +1,6 @@
 // src/pages/legal/AboutPage.tsx
 import { Link } from "react-router-dom";
-import { Rocket, Target, Heart, Users, TrendingUp, Zap } from "lucide-react";
+import { Rocket, Target, Heart, Users, TrendingUp, Zap, MapPin } from "lucide-react";
 
 export default function AboutPage() {
   return (
@@ -15,14 +15,48 @@ export default function AboutPage() {
             Sobre Dropship Perú 🇵🇪
           </h1>
           <p className="mx-auto max-w-2xl text-lg text-white/90 md:text-xl">
-            El marketplace peruano que empodera a emprendedores para vender online
-            <strong> sin stock</strong>, <strong>sin capital inicial</strong> y
-            <strong> con delivery incluido</strong>.
+            Nacimos en <strong>Iquitos 🌴</strong> para llevar el emprendimiento digital
+            a toda la selva y el país, sin fronteras ni excusas.
           </p>
         </div>
       </div>
 
       <div className="container mx-auto max-w-5xl px-4 py-12 md:py-16">
+        
+        {/* 🆕 SECCIÓN NUESTRO ORIGEN */}
+        <div className="mb-16 rounded-2xl bg-linear-to-br from-emerald-50 via-teal-50 to-cyan-50 p-8 md:p-12">
+          <div className="grid gap-8 md:grid-cols-2 md:items-center">
+            <div>
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-emerald-700">
+                <MapPin className="h-3 w-3" />
+                Orgullosamente iquiteños
+              </div>
+              <h2 className="mb-4 text-3xl font-bold text-slate-900">
+                🌴 Desde Iquitos para el Perú
+              </h2>
+              <p className="mb-4 text-slate-700">
+                Cansados de que <strong>todo se centralice en Lima</strong>, decidimos
+                crear la primera plataforma de dropshipping <strong>hecha desde la
+                Amazonía peruana</strong>.
+              </p>
+              <p className="text-slate-700">
+                Sabemos que en Iquitos hay emprendedores con muchas ganas pero pocas
+                herramientas. Por eso creamos Dropship Perú:
+                <strong> primero para nuestra tierra</strong>, y ahora expandiéndonos
+                a Lima Metropolitana y más ciudades del país.
+              </p>
+            </div>
+            <div className="flex justify-center">
+              <div className="text-center">
+                <div className="text-8xl">🌴</div>
+                <p className="mt-2 text-sm font-semibold text-emerald-800">
+                  Iquitos, Loreto — Perú 🇵🇪
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Misión y Visión */}
         <div className="mb-16 grid gap-6 md:grid-cols-2">
           <div className="rounded-2xl bg-white p-8 shadow-sm">
@@ -35,7 +69,8 @@ export default function AboutPage() {
             <p className="text-slate-700">
               Democratizar el emprendimiento en Perú brindando herramientas simples y
               accesibles para que cualquier persona pueda tener su propia tienda
-              online <strong>sin necesidad de inversión inicial</strong>.
+              online <strong>sin necesidad de inversión inicial</strong>, sin importar
+              dónde viva.
             </p>
           </div>
 
@@ -47,8 +82,9 @@ export default function AboutPage() {
               Nuestra Visión
             </h2>
             <p className="text-slate-700">
-              Ser el marketplace #1 de Perú para emprendedores digitales, conectando
-              a <strong>10,000+ vendors</strong> con clientes de todo el país al 2028.
+              Ser el marketplace #1 del interior del Perú, demostrando que la
+              innovación no solo se hace en Lima. Meta al 2028:
+              <strong> 10,000+ vendors</strong> en Iquitos, Lima y todo el país.
             </p>
           </div>
         </div>
@@ -66,7 +102,7 @@ export default function AboutPage() {
               </h3>
               <p className="text-sm text-slate-700">
                 Cada vendor, proveedor y cliente es parte de nuestra familia.
-                Crecemos juntos.
+                Crecemos juntos, desde la selva hasta la costa.
               </p>
             </div>
 
@@ -77,21 +113,60 @@ export default function AboutPage() {
               </h3>
               <p className="text-sm text-slate-700">
                 Tecnología de punta con IA, OCR de pagos y WhatsApp automatizado
-                para que vendas más fácil.
+                para que vendas más fácil, estés donde estés.
               </p>
             </div>
 
             <div className="rounded-xl bg-linear-to-br from-emerald-50 to-teal-50 p-6">
               <TrendingUp className="mb-3 h-8 w-8 text-emerald-600" />
               <h3 className="mb-2 text-lg font-bold text-slate-900">
-                Éxito Compartido
+                Descentralización
               </h3>
               <p className="text-sm text-slate-700">
-                Solo ganamos si tú ganas. Comisiones justas del 3% y liquidaciones
-                transparentes.
+                Rompemos el mito de que el emprendimiento digital solo es de Lima.
+                Hecho por y para el Perú entero.
               </p>
             </div>
           </div>
+        </div>
+
+        {/* Zonas de cobertura */}
+        <div className="mb-16 rounded-2xl bg-white p-8 shadow-sm md:p-12">
+          <h2 className="mb-6 text-center text-3xl font-bold text-slate-900">
+            📍 Zonas de cobertura
+          </h2>
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-6">
+              <div className="mb-2 flex items-center gap-2">
+                <span className="text-3xl">🌴</span>
+                <h3 className="text-xl font-bold text-slate-900">Iquitos</h3>
+                <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-xs font-bold text-white">
+                  PRINCIPAL
+                </span>
+              </div>
+              <p className="text-sm text-slate-700">
+                Nuestro mercado base. Delivery en toda la ciudad de Iquitos
+                y distritos aledaños (Punchana, Belén, San Juan Bautista).
+              </p>
+            </div>
+
+            <div className="rounded-xl border-2 border-rose-200 bg-rose-50 p-6">
+              <div className="mb-2 flex items-center gap-2">
+                <span className="text-3xl">🏙️</span>
+                <h3 className="text-xl font-bold text-slate-900">Lima Metropolitana</h3>
+                <span className="rounded-full bg-rose-500 px-2 py-0.5 text-xs font-bold text-white">
+                  EXPANSIÓN
+                </span>
+              </div>
+              <p className="text-sm text-slate-700">
+                Cobertura en toda Lima Metropolitana con delivery a domicilio
+                en distritos principales.
+              </p>
+            </div>
+          </div>
+          <p className="mt-6 text-center text-sm text-slate-500">
+            🚀 Próximamente: Trujillo, Arequipa, Chiclayo, Piura y más ciudades
+          </p>
         </div>
 
         {/* Cómo funciona */}
@@ -134,7 +209,7 @@ export default function AboutPage() {
         <div className="rounded-2xl bg-linear-to-br from-slate-900 via-slate-800 to-slate-900 p-8 text-center text-white md:p-12">
           <h2 className="mb-3 text-3xl font-bold">¿Listo para emprender?</h2>
           <p className="mb-6 text-slate-300">
-            Únete a la comunidad de emprendedores más grande de Perú.
+            Únete a la comunidad de emprendedores del Perú profundo 🌴🇵🇪
           </p>
           <div className="flex flex-col justify-center gap-3 sm:flex-row">
             <Link

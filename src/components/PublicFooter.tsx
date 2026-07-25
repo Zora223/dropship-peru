@@ -137,7 +137,7 @@ export default function PublicFooter() {
                 <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
                 <div>
                   <div className="text-xs text-slate-500">Ubicación</div>
-                  <div className="font-medium">Lima, Perú 🇵🇪</div>
+                  <div className="font-medium">Iquitos & Lima 🌴🇵🇪</div>
                 </div>
               </li>
             </ul>
@@ -238,7 +238,8 @@ export default function PublicFooter() {
             Todos los derechos reservados.
           </p>
           <p className="flex items-center gap-1.5">
-            Hecho con <Heart className="h-4 w-4 fill-rose-500 text-rose-500" /> en Lima, Perú 🇵🇪
+            Hecho con <Heart className="h-4 w-4 fill-rose-500 text-rose-500" /> desde
+  Iquitos 🌴 para todo el Perú 🇵🇪
           </p>
         </div>
       </div>
