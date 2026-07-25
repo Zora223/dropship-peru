@@ -33,7 +33,8 @@ export default function TermsPage() {
               2. Descripción del Servicio
             </h2>
             <p className="text-slate-700">
-              Dropship Perú es un marketplace peruano que conecta:
+              Dropship Perú es un marketplace peruano <strong>nacido en Iquitos 🌴</strong> que
+              conecta:
             </p>
             <ul className="ml-6 mt-2 list-disc space-y-1 text-slate-700">
               <li><strong>Proveedores mayoristas</strong> con stock de productos</li>
@@ -42,7 +43,9 @@ export default function TermsPage() {
               <li><strong>Deliveries</strong> que entregan los pedidos</li>
             </ul>
             <p className="mt-2 text-slate-700">
-              Actuamos como intermediarios facilitando transacciones, logística y pagos.
+              Actuamos como intermediarios facilitando transacciones, logística y pagos
+              con cobertura principal en <strong>Iquitos (Loreto)</strong> y expansión
+              activa en <strong>Lima Metropolitana</strong>.
             </p>
           </section>
 
@@ -70,8 +73,9 @@ export default function TermsPage() {
                 <strong>Comisión Dropship:</strong> 3% sobre el precio de venta al público.
               </li>
               <li>
-                <strong>Costo de delivery:</strong> S/ 7 por pedido en Lima Metropolitana
-                (incluido en el precio final visible al cliente).
+                <strong>Costo de delivery:</strong> S/ 7 por pedido dentro de Iquitos
+                y Lima Metropolitana (incluido en el precio final visible al cliente).
+                Otras ciudades a cotizar.
               </li>
               <li>
                 <strong>Liquidaciones a Vendors y Proveedores:</strong> Se realizan por
@@ -172,7 +176,7 @@ export default function TermsPage() {
             </h2>
             <p className="text-slate-700">
               Estos términos se rigen por las leyes de la República del Perú. Cualquier
-              disputa será resuelta en los tribunales de Lima, Perú.
+              disputa será resuelta en los tribunales de <strong>Iquitos, Loreto — Perú</strong>.
             </p>
           </section>
 
