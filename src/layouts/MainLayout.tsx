@@ -16,9 +16,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         </div>
       </div>
 
-      <main className="grow">
-        {children}
-      </main>
+      <main className="grow">{children}</main>
 
       <PublicFooter />
     </div>
