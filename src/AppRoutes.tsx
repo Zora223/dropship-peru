@@ -8,7 +8,11 @@ import { Routes, Route } from "react-router-dom";
 import AdminSupplierPayoutsPage from "./pages/admin/AdminSupplierPayoutsPage"; // 🆕 v19
 import AdminSettingsPage from "./pages/admin/AdminSettingsPage"; // 🆕 v19
 import AdminDiscountsPage from "./pages/admin/AdminDiscountsPage"; // 🆕 v19
-
+// Páginas legales
+import TermsPage from "./pages/legal/TermsPage";
+import PrivacyPage from "./pages/legal/PrivacyPage";
+import CookiesPage from "./pages/legal/CookiesPage";
+import AboutPage from "./pages/legal/AboutPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 import HomePage from "./pages/HomePage";
@@ -82,6 +86,11 @@ export default function AppRoutes() {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/crear-tienda" element={<VendorOnboardingPage />} />
       <Route path="/registro-proveedor" element={<SupplierRegisterPage />} /> {/* 🆕 v13 */}
+      {/* ═══ Páginas legales ═══ */}
+<Route path="/terminos" element={<TermsPage />} />
+<Route path="/privacidad" element={<PrivacyPage />} />
+<Route path="/cookies" element={<CookiesPage />} />
+<Route path="/nosotros" element={<AboutPage />} />
 
       {/* Tienda pública */}
       <Route path="/tienda/:slug" element={<StorePage />} />

@@ -1,5 +1,7 @@
+// src/layouts/MainLayout.tsx
 import type { ReactNode } from "react";
 import Navbar from "../components/Navbar";
+import PublicFooter from "../components/PublicFooter";
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -18,11 +20,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         {children}
       </main>
 
-      <footer className="border-t border-gray-200 bg-white">
-        <div className="container mx-auto px-4 py-8 text-center text-sm text-gray-400">
-          © {new Date().getFullYear()} Dropship Perú. Todos los derechos reservados.
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   );
 }

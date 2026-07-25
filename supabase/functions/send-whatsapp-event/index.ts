@@ -227,9 +227,13 @@ Deno.serve(async (req) => {
       platform_fee: formatPrice(order?.delivery_cost), // TODO: calcular con RPC
 
       // URLs
+      // URLs
       tracking_url: `${frontendUrl}/pedido/${order?.order_number ?? ''}`,
       delivery_panel_url: `${frontendUrl}/delivery/orders`,
       vendor_payments_url: `${frontendUrl}/vendor/payments`,
+      vendor_orders_url: `${frontendUrl}/vendor/orders`,
+      admin_suppliers_url: `${frontendUrl}/admin/suppliers`,
+      supplier_panel_url: `${frontendUrl}/supplier`,
 
       // Variables custom (sobreescriben si vienen del trigger)
       ...(customVars ?? {}),
