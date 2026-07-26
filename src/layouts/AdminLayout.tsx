@@ -131,7 +131,7 @@ export default function AdminLayout() {
       </aside>
 
       {/* Contenido principal */}
-      <main className="grow bg-[#f5f5f7] p-4 sm:p-6 lg:p-8">
+      <main className="grow bg-[#f5f5f7] p-4 sm:p-6 lg:p-8 min-w-0 overflow-x-hidden">
         {/* Header móvil con hamburguesa */}
         <div className="mb-6 flex items-center gap-3 lg:hidden">
           <button
@@ -159,10 +159,9 @@ export default function AdminLayout() {
             Administración
           </span>
         </div>
-
-        <div className="mx-auto max-w-6xl">
-          <Outlet />
-        </div>
+<div className="mx-auto max-w-6xl w-full min-w-0">
+  <Outlet />
+</div>
       </main>
     </div>
   );
