@@ -1,15 +1,20 @@
+// src/components/Navbar.tsx
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
 function getDashboardPath(role: string) {
   if (role === "admin") return "/admin";
   if (role === "vendor") return "/vendor";
+  if (role === "delivery") return "/delivery";
+  if (role === "supplier") return "/supplier";
   return "/customer";
 }
 
 function getDashboardLabel(role: string) {
-  if (role === "admin") return "Panel admin";
+  if (role === "admin") return "Admin";
   if (role === "vendor") return "Mi tienda";
+  if (role === "delivery") return "Delivery";
+  if (role === "supplier") return "Proveedor";
   return "Mi cuenta";
 }
 
@@ -26,49 +31,48 @@ export default function Navbar() {
     }
   };
 
-  // ¿Debe mostrarse el botón "Crear mi tienda"?
-  // - Si no hay usuario: sí (invita a registrarse)
-  // - Si es customer: sí (invita a convertirse en vendor)
-  // - Si es vendor o admin: no
   const showCreateStore = !user || user.role === "customer";
-
-  // ¿A dónde apunta el botón "Crear mi tienda"?
   const createStoreLink = user ? "/crear-tienda" : "/register";
 
   return (
     <nav className="sticky top-0 z-50 border-b border-gray-200/60 bg-white/80 backdrop-blur-md">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-        <Link to="/" className="text-xl font-bold tracking-tight text-gray-900">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:py-4 sm:px-6 lg:px-8">
+        {/* Logo */}
+        <Link to="/" className="text-lg sm:text-xl font-bold tracking-tight text-gray-900 shrink-0">
           Dropship <span className="text-rose-500">Perú</span>
         </Link>
 
-        <div className="flex items-center gap-3">
+        {/* Acciones */}
+        <div className="flex items-center gap-2 sm:gap-3">
           {user ? (
             <>
-              {/* Botón "Crear mi tienda" solo para customers logueados */}
+              {/* "Crear tienda" — oculto en móvil muy pequeño */}
               {showCreateStore && (
                 <Link
                   to={createStoreLink}
-                  className="hidden rounded-full bg-rose-500 px-5 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-rose-600 sm:inline-block"
+                  className="hidden sm:inline-block rounded-full bg-rose-500 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-md transition hover:bg-rose-600"
                 >
                   Crear mi tienda
                 </Link>
               )}
 
+              {/* Dashboard — siempre visible */}
               <Link
                 to={getDashboardPath(user.role)}
-                className="rounded-full bg-gray-900 px-5 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-gray-800"
+                className="rounded-full bg-gray-900 px-3 sm:px-5 py-2 text-xs sm:text-sm font-semibold text-white shadow-md transition hover:bg-gray-800"
               >
                 {getDashboardLabel(user.role)}
               </Link>
 
-              <span className="hidden max-w-48 truncate text-sm font-medium text-gray-600 md:inline">
+              {/* Nombre — solo desktop */}
+              <span className="hidden lg:inline max-w-40 truncate text-sm font-medium text-gray-600">
                 {user.full_name ?? user.email}
               </span>
 
+              {/* Salir */}
               <button
                 onClick={handleSignOut}
-                className="rounded-full border border-gray-200 px-5 py-2 text-sm font-medium text-gray-700 transition hover:border-gray-300 hover:bg-gray-50"
+                className="rounded-full border border-gray-200 px-3 sm:px-5 py-2 text-xs sm:text-sm font-medium text-gray-700 transition hover:border-gray-300 hover:bg-gray-50"
               >
                 Salir
               </button>
@@ -77,16 +81,16 @@ export default function Navbar() {
             <>
               <Link
                 to="/login"
-                className="rounded-full px-5 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                className="rounded-full px-3 sm:px-5 py-2 text-xs sm:text-sm font-medium text-gray-700 transition hover:bg-gray-100"
               >
                 Entrar
               </Link>
-
               <Link
                 to="/register"
-                className="rounded-full bg-gray-900 px-5 py-2 text-sm font-medium text-white shadow-md transition hover:bg-gray-800"
+                className="rounded-full bg-gray-900 px-3 sm:px-5 py-2 text-xs sm:text-sm font-medium text-white shadow-md transition hover:bg-gray-800"
               >
-                Crear mi tienda
+                <span className="hidden sm:inline">Crear mi tienda</span>
+                <span className="sm:hidden">Registrarse</span>
               </Link>
             </>
           )}

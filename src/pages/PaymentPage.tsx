@@ -418,9 +418,9 @@ export default function PaymentPage() {
             ← Volver al carrito
           </Link>
 
-          <h1 className="mt-3 text-4xl font-bold tracking-tight text-gray-900">
-            Datos de envío y pago
-          </h1>
+          <h1 className="mt-3 text-2xl sm:text-4xl font-bold tracking-tight text-gray-900">
+  Datos de envío y pago
+</h1>
 
           <p className="mt-2 text-gray-500">
             Completa tus datos para finalizar el pedido
@@ -464,7 +464,8 @@ export default function PaymentPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="grid gap-8 lg:grid-cols-3">
+        // REEMPLAZAR POR:
+<form onSubmit={handleSubmit} className="flex flex-col-reverse gap-6 lg:grid lg:grid-cols-3 lg:gap-8">
           <div className="space-y-6 lg:col-span-2">
             {/* Selector de modo de entrega */}
             {hasPickupAvailable && (
@@ -981,15 +982,15 @@ export default function PaymentPage() {
           {/* Resumen */}
           <div className="lg:col-span-1">
             <div className="sticky top-24 overflow-hidden rounded-3xl bg-white shadow-xl">
-              <div className="bg-linear-to-br from-gray-900 to-gray-800 px-6 py-5 text-white">
-                <h2 className="text-lg font-bold">Tu pedido</h2>
+              <div className="bg-linear-to-br from-gray-900 to-gray-800 px-4 sm:px-6 py-4 sm:py-5 text-white">
+  <h2 className="text-base sm:text-lg font-bold">Tu pedido</h2>
                 <p className="text-xs text-gray-300">
                   {count} {count === 1 ? "producto" : "productos"}
                 </p>
               </div>
 
-              <div className="p-6">
-                <div className="max-h-48 space-y-3 overflow-y-auto">
+            <div className="p-4 sm:p-6">
+  <div className="max-h-40 sm:max-h-48 space-y-3 overflow-y-auto">
                   {items.map((item) => (
                     <div
                       key={item.productId}
@@ -1072,9 +1073,9 @@ export default function PaymentPage() {
                         S/ {subtotal.toFixed(2)}
                       </div>
                     )}
-                    <div className="text-3xl font-extrabold tabular-nums text-gray-900">
-                      S/ {total.toFixed(2)}
-                    </div>
+                    <div className="text-2xl sm:text-3xl font-extrabold tabular-nums text-gray-900">
+  S/ {total.toFixed(2)}
+</div>
                     {discountAmount > 0 && (
                       <div className="mt-0.5 text-[10px] font-bold text-emerald-600">
                         ¡Ahorras {discountPct}% (S/ {discountAmount.toFixed(2)})! 🎉
@@ -1090,7 +1091,7 @@ export default function PaymentPage() {
                     enabledPaymentMethods.length === 0 ||
                     !selectedMethod
                   }
-                  className="mt-6 w-full rounded-full py-4 text-sm font-bold text-white shadow-lg transition hover:shadow-xl active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="mt-5 sm:mt-6 w-full rounded-full py-3.5 sm:py-4 text-sm font-bold text-white shadow-lg transition hover:shadow-xl active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                   style={{
                     background: `linear-gradient(135deg, ${theme.primary_color}, ${theme.secondary_color})`,
                   }}

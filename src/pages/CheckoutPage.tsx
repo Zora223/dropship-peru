@@ -1,5 +1,4 @@
 // src/pages/CheckoutPage.tsx
-// 🆕 v19.3 - Descuentos porcentuales con tope
 import { useCart } from "../contexts/CartContext";
 import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
@@ -15,10 +14,7 @@ export default function CheckoutPage() {
   const backToStoreUrl = storeSlug ? `/tienda/${storeSlug}` : "/";
 
   useEffect(() => {
-    if (count === 0) {
-      setDiscount(null);
-      return;
-    }
+    if (count === 0) { setDiscount(null); return; }
     calculateDiscount(count, total).then(setDiscount);
   }, [count, total]);
 
@@ -29,17 +25,12 @@ export default function CheckoutPage() {
   if (count === 0) {
     return (
       <div className="flex min-h-[calc(100vh-140px)] flex-col items-center justify-center bg-linear-to-br from-rose-50 via-white to-orange-50 px-6 text-center">
-        <div className="text-7xl">🛍️</div>
-        <h1 className="mt-6 text-3xl font-bold tracking-tight text-gray-900">
-          Tu carrito está vacío
-        </h1>
-        <p className="mt-3 max-w-sm text-gray-500">
+        <div className="text-6xl sm:text-7xl">🛍️</div>
+        <h1 className="mt-6 text-2xl sm:text-3xl font-bold tracking-tight text-gray-900">Tu carrito está vacío</h1>
+        <p className="mt-3 max-w-sm text-sm text-gray-500">
           Para comprar, ingresa desde el enlace directo que te compartió tu vendedor.
         </p>
-        <Link
-          to="/"
-          className="mt-8 rounded-full bg-gray-900 px-8 py-3.5 text-sm font-semibold text-white shadow-lg transition hover:bg-gray-800 hover:shadow-xl"
-        >
+        <Link to="/" className="mt-8 rounded-full bg-gray-900 px-8 py-3.5 text-sm font-semibold text-white shadow-lg transition hover:bg-gray-800">
           Volver al inicio
         </Link>
       </div>
@@ -48,125 +39,105 @@ export default function CheckoutPage() {
 
   return (
     <div className="min-h-screen bg-linear-to-br from-rose-50 via-white to-orange-50">
+      {/* Banner tienda */}
       <div className="bg-linear-to-r from-rose-500 via-pink-500 to-orange-500 text-white">
-        <div className="container mx-auto px-6 py-3 text-center text-sm font-medium">
+        <div className="container mx-auto px-4 py-3 text-center text-xs sm:text-sm font-medium">
           ✨ Estás comprando en {storeName}
         </div>
       </div>
 
-      <div className="container mx-auto max-w-5xl px-6 py-12">
-        <div className="mb-8">
-          <Link
-            to={backToStoreUrl}
-            className="text-sm font-semibold text-gray-500 hover:text-gray-900"
-          >
+      <div className="container mx-auto max-w-5xl px-4 sm:px-6 py-6 sm:py-12">
+        {/* Breadcrumb */}
+        <div className="mb-6">
+          <Link to={backToStoreUrl} className="text-sm font-semibold text-gray-500 hover:text-gray-900">
             ← Volver a la tienda
           </Link>
-          <h1 className="mt-3 text-4xl font-bold tracking-tight text-gray-900">
-            Casi listo 🎉
-          </h1>
-          <p className="mt-2 text-gray-500">
-            Revisa tu pedido antes de confirmar.
-          </p>
+          <h1 className="mt-3 text-2xl sm:text-4xl font-bold tracking-tight text-gray-900">Casi listo 🎉</h1>
+          <p className="mt-1 sm:mt-2 text-sm text-gray-500">Revisa tu pedido antes de confirmar.</p>
         </div>
 
-        <div className="grid gap-8 lg:grid-cols-3">
+        {/* Layout: en móvil el resumen va PRIMERO (sticky) */}
+        <div className="flex flex-col-reverse gap-6 lg:grid lg:grid-cols-3 lg:gap-8">
+
+          {/* Productos — ocupa 2 columnas en desktop */}
           <div className="space-y-3 lg:col-span-2">
-            <DiscountProgressBar
-              itemCount={count}
-              subtotal={total}
-              onDiscountChange={setDiscount}
-            />
+            <DiscountProgressBar itemCount={count} subtotal={total} onDiscountChange={setDiscount} />
 
             {items.map((item) => (
               <div
                 key={item.productId}
-                className="flex items-center gap-4 rounded-2xl border border-white bg-white/80 p-4 shadow-sm backdrop-blur transition hover:shadow-lg"
+                className="flex items-center gap-3 sm:gap-4 rounded-2xl border border-white bg-white/80 p-3 sm:p-4 shadow-sm backdrop-blur transition hover:shadow-lg"
               >
-                <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-linear-to-br from-gray-100 to-gray-200 text-3xl">
+                {/* Imagen */}
+                <div className="flex h-16 w-16 sm:h-20 sm:w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-100 text-2xl sm:text-3xl">
                   {item.image ? (
                     <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
-                  ) : (
-                    "📦"
-                  )}
+                  ) : "📦"}
                 </div>
 
+                {/* Info */}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="truncate text-base font-semibold text-gray-900">
-                      {item.name}
-                    </h3>
+                    <h3 className="text-sm sm:text-base font-semibold text-gray-900 truncate">{item.name}</h3>
                     <FreeShippingBadge size="sm" />
                   </div>
-                  <p className="mt-0.5 text-sm text-gray-500">
-                    S/ {item.price.toFixed(2)} por unidad
-                  </p>
+                  <p className="mt-0.5 text-xs sm:text-sm text-gray-500">S/ {item.price.toFixed(2)} c/u</p>
 
-                  <div className="mt-3 flex items-center gap-2">
+                  {/* Controles cantidad */}
+                  <div className="mt-2 sm:mt-3 flex items-center gap-2">
                     <button
                       onClick={() => updateQuantity(item.productId, item.quantity - 1)}
                       className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition hover:border-gray-900 hover:bg-gray-900 hover:text-white"
-                    >
-                      −
-                    </button>
-                    <span className="w-6 text-center text-sm font-semibold tabular-nums">
-                      {item.quantity}
-                    </span>
+                    >−</button>
+                    <span className="w-6 text-center text-sm font-semibold tabular-nums">{item.quantity}</span>
                     <button
                       onClick={() => updateQuantity(item.productId, item.quantity + 1)}
                       className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition hover:border-gray-900 hover:bg-gray-900 hover:text-white"
-                    >
-                      +
-                    </button>
+                    >+</button>
                     <button
                       onClick={() => removeItem(item.productId)}
-                      className="ml-3 text-xs font-medium text-gray-400 transition hover:text-red-500"
-                    >
-                      Eliminar
-                    </button>
+                      className="ml-2 text-xs font-medium text-gray-400 transition hover:text-red-500"
+                    >Eliminar</button>
                   </div>
                 </div>
 
+                {/* Subtotal */}
                 <div className="shrink-0 text-right">
-                  <div className="text-base font-bold text-gray-900">
+                  <div className="text-sm sm:text-base font-bold text-gray-900">
                     S/ {(item.price * item.quantity).toFixed(2)}
                   </div>
                 </div>
               </div>
             ))}
 
-            <div className="mt-8 grid grid-cols-3 gap-3">
-              <div className="rounded-2xl bg-white/60 p-4 text-center backdrop-blur">
-                <div className="text-2xl">🚚</div>
-                <div className="mt-1 text-xs font-semibold text-gray-700">Envío GRATIS</div>
-              </div>
-              <div className="rounded-2xl bg-white/60 p-4 text-center backdrop-blur">
-                <div className="text-2xl">🔒</div>
-                <div className="mt-1 text-xs font-semibold text-gray-700">Compra protegida</div>
-              </div>
-              <div className="rounded-2xl bg-white/60 p-4 text-center backdrop-blur">
-                <div className="text-2xl">🏪</div>
-                <div className="mt-1 text-xs font-semibold text-gray-700">Tienda verificada</div>
-              </div>
+            {/* Badges de confianza */}
+            <div className="mt-4 sm:mt-8 grid grid-cols-3 gap-2 sm:gap-3">
+              {[
+                { icon: "🚚", label: "Envío GRATIS" },
+                { icon: "🔒", label: "Compra protegida" },
+                { icon: "🏪", label: "Tienda verificada" },
+              ].map((badge) => (
+                <div key={badge.label} className="rounded-xl sm:rounded-2xl bg-white/60 p-3 sm:p-4 text-center backdrop-blur">
+                  <div className="text-xl sm:text-2xl">{badge.icon}</div>
+                  <div className="mt-1 text-[10px] sm:text-xs font-semibold text-gray-700">{badge.label}</div>
+                </div>
+              ))}
             </div>
           </div>
 
+          {/* Resumen — sticky en desktop, normal en móvil */}
           <div className="lg:col-span-1">
-            <div className="sticky top-24 overflow-hidden rounded-3xl bg-white shadow-xl">
-              <div className="bg-linear-to-br from-gray-900 to-gray-800 px-6 py-5 text-white">
-                <h2 className="text-lg font-bold">Tu resumen</h2>
-                <p className="text-xs text-gray-300">
-                  {count} {count === 1 ? "producto" : "productos"} en el carrito
-                </p>
+            <div className="lg:sticky lg:top-24 overflow-hidden rounded-2xl sm:rounded-3xl bg-white shadow-xl">
+              <div className="bg-linear-to-br from-gray-900 to-gray-800 px-4 sm:px-6 py-4 sm:py-5 text-white">
+                <h2 className="text-base sm:text-lg font-bold">Tu resumen</h2>
+                <p className="text-xs text-gray-300">{count} {count === 1 ? "producto" : "productos"} en el carrito</p>
               </div>
 
-              <div className="p-6">
+              <div className="p-4 sm:p-6">
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Subtotal</span>
-                    <span className="font-semibold tabular-nums text-gray-900">
-                      S/ {total.toFixed(2)}
-                    </span>
+                    <span className="font-semibold tabular-nums text-gray-900">S/ {total.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Envío</span>
@@ -177,36 +148,32 @@ export default function CheckoutPage() {
                     <span className="font-semibold text-gray-900">Incluido</span>
                   </div>
 
-                  {/* 🆕 v19.3 - Descuento con % */}
                   {discountAmount > 0 && discount?.current_tier && (
                     <div className="flex justify-between text-sm rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2">
-                      <span className="font-bold text-emerald-700">
-                        {discount.current_tier.tier_emoji} Dscto {discount.current_tier.tier_label} (-{discountPct}%)
+                      <span className="font-bold text-emerald-700 text-xs sm:text-sm">
+                        {discount.current_tier.tier_emoji} -{discountPct}%
                       </span>
-                      <span className="font-black tabular-nums text-emerald-700">
+                      <span className="font-black tabular-nums text-emerald-700 text-xs sm:text-sm">
                         -S/ {discountAmount.toFixed(2)}
                       </span>
                     </div>
                   )}
                 </div>
 
-                <div className="my-5 border-t border-dashed border-gray-200" />
+                <div className="my-4 sm:my-5 border-t border-dashed border-gray-200" />
 
                 <div className="flex items-baseline justify-between">
-                  <span className="text-base font-bold text-gray-900">Total a pagar</span>
-
+                  <span className="text-sm sm:text-base font-bold text-gray-900">Total a pagar</span>
                   <div className="text-right">
                     {discountAmount > 0 && (
-                      <div className="text-sm line-through text-gray-400 tabular-nums">
-                        S/ {total.toFixed(2)}
-                      </div>
+                      <div className="text-xs sm:text-sm line-through text-gray-400 tabular-nums">S/ {total.toFixed(2)}</div>
                     )}
-                    <div className="text-3xl font-extrabold tabular-nums text-gray-900">
+                    <div className="text-2xl sm:text-3xl font-extrabold tabular-nums text-gray-900">
                       S/ {finalTotal.toFixed(2)}
                     </div>
                     {discountAmount > 0 && (
                       <div className="mt-0.5 text-[10px] font-bold text-emerald-600">
-                        ¡Ahorras {discountPct}% (S/ {discountAmount.toFixed(2)})! 🎉
+                        ¡Ahorras S/ {discountAmount.toFixed(2)}! 🎉
                       </div>
                     )}
                   </div>
@@ -214,7 +181,7 @@ export default function CheckoutPage() {
 
                 <Link
                   to="/payment"
-                  className="mt-6 block w-full rounded-full bg-linear-to-r from-rose-500 to-orange-500 py-4 text-center text-sm font-bold text-white shadow-lg transition hover:from-rose-600 hover:to-orange-600 hover:shadow-xl active:scale-[0.98]"
+                  className="mt-5 sm:mt-6 block w-full rounded-full bg-linear-to-r from-rose-500 to-orange-500 py-3.5 sm:py-4 text-center text-sm font-bold text-white shadow-lg transition hover:from-rose-600 hover:to-orange-600 active:scale-[0.98]"
                 >
                   Confirmar y pagar →
                 </Link>
@@ -223,7 +190,7 @@ export default function CheckoutPage() {
                   to={backToStoreUrl}
                   className="mt-3 block text-center text-xs font-semibold text-gray-400 hover:text-gray-700"
                 >
-                  Seguir comprando en esta tienda
+                  Seguir comprando
                 </Link>
 
                 <div className="mt-4 flex items-center justify-center gap-2 text-xs text-gray-400">

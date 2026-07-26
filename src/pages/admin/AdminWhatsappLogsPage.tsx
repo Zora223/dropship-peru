@@ -471,7 +471,7 @@ export default function AdminWhatsappLogsPage() {
                   📱 Mensaje
                 </p>
                 <div className="rounded-xl bg-emerald-50 p-4">
-                  <pre className="whitespace-pre-wrap break-words font-sans text-sm text-gray-900">
+                  <pre className="whitespace-pre-wrap wrap-break-word font-sans text-sm text-gray-900">
                     {selectedLog.message_sent}
                   </pre>
                 </div>
