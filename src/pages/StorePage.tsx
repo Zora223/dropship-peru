@@ -1,6 +1,7 @@
 // src/pages/StorePage.tsx
 import WhatsappFloatingButton from "../components/WhatsappFloatingButton";
 import FreeShippingBadge from "../components/FreeShippingBadge";
+import ProductImageGallery from "../components/ProductImageGallery";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useCart } from "../contexts/CartContext";
@@ -332,7 +333,6 @@ export default function StorePage() {
           <div className="grid gap-3 sm:gap-4 md:gap-6 grid-cols-2 md:grid-cols-3">
             {filtered.map((product) => {
               const productImages = normalizeImages(product.images);
-              const firstImage = productImages[0];
               const badges = getProductBadges({
                 stock: product.real_stock,
                 featured: product.featured,
@@ -353,20 +353,16 @@ export default function StorePage() {
                     canBuy ? "hover:-translate-y-1 hover:shadow-2xl" : "opacity-75"
                   }`}
                 >
-                  {/* Imagen */}
-                  <div className="relative aspect-square sm:aspect-4/3 overflow-hidden bg-linear-to-br from-gray-100 to-gray-200">
-                    {firstImage ? (
-                      <img
-                        src={firstImage}
-                        alt={product.name}
-                        className={`h-full w-full object-cover transition ${canBuy ? "group-hover:scale-110" : "grayscale"}`}
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-3xl sm:text-5xl text-gray-300">📦</div>
-                    )}
+                  {/* Imagen con galería */}
+                  <div className="relative">
+                    <ProductImageGallery
+                      images={productImages}
+                      productName={product.name}
+                      canBuy={canBuy}
+                    />
 
                     {/* Badges — más pequeños en móvil */}
-                    <div className="absolute left-2 top-2 sm:left-3 sm:top-3 flex flex-col gap-1">
+                    <div className="absolute left-2 top-2 sm:left-3 sm:top-3 z-10 flex flex-col gap-1">
                       {badges.slice(0, 2).map((badge, index) => (
                         <span
                           key={index}
@@ -382,7 +378,7 @@ export default function StorePage() {
                       type="button"
                       onClick={() => handleToggleFavorite(product.id)}
                       disabled={favoriteBusy}
-                      className={`absolute right-2 top-2 sm:right-3 sm:top-3 flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-white/90 text-base sm:text-lg shadow-md backdrop-blur transition hover:scale-110 hover:bg-white disabled:opacity-60 ${
+                      className={`absolute right-2 top-2 sm:right-3 sm:top-3 z-10 flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-white/90 text-base sm:text-lg shadow-md backdrop-blur transition hover:scale-110 hover:bg-white disabled:opacity-60 ${
                         isFavorite ? "text-rose-500" : "text-gray-500"
                       }`}
                     >
