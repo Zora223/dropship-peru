@@ -4,16 +4,15 @@ import {
   sendWhatsappMessage,
   checkWhatsappNumber,
   reconnectBot,
+  resetBotAuth,
   formatUptime,
   type BotStatus,
 } from '../../lib/whatsapp-bot';
 import { useToast } from '../../contexts/ToastContext';
 
-// ─── CONSTANTE ─────────────────────────────────────────────────────────────────
 const BOT_URL = import.meta.env.VITE_WHATSAPP_BOT_URL as string;
-const REFRESH_INTERVAL = 3000; // 3 segundos
+const REFRESH_INTERVAL = 3000;
 
-// ─── COMPONENTE BADGE DE ESTADO ────────────────────────────────────────────────
 function StatusBadge({ status }: { status: BotStatus['status'] }) {
   const config = {
     connected: {
@@ -39,25 +38,14 @@ function StatusBadge({ status }: { status: BotStatus['status'] }) {
   }[status];
 
   return (
-    <span
-      className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium border ${config.color}`}
-    >
+    <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium border ${config.color}`}>
       <span className={`w-2 h-2 rounded-full animate-pulse ${config.dot}`} />
       {config.label}
     </span>
   );
 }
 
-// ─── COMPONENTE STAT MINI ───────────────────────────────────────────────────────
-function MiniStat({
-  label,
-  value,
-  icon,
-}: {
-  label: string;
-  value: string;
-  icon: string;
-}) {
+function MiniStat({ label, value, icon }: { label: string; value: string; icon: string }) {
   return (
     <div className="bg-gray-50 rounded-2xl p-4 flex flex-col gap-1">
       <span className="text-2xl">{icon}</span>
@@ -67,35 +55,27 @@ function MiniStat({
   );
 }
 
-// ─── PÁGINA PRINCIPAL ──────────────────────────────────────────────────────────
 export default function AdminWhatsappPage() {
   const toast = useToast();
 
-  // Estado del bot
   const [botStatus, setBotStatus] = useState<BotStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Estado de reconexión
   const [reconnecting, setReconnecting] = useState(false);
+  const [resettingAuth, setResettingAuth] = useState(false);
 
-  // Estado test de envío
   const [testPhone, setTestPhone] = useState('51');
   const [testMessage, setTestMessage] = useState('🚀 Mensaje de prueba desde Dropship Perú');
   const [sending, setSending] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
 
-  // Estado verificación de número
   const [checkPhone, setCheckPhone] = useState('51');
   const [checking, setChecking] = useState(false);
-  const [checkResult, setCheckResult] = useState<{
-    exists: boolean;
-    phone: string;
-  } | null>(null);
+  const [checkResult, setCheckResult] = useState<{ exists: boolean; phone: string } | null>(null);
 
-  // ─── FETCH STATUS ────────────────────────────────────────────────────────────
   const fetchStatus = useCallback(async () => {
     const status = await getBotStatus();
     setBotStatus(status);
@@ -103,41 +83,60 @@ export default function AdminWhatsappPage() {
     setLoading(false);
   }, []);
 
-  // Fetch inicial
   useEffect(() => {
     fetchStatus();
   }, [fetchStatus]);
 
-  // Auto-refresh cada 3s
   useEffect(() => {
     if (autoRefresh) {
       intervalRef.current = setInterval(fetchStatus, REFRESH_INTERVAL);
     } else {
       if (intervalRef.current) clearInterval(intervalRef.current);
     }
-
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [autoRefresh, fetchStatus]);
 
-  // ─── RECONECTAR ──────────────────────────────────────────────────────────────
   const handleReconnect = async () => {
     setReconnecting(true);
     const result = await reconnectBot();
-
     if (result.success) {
       toast.success('Reconexión iniciada', result.message);
     } else {
       toast.error('Error al reconectar', result.message);
     }
-
     setReconnecting(false);
-    // Refrescar estado en 2s
     setTimeout(fetchStatus, 2000);
   };
 
-  // ─── ENVIAR TEST ─────────────────────────────────────────────────────────────
+  const handleResetAuth = async () => {
+    const confirmed = confirm(
+      '⚠️ ¿Resetear la autenticación del bot?\n\n' +
+      'Esto borrará la sesión actual del bot y tendrás que escanear ' +
+      'el QR de nuevo con WhatsApp.\n\n' +
+      'Úsalo SOLO si el bot está atascado con código 401 o no puede reconectar.'
+    );
+    if (!confirmed) return;
+
+    setResettingAuth(true);
+    const result = await resetBotAuth();
+
+    if (result.success) {
+      toast.success('🔥 Auth reseteada', result.message);
+      let attempts = 0;
+      const interval = setInterval(() => {
+        fetchStatus();
+        attempts++;
+        if (attempts >= 10) clearInterval(interval);
+      }, 3000);
+    } else {
+      toast.error('Error al resetear', result.error ?? 'No se pudo resetear');
+    }
+
+    setResettingAuth(false);
+  };
+
   const handleSendTest = async () => {
     if (!testPhone || testPhone.length < 10) {
       toast.warning('Número inválido', 'Ingresa el número con código de país (ej: 51916146396)');
@@ -164,7 +163,6 @@ export default function AdminWhatsappPage() {
     setSending(false);
   };
 
-  // ─── VERIFICAR NÚMERO ────────────────────────────────────────────────────────
   const handleCheckNumber = async () => {
     if (!checkPhone || checkPhone.length < 10) {
       toast.warning('Número inválido', 'Ingresa el número con código de país');
@@ -185,33 +183,24 @@ export default function AdminWhatsappPage() {
     setChecking(false);
   };
 
-  // ─── COPIAR URL ──────────────────────────────────────────────────────────────
   const handleCopyUrl = () => {
     navigator.clipboard.writeText(BOT_URL);
     toast.success('¡Copiado!', 'URL del bot copiada al portapapeles');
   };
 
-  // ─── RENDER ──────────────────────────────────────────────────────────────────
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
-
-      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            🤖 Panel WhatsApp Bot
-          </h1>
+          <h1 className="text-2xl font-bold text-gray-900">🤖 Panel WhatsApp Bot</h1>
           <p className="text-sm text-gray-500 mt-1">
             Gestión del bot de WhatsApp en producción (Railway)
           </p>
         </div>
 
-        {/* Auto-refresh toggle */}
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-500">
-            {lastRefresh
-              ? `Actualizado: ${lastRefresh.toLocaleTimeString('es-PE')}`
-              : 'Cargando...'}
+            {lastRefresh ? `Actualizado: ${lastRefresh.toLocaleTimeString('es-PE')}` : 'Cargando...'}
           </span>
           <button
             onClick={() => setAutoRefresh((v) => !v)}
@@ -229,51 +218,29 @@ export default function AdminWhatsappPage() {
         </div>
       </div>
 
-      {/* ── CARD: ESTADO DEL BOT ────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div className="flex items-start justify-between flex-wrap gap-4">
-          {/* Lado izquierdo: estado + stats */}
           <div className="space-y-4 flex-1">
             <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Estado del Bot
-              </h2>
+              <h2 className="text-lg font-semibold text-gray-900">Estado del Bot</h2>
               {loading ? (
-                <span className="text-sm text-gray-400 animate-pulse">
-                  Verificando...
-                </span>
+                <span className="text-sm text-gray-400 animate-pulse">Verificando...</span>
               ) : (
                 botStatus && <StatusBadge status={botStatus.status} />
               )}
             </div>
 
-            {/* Stats en grid */}
             {botStatus && !loading && (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <MiniStat
-                  icon="⏱️"
-                  label="Uptime"
-                  value={formatUptime(botStatus.uptime_seconds)}
-                />
-                <MiniStat
-                  icon="📨"
-                  label="Mensajes hoy"
-                  value={String(botStatus.messages_sent_today)}
-                />
-                <MiniStat
-                  icon="📱"
-                  label="Teléfono"
-                  value={botStatus.phone ?? '—'}
-                />
+                <MiniStat icon="⏱️" label="Uptime" value={formatUptime(botStatus.uptime_seconds)} />
+                <MiniStat icon="📨" label="Mensajes hoy" value={String(botStatus.messages_sent_today)} />
+                <MiniStat icon="📱" label="Teléfono" value={botStatus.phone ?? '—'} />
               </div>
             )}
 
-            {/* URL del bot */}
             <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-4 py-2">
               <span className="text-xs text-gray-400 shrink-0">URL:</span>
-              <span className="text-xs text-gray-700 font-mono truncate flex-1">
-                {BOT_URL}
-              </span>
+              <span className="text-xs text-gray-700 font-mono truncate flex-1">{BOT_URL}</span>
               <button
                 onClick={handleCopyUrl}
                 className="text-xs text-emerald-600 hover:text-emerald-700 font-medium shrink-0"
@@ -283,7 +250,6 @@ export default function AdminWhatsappPage() {
             </div>
           </div>
 
-          {/* Lado derecho: botones de acción */}
           <div className="flex flex-col gap-2 shrink-0">
             <button
               onClick={fetchStatus}
@@ -292,13 +258,24 @@ export default function AdminWhatsappPage() {
             >
               🔄 Refrescar
             </button>
+
             <button
               onClick={handleReconnect}
-              disabled={reconnecting}
+              disabled={reconnecting || resettingAuth}
               className="flex items-center gap-2 px-4 py-2 text-sm bg-amber-500 hover:bg-amber-600 text-white rounded-xl transition-colors disabled:opacity-50"
             >
               {reconnecting ? '⏳ Reconectando...' : '🔌 Reconectar'}
             </button>
+
+            <button
+              onClick={handleResetAuth}
+              disabled={resettingAuth || reconnecting}
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-rose-500 hover:bg-rose-600 text-white rounded-xl transition-colors disabled:opacity-50 font-semibold"
+              title="Borra la sesión y fuerza QR nuevo"
+            >
+              {resettingAuth ? '⏳ Reseteando...' : '🔥 Reset Auth'}
+            </button>
+
             <a
               href={`${BOT_URL}/status`}
               target="_blank"
@@ -311,15 +288,30 @@ export default function AdminWhatsappPage() {
         </div>
       </div>
 
-      {/* ── CARD: QR (solo si está disponible o desconectado) ───────────────── */}
+      {botStatus && !botStatus.connected && !botStatus.hasQr && !loading && (
+        <div className="bg-rose-50 border-l-4 border-rose-500 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">🚨</span>
+            <div className="flex-1">
+              <h3 className="text-sm font-bold text-rose-900">Bot atascado — Sesión expulsada</h3>
+              <p className="mt-1 text-sm text-rose-700">
+                El bot no puede generar QR porque tiene credenciales inválidas (código 401).
+                Usa el botón <b>"🔥 Reset Auth"</b> arriba para borrar la sesión y generar un QR nuevo.
+              </p>
+              <p className="mt-2 text-xs text-rose-600">
+                Después del reset, el QR aparecerá en 5-10 segundos.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {botStatus && !botStatus.connected && (
         <div className="bg-white rounded-2xl shadow-sm border border-amber-200 p-6">
           <div className="flex items-center gap-3 mb-4">
             <span className="text-2xl">📱</span>
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">
-                Escanear QR
-              </h2>
+              <h2 className="text-lg font-semibold text-gray-900">Escanear QR</h2>
               <p className="text-sm text-gray-500">
                 El bot está desconectado. Escanea el QR con WhatsApp para reconectar.
               </p>
@@ -327,18 +319,15 @@ export default function AdminWhatsappPage() {
           </div>
 
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
-            <p className="text-sm text-amber-700 font-medium">
-              ⚠️ Pasos para reconectar:
-            </p>
+            <p className="text-sm text-amber-700 font-medium">⚠️ Pasos para reconectar:</p>
             <ol className="text-sm text-amber-600 mt-1 list-decimal list-inside space-y-1">
-              <li>Haz clic en "Reconectar" (botón arriba) si el QR no aparece</li>
+              <li>Si el QR no aparece, usa "🔥 Reset Auth" (botón rojo arriba)</li>
               <li>Abre WhatsApp en tu teléfono</li>
               <li>Ve a Dispositivos Vinculados → Vincular dispositivo</li>
               <li>Escanea el QR de abajo</li>
             </ol>
           </div>
 
-          {/* QR iframe */}
           <div className="flex justify-center">
             <iframe
               src={`${BOT_URL}/qr`}
@@ -349,17 +338,13 @@ export default function AdminWhatsappPage() {
           </div>
 
           <p className="text-center text-xs text-gray-400 mt-3">
-            El QR se actualiza automáticamente cada 30 segundos.
-            Si expiró, haz clic en "Reconectar".
+            El QR se actualiza automáticamente cada 30 segundos. Si expiró, usa "🔥 Reset Auth".
           </p>
         </div>
       )}
 
-      {/* ── CARD: TEST RÁPIDO ────────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          🧪 Test Rápido — Enviar Mensaje
-        </h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">🧪 Test Rápido — Enviar Mensaje</h2>
 
         <div className="space-y-3">
           <div>
@@ -379,9 +364,7 @@ export default function AdminWhatsappPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Mensaje
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Mensaje</label>
             <textarea
               value={testMessage}
               onChange={(e) => setTestMessage(e.target.value)}
@@ -391,7 +374,6 @@ export default function AdminWhatsappPage() {
             />
           </div>
 
-          {/* Resultado del test */}
           {testResult && (
             <div
               className={`text-sm px-4 py-3 rounded-xl ${
@@ -427,17 +409,12 @@ export default function AdminWhatsappPage() {
         </div>
       </div>
 
-      {/* ── CARD: VERIFICAR NÚMERO ───────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          🔍 Verificar Número WhatsApp
-        </h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">🔍 Verificar Número WhatsApp</h2>
 
         <div className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Número a verificar
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Número a verificar</label>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -456,7 +433,6 @@ export default function AdminWhatsappPage() {
             </div>
           </div>
 
-          {/* Resultado verificación */}
           {checkResult && (
             <div
               className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
@@ -465,9 +441,7 @@ export default function AdminWhatsappPage() {
                   : 'bg-rose-50 border-rose-200'
               }`}
             >
-              <span className="text-2xl">
-                {checkResult.exists ? '✅' : '❌'}
-              </span>
+              <span className="text-2xl">{checkResult.exists ? '✅' : '❌'}</span>
               <div>
                 <p
                   className={`text-sm font-semibold ${
@@ -485,17 +459,14 @@ export default function AdminWhatsappPage() {
         </div>
       </div>
 
-      {/* ── CARD: INFO TÉCNICA ───────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          ⚙️ Info Técnica
-        </h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">⚙️ Info Técnica</h2>
 
         <div className="space-y-2 text-sm">
           {[
             { label: 'Stack', value: 'Node.js + Baileys + Express' },
             { label: 'Deploy', value: 'Railway (auto-deploy GitHub)' },
-            { label: 'Endpoints', value: 'GET /status, GET /qr, POST /send, POST /check, POST /reconnect' },
+            { label: 'Endpoints', value: 'GET /status, GET /qr, POST /send, POST /check, POST /reconnect, POST /reset-auth' },
             { label: 'Límite mensajes', value: 'Máx 30/día (primeras 2 semanas)' },
             { label: 'Delay entre envíos', value: '2 segundos mínimo' },
           ].map(({ label, value }) => (
@@ -506,7 +477,6 @@ export default function AdminWhatsappPage() {
           ))}
         </div>
       </div>
-
     </div>
   );
 }

@@ -1,187 +1,144 @@
 // src/lib/whatsapp-bot.ts
-// Funciones para comunicarse con el bot de WhatsApp en Railway
+// Cliente para conectar con el bot de WhatsApp (Railway)
 
 const BOT_URL = import.meta.env.VITE_WHATSAPP_BOT_URL as string;
-const API_KEY = import.meta.env.VITE_WHATSAPP_BOT_API_KEY as string;
+const BOT_API_KEY = import.meta.env.VITE_WHATSAPP_BOT_API_KEY as string;
 
-// Headers autenticados para endpoints protegidos
-const authHeaders = {
-  'Content-Type': 'application/json',
-  'x-api-key': API_KEY,
-};
-
-// ─── TIPOS ────────────────────────────────────────────────────────────────────
-
+// ─── TIPOS ─────────────────────────────────────────────────────────────────────
 export interface BotStatus {
-  status: 'connected' | 'disconnected' | 'connecting' | 'qr_ready';
   connected: boolean;
-  qr_available: boolean;
+  status: 'connected' | 'qr_ready' | 'connecting' | 'disconnected';
+  hasQr: boolean;
+  phone: string | null;
   uptime_seconds: number;
   messages_sent_today: number;
-  phone?: string;
-  timestamp: string;
 }
 
-export interface SendMessageResult {
-  success: boolean;
-  message_id?: string;
-  error?: string;
-}
-
-export interface CheckNumberResult {
-  exists: boolean;
-  phone: string;
-  error?: string;
-}
-
-export interface ReconnectResult {
-  success: boolean;
-  message: string;
-}
-
-// ─── FUNCIONES ────────────────────────────────────────────────────────────────
-
-/**
- * Obtiene el estado actual del bot
- * El bot devuelve: { connected, hasQr, uptime, attempts, phone?, messagesToday? }
- */
-export async function getBotStatus(): Promise<BotStatus> {
+// ─── OBTENER ESTADO DEL BOT ───────────────────────────────────────────────────
+export async function getBotStatus(): Promise<BotStatus | null> {
   try {
-    const res = await fetch(`${BOT_URL}/status`, {
-      method: 'GET',
-      signal: AbortSignal.timeout(5000), // timeout 5s
-    });
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const res = await fetch(`${BOT_URL}/status`);
+    if (!res.ok) return null;
 
     const data = await res.json();
 
-    // 🔧 Mapeo del formato real que devuelve el bot
+    // Normalizar respuesta (el bot puede devolver campos en español o inglés)
+    const connected = data.connected ?? data.conectado ?? false;
+    const hasQr = data.hasQr ?? data.tieneQr ?? false;
+    const uptime = data.uptime_seconds ?? data.uptime ?? data['tiempo de actividad'] ?? 0;
+
+    let status: BotStatus['status'] = 'disconnected';
+    if (connected) status = 'connected';
+    else if (hasQr) status = 'qr_ready';
+    else status = 'connecting';
+
     return {
-      status: data.connected
-        ? 'connected'
-        : data.hasQr
-          ? 'qr_ready'
-          : 'disconnected',
-      connected: data.connected ?? false,
-      qr_available: data.hasQr ?? false,
-      uptime_seconds: Math.floor(data.uptime ?? 0),
-      messages_sent_today: data.messagesToday ?? 0,
-      phone: data.phone,
-      timestamp: new Date().toISOString(),
+      connected,
+      status,
+      hasQr,
+      phone: data.phone ?? null,
+      uptime_seconds: uptime,
+      messages_sent_today: data.messages_sent_today ?? 0,
     };
   } catch (err) {
-    // Bot inaccesible
-    return {
-      status: 'disconnected',
-      connected: false,
-      qr_available: false,
-      uptime_seconds: 0,
-      messages_sent_today: 0,
-      timestamp: new Date().toISOString(),
-    };
+    console.error('[getBotStatus] Error:', err);
+    return null;
   }
 }
 
-/**
- * Envía un mensaje de WhatsApp a un número
- * @param phone — Número con código de país, ej: "51916146396"
- * @param message — Texto del mensaje
- */
+// ─── ENVIAR MENSAJE ────────────────────────────────────────────────────────────
 export async function sendWhatsappMessage(
   phone: string,
   message: string
-): Promise<SendMessageResult> {
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
     const res = await fetch(`${BOT_URL}/send`, {
       method: 'POST',
-      headers: authHeaders,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': BOT_API_KEY,
+      },
       body: JSON.stringify({ phone, message }),
-      signal: AbortSignal.timeout(15000),
     });
 
-    // Intentar parsear JSON (puede fallar si el bot devuelve texto plano)
-    let data: any = {};
-    try {
-      data = await res.json();
-    } catch {
-      data = {};
-    }
+    const data = await res.json();
 
     if (!res.ok) {
-      return { success: false, error: data.error ?? `HTTP ${res.status}` };
+      return {
+        success: false,
+        error: data.error ?? `Error ${res.status}`,
+      };
     }
 
     return {
-      success: data.success ?? true,
-      message_id: data.messageId ?? data.message_id,
+      success: true,
+      messageId: data.messageId,
     };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Error desconocido';
-    return { success: false, error: msg };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message ?? 'Error de conexión',
+    };
   }
 }
 
-/**
- * Verifica si un número tiene WhatsApp activo
- * @param phone — Número con código de país
- */
+// ─── VERIFICAR SI UN NÚMERO TIENE WHATSAPP ────────────────────────────────────
 export async function checkWhatsappNumber(
   phone: string
-): Promise<CheckNumberResult> {
+): Promise<{ exists: boolean; phone: string; error?: string }> {
   try {
     const res = await fetch(`${BOT_URL}/check`, {
       method: 'POST',
-      headers: authHeaders,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': BOT_API_KEY,
+      },
       body: JSON.stringify({ phone }),
-      signal: AbortSignal.timeout(10000),
     });
 
-    let data: any = {};
-    try {
-      data = await res.json();
-    } catch {
-      data = {};
-    }
+    const data = await res.json();
 
     if (!res.ok) {
-      return { exists: false, phone, error: data.error ?? `HTTP ${res.status}` };
+      return {
+        exists: false,
+        phone,
+        error: data.error ?? `Error ${res.status}`,
+      };
     }
 
     return {
       exists: data.exists ?? false,
       phone: data.phone ?? phone,
     };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Error desconocido';
-    return { exists: false, phone, error: msg };
+  } catch (err: any) {
+    return {
+      exists: false,
+      phone,
+      error: err.message ?? 'Error de conexión',
+    };
   }
 }
 
-/**
- * Fuerza la reconexión del bot
- */
-export async function reconnectBot(): Promise<ReconnectResult> {
+// ─── RECONECTAR BOT ────────────────────────────────────────────────────────────
+export async function reconnectBot(): Promise<{
+  success: boolean;
+  message: string;
+}> {
   try {
     const res = await fetch(`${BOT_URL}/reconnect`, {
       method: 'POST',
-      headers: authHeaders,
-      signal: AbortSignal.timeout(10000),
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': BOT_API_KEY,
+      },
     });
 
-    // El bot puede devolver texto vacío o JSON según implementación
-    let data: any = {};
-    try {
-      const text = await res.text();
-      data = text ? JSON.parse(text) : {};
-    } catch {
-      data = {};
-    }
+    const data = await res.json();
 
     if (!res.ok) {
       return {
         success: false,
-        message: data.error ?? `HTTP ${res.status}`,
+        message: data.error ?? `Error ${res.status}`,
       };
     }
 
@@ -189,20 +146,66 @@ export async function reconnectBot(): Promise<ReconnectResult> {
       success: true,
       message: data.message ?? 'Reconexión iniciada',
     };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Error desconocido';
-    return { success: false, message: msg };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: err.message ?? 'Error de conexión con el bot',
+    };
   }
 }
 
-/**
- * Formatea segundos de uptime a string legible
- */
-export function formatUptime(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+// ─── 🆕 RESET AUTH (borra sesión y fuerza QR nuevo) ───────────────────────────
+export async function resetBotAuth(): Promise<{
+  success: boolean;
+  message: string;
+  error?: string;
+}> {
+  try {
+    const res = await fetch(`${BOT_URL}/reset-auth`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': BOT_API_KEY,
+      },
+    });
 
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  return `${h}h ${m}m`;
+    const data = await res.json();
+
+    if (!res.ok) {
+      return {
+        success: false,
+        message: '',
+        error: data.error ?? `Error ${res.status}`,
+      };
+    }
+
+    return {
+      success: true,
+      message: data.message ?? 'Auth reseteada correctamente',
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: '',
+      error: err.message ?? 'Error de conexión con el bot',
+    };
+  }
+}
+
+// ─── FORMATEAR UPTIME ─────────────────────────────────────────────────────────
+export function formatUptime(seconds: number): string {
+  if (seconds < 60) return `${Math.floor(seconds)}s`;
+
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMin = minutes % 60;
+
+  if (hours < 24) return `${hours}h ${remainingMin}m`;
+
+  const days = Math.floor(hours / 24);
+  const remainingHrs = hours % 24;
+
+  return `${days}d ${remainingHrs}h`;
 }
