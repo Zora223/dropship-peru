@@ -1,7 +1,7 @@
 // src/pages/StorePage.tsx
 import WhatsappFloatingButton from "../components/WhatsappFloatingButton";
 import FreeShippingBadge from "../components/FreeShippingBadge";
-import ProductImageGallery from "../components/ProductImageGallery";
+import ProductDetailModal from "../components/ProductDetailModal"; // 🆕
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useCart } from "../contexts/CartContext";
@@ -86,6 +86,9 @@ export default function StorePage() {
   const [favoriteMessage, setFavoriteMessage] = useState<string | null>(null);
   const [reviewsModal, setReviewsModal] = useState<ReviewsModalState | null>(null);
 
+  // 🆕 Estado para el modal de detalle del producto
+  const [selectedProduct, setSelectedProduct] = useState<PublicStoreProduct | null>(null);
+
   useEffect(() => {
     if (!slug) return;
     const load = async () => {
@@ -144,20 +147,23 @@ export default function StorePage() {
     return methods.filter(m => m && m.enabled);
   }, [store?.payment_methods]);
 
-  const handleAdd = (product: PublicStoreProduct) => {
+  // 🆕 handleAdd ahora acepta cantidad y color opcionales
+  const handleAdd = (product: PublicStoreProduct, quantity: number = 1, selectedColor: string | null = null) => {
     if (!isPurchasable(product.real_stock) || !store) return;
     const images = normalizeImages(product.images);
-    addItem({
-      productId: product.id,
-      name: product.name,
-      price: Number(product.price),
-      storeId: store.id,
-      storeSlug: store.slug,
-      storeName: store.name,
-      source: product.source,
-      catalogProductId: product.catalog_product_id,
-      image: images[0] ?? null,
-    });
+    for (let i = 0; i < quantity; i++) {
+      addItem({
+        productId: product.id,
+        name: selectedColor ? `${product.name} (${selectedColor})` : product.name,
+        price: Number(product.price),
+        storeId: store.id,
+        storeSlug: store.slug,
+        storeName: store.name,
+        source: product.source,
+        catalogProductId: product.catalog_product_id,
+        image: images[0] ?? null,
+      });
+    }
     setAddedId(product.id);
     setTimeout(() => setAddedId(null), 1000);
   };
@@ -227,7 +233,7 @@ export default function StorePage() {
         </div>
       )}
 
-      {/* Header sticky compacto en móvil */}
+      {/* Header sticky */}
       <div className="sticky top-0 z-40 border-b border-gray-200/60 bg-white/90 backdrop-blur-md">
         <div className="container mx-auto flex items-center justify-between px-4 py-3 sm:py-4">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -283,7 +289,6 @@ export default function StorePage() {
           </p>
         )}
 
-        {/* Chips de confianza */}
         <div className="mt-4 sm:mt-6 flex flex-wrap justify-center gap-2 sm:gap-3 px-2">
           <span className="rounded-full bg-emerald-500 px-3 sm:px-4 py-1 sm:py-1.5 text-[10px] sm:text-xs font-bold text-white shadow-sm">
             🚚 ENVÍO GRATIS
@@ -299,7 +304,7 @@ export default function StorePage() {
         </div>
       </div>
 
-      {/* Categorías con scroll horizontal */}
+      {/* Categorías */}
       {categories.length > 1 && (
         <div className="container mx-auto px-4 pb-6 sm:pb-8">
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
@@ -321,7 +326,7 @@ export default function StorePage() {
         </div>
       )}
 
-      {/* GRID DE PRODUCTOS — 2 columnas en móvil, 3 en desktop */}
+      {/* GRID DE PRODUCTOS */}
       <div className="container mx-auto px-4 pb-12 sm:pb-16">
         {products.length === 0 ? (
           <div className="rounded-3xl bg-white p-10 sm:p-16 text-center shadow-sm">
@@ -333,6 +338,7 @@ export default function StorePage() {
           <div className="grid gap-3 sm:gap-4 md:gap-6 grid-cols-2 md:grid-cols-3">
             {filtered.map((product) => {
               const productImages = normalizeImages(product.images);
+              const firstImage = productImages[0];
               const badges = getProductBadges({
                 stock: product.real_stock,
                 featured: product.featured,
@@ -349,20 +355,25 @@ export default function StorePage() {
               return (
                 <div
                   key={product.id}
-                  className={`group overflow-hidden rounded-2xl sm:rounded-3xl bg-white shadow-sm transition ${
+                  className={`group overflow-hidden rounded-2xl sm:rounded-3xl bg-white shadow-sm transition cursor-pointer ${
                     canBuy ? "hover:-translate-y-1 hover:shadow-2xl" : "opacity-75"
                   }`}
+                  onClick={() => setSelectedProduct(product)} // 🆕 Click abre modal
                 >
-                  {/* Imagen con galería */}
-                  <div className="relative">
-                    <ProductImageGallery
-                      images={productImages}
-                      productName={product.name}
-                      canBuy={canBuy}
-                    />
+                  {/* Imagen */}
+                  <div className="relative aspect-square sm:aspect-4/3 overflow-hidden bg-linear-to-br from-gray-100 to-gray-200">
+                    {firstImage ? (
+                      <img
+                        src={firstImage}
+                        alt={product.name}
+                        className={`h-full w-full object-cover transition ${canBuy ? "group-hover:scale-110" : "grayscale"}`}
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-3xl sm:text-5xl text-gray-300">📦</div>
+                    )}
 
-                    {/* Badges — más pequeños en móvil */}
-                    <div className="absolute left-2 top-2 sm:left-3 sm:top-3 z-10 flex flex-col gap-1">
+                    {/* Badges */}
+                    <div className="absolute left-2 top-2 sm:left-3 sm:top-3 flex flex-col gap-1">
                       {badges.slice(0, 2).map((badge, index) => (
                         <span
                           key={index}
@@ -373,12 +384,15 @@ export default function StorePage() {
                       ))}
                     </div>
 
-                    {/* Favorito */}
+                    {/* Favorito — con stopPropagation para no abrir el modal */}
                     <button
                       type="button"
-                      onClick={() => handleToggleFavorite(product.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleFavorite(product.id);
+                      }}
                       disabled={favoriteBusy}
-                      className={`absolute right-2 top-2 sm:right-3 sm:top-3 z-10 flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-white/90 text-base sm:text-lg shadow-md backdrop-blur transition hover:scale-110 hover:bg-white disabled:opacity-60 ${
+                      className={`absolute right-2 top-2 sm:right-3 sm:top-3 flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-white/90 text-base sm:text-lg shadow-md backdrop-blur transition hover:scale-110 hover:bg-white disabled:opacity-60 ${
                         isFavorite ? "text-rose-500" : "text-gray-500"
                       }`}
                     >
@@ -386,7 +400,7 @@ export default function StorePage() {
                     </button>
                   </div>
 
-                  {/* Info — más compacta en móvil */}
+                  {/* Info */}
                   <div className="p-3 sm:p-4 md:p-5">
                     {product.category && (
                       <div className="text-[9px] sm:text-xs font-semibold uppercase tracking-wider text-gray-400 truncate">
@@ -398,32 +412,40 @@ export default function StorePage() {
                       {product.name}
                     </h3>
 
-                    {/* Envío gratis */}
                     <div className="mt-1 sm:mt-1.5 hidden sm:block">
                       <FreeShippingBadge size="sm" />
                     </div>
 
-                    {/* Rating */}
                     <div className="mt-1 sm:mt-1.5">
                       {reviewCount > 0 ? (
-                        <button onClick={() => handleOpenReviews(product)} className="inline-flex transition-opacity hover:opacity-75">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenReviews(product);
+                          }}
+                          className="inline-flex transition-opacity hover:opacity-75"
+                        >
                           <ProductRatingBadge avgRating={avgRating} reviewCount={reviewCount} />
                         </button>
                       ) : (
-                        <button onClick={() => handleOpenReviews(product)} className="text-[10px] sm:text-xs text-gray-400 transition-colors hover:text-rose-500">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenReviews(product);
+                          }}
+                          className="text-[10px] sm:text-xs text-gray-400 transition-colors hover:text-rose-500"
+                        >
                           ⭐ Sé el primero
                         </button>
                       )}
                     </div>
 
-                    {/* Descripción — oculta en móvil */}
                     {product.description && (
                       <p className="mt-1 line-clamp-2 text-xs text-gray-500 hidden sm:block">
                         {product.description}
                       </p>
                     )}
 
-                    {/* Precio + botón */}
                     <div className="mt-2 sm:mt-3 flex items-end justify-between gap-2">
                       <div className="min-w-0">
                         <div className="flex items-baseline gap-1">
@@ -444,8 +466,12 @@ export default function StorePage() {
                         </div>
                       </div>
 
+                      {/* Botón agregar — con stopPropagation */}
                       <button
-                        onClick={() => handleAdd(product)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAdd(product);
+                        }}
                         disabled={!canBuy}
                         className={`shrink-0 rounded-full px-3 sm:px-5 py-2 sm:py-2.5 text-[11px] sm:text-sm font-bold shadow-md transition active:scale-95 ${
                           !canBuy
@@ -564,6 +590,21 @@ export default function StorePage() {
           storeId={store.id}
           productName={reviewsModal.productName}
           productImage={reviewsModal.productImage}
+        />
+      )}
+
+      {/* 🆕 MODAL DE DETALLE DEL PRODUCTO */}
+      {selectedProduct && (
+        <ProductDetailModal
+          product={selectedProduct}
+          onClose={() => setSelectedProduct(null)}
+          onAddToCart={handleAdd}
+          onOpenReviews={handleOpenReviews}
+          onToggleFavorite={handleToggleFavorite}
+          isFavorite={favoriteProductIds.has(selectedProduct.id)}
+          favoriteBusy={favoriteLoadingId === selectedProduct.id}
+          themeColor={theme.primary_color}
+          themeSecondaryColor={theme.secondary_color}
         />
       )}
     </div>
