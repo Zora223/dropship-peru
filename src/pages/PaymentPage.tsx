@@ -12,6 +12,7 @@ import {
   getCartTypeLabel,
 } from "../lib/cart-detection";
 import PaymentQrDisplay from "../components/PaymentQrDisplay";
+import PickupLocationsMap from "../components/maps/PickupLocationsMap";
 import { fetchPublicStoreById } from "../lib/public-store";
 import {
   getStorePickupLocations,
@@ -419,8 +420,8 @@ export default function PaymentPage() {
           </Link>
 
           <h1 className="mt-3 text-2xl sm:text-4xl font-bold tracking-tight text-gray-900">
-  Datos de envío y pago
-</h1>
+            Datos de envío y pago
+          </h1>
 
           <p className="mt-2 text-gray-500">
             Completa tus datos para finalizar el pedido
@@ -464,8 +465,7 @@ export default function PaymentPage() {
           </div>
         )}
 
-        // REEMPLAZAR POR:
-<form onSubmit={handleSubmit} className="flex flex-col-reverse gap-6 lg:grid lg:grid-cols-3 lg:gap-8">
+        <form onSubmit={handleSubmit} className="flex flex-col-reverse gap-6 lg:grid lg:grid-cols-3 lg:gap-8">
           <div className="space-y-6 lg:col-span-2">
             {/* Selector de modo de entrega */}
             {hasPickupAvailable && (
@@ -753,55 +753,77 @@ export default function PaymentPage() {
                     Esta tienda aún no tiene puntos de recojo configurados.
                   </div>
                 ) : (
-                  <div className="mt-5 space-y-3">
-                    {pickupLocations.map((location) => {
-                      const active = selectedPickupId === location.id;
-                      return (
-                        <label
-                          key={location.id}
-                          className={`flex cursor-pointer items-start gap-3 rounded-2xl border-2 p-4 transition ${
-                            active
-                              ? "bg-rose-50/50"
-                              : "border-gray-100 hover:border-gray-300"
-                          }`}
-                          style={
-                            active
-                              ? { borderColor: theme.primary_color }
-                              : undefined
-                          }
-                        >
-                          <input
-                            type="radio"
-                            name="pickup"
-                            value={location.id}
-                            checked={active}
-                            onChange={() => setSelectedPickupId(location.id)}
-                            className="sr-only"
-                          />
-                          <div className="text-2xl">📍</div>
-                          <div className="flex-1">
-                            <div className="font-bold text-gray-900">
-                              {location.name}
-                            </div>
-                            <div className="text-xs text-gray-500 mt-0.5">
-                              {location.street}
-                              {location.district && `, ${location.district}`}
-                              {location.city && `, ${location.city}`}
-                            </div>
-                            {location.reference && (
-                              <div className="text-xs text-gray-400 mt-1">
-                                📌 {location.reference}
+                  <div className="mt-5 space-y-4">
+                    {/* 🗺️ MAPA con todos los puntos */}
+                    <PickupLocationsMap
+                      locations={pickupLocations}
+                      selectedId={selectedPickupId}
+                      onSelect={setSelectedPickupId}
+                      primaryColor={theme.primary_color}
+                    />
+
+                    {/* Lista de puntos */}
+                    <div className="space-y-3">
+                      {pickupLocations.map((location) => {
+                        const active = selectedPickupId === location.id;
+                        return (
+                          <label
+                            key={location.id}
+                            className={`flex cursor-pointer items-start gap-3 rounded-2xl border-2 p-4 transition ${
+                              active
+                                ? "bg-rose-50/50"
+                                : "border-gray-100 hover:border-gray-300"
+                            }`}
+                            style={
+                              active
+                                ? { borderColor: theme.primary_color }
+                                : undefined
+                            }
+                          >
+                            <input
+                              type="radio"
+                              name="pickup"
+                              value={location.id}
+                              checked={active}
+                              onChange={() => setSelectedPickupId(location.id)}
+                              className="sr-only"
+                            />
+                            <div className="text-2xl">📍</div>
+                            <div className="flex-1">
+                              <div className="font-bold text-gray-900">
+                                {location.name}
                               </div>
-                            )}
-                            {location.contact_phone && (
-                              <div className="text-xs text-gray-500 mt-1">
-                                📞 {location.contact_phone}
+                              <div className="text-xs text-gray-500 mt-0.5">
+                                {location.street}
+                                {location.district && `, ${location.district}`}
+                                {location.city && `, ${location.city}`}
                               </div>
-                            )}
-                          </div>
-                        </label>
-                      );
-                    })}
+                              {location.reference && (
+                                <div className="text-xs text-gray-400 mt-1">
+                                  📌 {location.reference}
+                                </div>
+                              )}
+                              {location.contact_phone && (
+                                <div className="text-xs text-gray-500 mt-1">
+                                  📞 {location.contact_phone}
+                                </div>
+                              )}
+                              {(location as any).latitude && (
+                                <a
+                                  href={`https://www.google.com/maps/dir/?api=1&destination=${(location as any).latitude},${(location as any).longitude}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800"
+                                >
+                                  🚗 Cómo llegar en Google Maps →
+                                </a>
+                              )}
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 
@@ -983,14 +1005,14 @@ export default function PaymentPage() {
           <div className="lg:col-span-1">
             <div className="sticky top-24 overflow-hidden rounded-3xl bg-white shadow-xl">
               <div className="bg-linear-to-br from-gray-900 to-gray-800 px-4 sm:px-6 py-4 sm:py-5 text-white">
-  <h2 className="text-base sm:text-lg font-bold">Tu pedido</h2>
+                <h2 className="text-base sm:text-lg font-bold">Tu pedido</h2>
                 <p className="text-xs text-gray-300">
                   {count} {count === 1 ? "producto" : "productos"}
                 </p>
               </div>
 
-            <div className="p-4 sm:p-6">
-  <div className="max-h-40 sm:max-h-48 space-y-3 overflow-y-auto">
+              <div className="p-4 sm:p-6">
+                <div className="max-h-40 sm:max-h-48 space-y-3 overflow-y-auto">
                   {items.map((item) => (
                     <div
                       key={item.productId}
@@ -1074,8 +1096,8 @@ export default function PaymentPage() {
                       </div>
                     )}
                     <div className="text-2xl sm:text-3xl font-extrabold tabular-nums text-gray-900">
-  S/ {total.toFixed(2)}
-</div>
+                      S/ {total.toFixed(2)}
+                    </div>
                     {discountAmount > 0 && (
                       <div className="mt-0.5 text-[10px] font-bold text-emerald-600">
                         ¡Ahorras {discountPct}% (S/ {discountAmount.toFixed(2)})! 🎉
