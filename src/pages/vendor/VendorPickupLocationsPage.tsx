@@ -1,261 +1,592 @@
-import { useState, useCallback, useRef } from 'react';
-import { GoogleMap, Marker, Autocomplete, useJsApiLoader } from '@react-google-maps/api';
+// src/pages/vendor/VendorPickupLocationsPage.tsx
+// Gestión de puntos de recojo del vendor (CON GOOGLE MAPS + AUTORRELLENO)
 
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+import { useEffect, useState } from "react";
+import { useToast } from "../../contexts/ToastContext";
+import LocationPickerMap, { type LocationData } from "../../components/maps/LocationPickerMap";
+import {
+  getMyPickupLocations,
+  createPickupLocation,
+  updatePickupLocation,
+  deletePickupLocation,
+  setDefaultPickupLocation,
+  guessPickupEmoji,
+  type PickupLocation,
+  type PickupLocationInput,
+} from "../../lib/pickup-locations";
 
-// Librerías necesarias (constante fuera para evitar re-renders)
-const libraries: ('places')[] = ['places'];
+// ============================================
+// 📦 FORMULARIO INICIAL VACÍO
+// ============================================
 
-const mapContainerStyle = {
-  width: '100%',
-  height: '400px',
-  borderRadius: '12px',
+const emptyForm: PickupLocationInput = {
+  name: "",
+  street: "",
+  district: "",
+  city: "Iquitos",
+  reference: "",
+  contact_name: "",
+  contact_phone: "",
+  notes: "",
+  is_default: false,
 };
 
-const mapOptions = {
-  disableDefaultUI: false,
-  zoomControl: true,
-  streetViewControl: false,
-  mapTypeControl: false,
-  fullscreenControl: true,
-};
-
-export interface LocationData {
-  latitude: number;
-  longitude: number;
-  formatted_address: string;
-  google_place_id?: string;
+// Extendemos el form local con campos de mapa (sin tocar el tipo original)
+interface FormWithMap extends PickupLocationInput {
+  latitude?: number | null;
+  longitude?: number | null;
+  google_place_id?: string | null;
+  formatted_address?: string | null;
 }
 
-interface LocationPickerMapProps {
-  initialLocation?: LocationData | null;
-  onLocationSelect: (location: LocationData) => void;
-  defaultCity?: 'iquitos' | 'lima';
-}
+// ============================================
+// 🎯 COMPONENTE PRINCIPAL
+// ============================================
 
-const CITY_CENTERS = {
-  iquitos: { lat: -3.7437, lng: -73.2516 },
-  lima: { lat: -12.0464, lng: -77.0428 },
-};
+export default function VendorPickupLocationsPage() {
+  const toast = useToast();
 
-export default function LocationPickerMap({
-  initialLocation,
-  onLocationSelect,
-  defaultCity = 'iquitos',
-}: LocationPickerMapProps) {
-  const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-    libraries,
-    language: 'es',
-    region: 'PE',
-  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [locations, setLocations] = useState<PickupLocation[]>([]);
+  const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<FormWithMap>(emptyForm);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [showMap, setShowMap] = useState(false);
 
-  const [markerPosition, setMarkerPosition] = useState(
-    initialLocation
-      ? { lat: initialLocation.latitude, lng: initialLocation.longitude }
-      : CITY_CENTERS[defaultCity]
-  );
-
-  const [selectedAddress, setSelectedAddress] = useState(
-    initialLocation?.formatted_address || ''
-  );
-
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
-
-  const onMapLoad = useCallback((map: google.maps.Map) => {
-    mapRef.current = map;
+  useEffect(() => {
+    loadLocations();
   }, []);
 
-  const onAutocompleteLoad = useCallback(
-    (autocomplete: google.maps.places.Autocomplete) => {
-      autocompleteRef.current = autocomplete;
-    },
-    []
-  );
-
-  const onPlaceChanged = useCallback(() => {
-    if (!autocompleteRef.current) return;
-
-    const place = autocompleteRef.current.getPlace();
-    if (!place.geometry?.location) return;
-
-    const lat = place.geometry.location.lat();
-    const lng = place.geometry.location.lng();
-    const address = place.formatted_address || '';
-    const placeId = place.place_id || '';
-
-    setMarkerPosition({ lat, lng });
-    setSelectedAddress(address);
-    mapRef.current?.panTo({ lat, lng });
-    mapRef.current?.setZoom(17);
-
-    onLocationSelect({
-      latitude: lat,
-      longitude: lng,
-      formatted_address: address,
-      google_place_id: placeId,
-    });
-  }, [onLocationSelect]);
-
-  const onMarkerDragEnd = useCallback(
-    async (e: google.maps.MapMouseEvent) => {
-      if (!e.latLng) return;
-      const lat = e.latLng.lat();
-      const lng = e.latLng.lng();
-      setMarkerPosition({ lat, lng });
-
-      const geocoder = new google.maps.Geocoder();
-      try {
-        const response = await geocoder.geocode({ location: { lat, lng } });
-        if (response.results[0]) {
-          const address = response.results[0].formatted_address;
-          const placeId = response.results[0].place_id;
-          setSelectedAddress(address);
-          onLocationSelect({
-            latitude: lat,
-            longitude: lng,
-            formatted_address: address,
-            google_place_id: placeId,
-          });
-        }
-      } catch (err) {
-        console.error('Error en geocoding reverso:', err);
-        onLocationSelect({
-          latitude: lat,
-          longitude: lng,
-          formatted_address: `${lat}, ${lng}`,
-        });
-      }
-    },
-    [onLocationSelect]
-  );
-
-  const onMapClick = useCallback(
-    async (e: google.maps.MapMouseEvent) => {
-      await onMarkerDragEnd(e);
-    },
-    [onMarkerDragEnd]
-  );
-
-  const useMyLocation = useCallback(() => {
-    if (!navigator.geolocation) {
-      alert('Tu navegador no soporta geolocalización');
-      return;
+  async function loadLocations() {
+    try {
+      setLoading(true);
+      const data = await getMyPickupLocations();
+      setLocations(data);
+    } catch (err: any) {
+      toast.error("Error", err.message);
+    } finally {
+      setLoading(false);
     }
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        setMarkerPosition({ lat, lng });
-        mapRef.current?.panTo({ lat, lng });
-        mapRef.current?.setZoom(17);
-
-        const geocoder = new google.maps.Geocoder();
-        const response = await geocoder.geocode({ location: { lat, lng } });
-        if (response.results[0]) {
-          const address = response.results[0].formatted_address;
-          const placeId = response.results[0].place_id;
-          setSelectedAddress(address);
-          onLocationSelect({
-            latitude: lat,
-            longitude: lng,
-            formatted_address: address,
-            google_place_id: placeId,
-          });
-        }
-      },
-      (err) => {
-        alert('No pudimos obtener tu ubicación: ' + err.message);
-      }
-    );
-  }, [onLocationSelect]);
-
-  if (loadError) {
-    return (
-      <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-        <p className="text-red-700 font-medium">Error al cargar Google Maps</p>
-        <p className="text-red-600 text-sm mt-1">
-          Verifica tu API Key y las restricciones.
-        </p>
-      </div>
-    );
   }
 
-  if (!isLoaded) {
+  // ============================================
+  // 📝 ABRIR MODAL
+  // ============================================
+
+  function openNew() {
+    setEditingId(null);
+    setForm(emptyForm);
+    setShowMap(false);
+    setShowModal(true);
+  }
+
+  function openEdit(loc: PickupLocation) {
+    setEditingId(loc.id);
+    setForm({
+      name:          loc.name,
+      street:        loc.street,
+      district:      loc.district,
+      city:          loc.city,
+      reference:     loc.reference ?? "",
+      contact_name:  loc.contact_name ?? "",
+      contact_phone: loc.contact_phone ?? "",
+      notes:         loc.notes ?? "",
+      is_default:    loc.is_default,
+      // Campos del mapa (si existen en el loc)
+      latitude:          (loc as any).latitude ?? null,
+      longitude:         (loc as any).longitude ?? null,
+      google_place_id:   (loc as any).google_place_id ?? null,
+      formatted_address: (loc as any).formatted_address ?? null,
+    });
+    setMenuOpenId(null);
+    setShowMap(!!((loc as any).latitude && (loc as any).longitude));
+    setShowModal(true);
+  }
+
+  // ============================================
+  // 🗺️ CALLBACK MAPA — Autorrellena campos vacíos
+  // ============================================
+
+  function handleLocationSelect(location: LocationData) {
+    setForm((prev) => ({
+      ...prev,
+      latitude:          location.latitude,
+      longitude:         location.longitude,
+      google_place_id:   location.google_place_id ?? null,
+      formatted_address: location.formatted_address,
+      // ✨ Autorrellena todos los campos vacíos (respeta lo que ya escribió)
+      street:   prev.street.trim()   || location.street   || location.formatted_address,
+      district: prev.district.trim() || location.district || "",
+      city:     prev.city.trim()     || location.city     || prev.city,
+    }));
+  }
+
+  // ============================================
+  // 💾 GUARDAR
+  // ============================================
+
+  async function handleSave() {
+    if (!form.name.trim()) {
+      toast.warning("Falta nombre", "Ponle un nombre corto a este punto");
+      return;
+    }
+    if (!form.street.trim() || !form.district.trim()) {
+      toast.warning("Faltan datos", "La dirección y el distrito son obligatorios");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      if (editingId) {
+        await updatePickupLocation(editingId, form as PickupLocationInput);
+        toast.success("Actualizado", "Punto de recojo guardado");
+      } else {
+        await createPickupLocation(form as PickupLocationInput);
+        toast.success("Creado", "Nuevo punto de recojo listo para usar");
+      }
+      setShowModal(false);
+      await loadLocations();
+    } catch (err: any) {
+      toast.error("Error", err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ============================================
+  // ⭐ MARCAR DEFAULT
+  // ============================================
+
+  async function handleSetDefault(id: string) {
+    try {
+      await setDefaultPickupLocation(id);
+      toast.success("Default actualizado", "Este será tu punto por defecto");
+      setMenuOpenId(null);
+      await loadLocations();
+    } catch (err: any) {
+      toast.error("Error", err.message);
+    }
+  }
+
+  // ============================================
+  // 🗑️ ELIMINAR
+  // ============================================
+
+  async function handleDelete(id: string, name: string) {
+    if (!confirm(`¿Eliminar "${name}"?\n\nSi ya usaste este punto en pedidos anteriores, los pedidos mantienen la dirección original.`)) {
+      return;
+    }
+    try {
+      await deletePickupLocation(id);
+      toast.success("Eliminado", "Punto de recojo eliminado");
+      setMenuOpenId(null);
+      await loadLocations();
+    } catch (err: any) {
+      toast.error("Error", err.message);
+    }
+  }
+
+  // ============================================
+  // 🎨 RENDER
+  // ============================================
+
+  if (loading) {
     return (
-      <div className="flex items-center justify-center h-96 bg-gray-100 rounded-lg">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-3"></div>
-          <p className="text-gray-600">Cargando mapa...</p>
-        </div>
+      <div className="flex min-h-100 items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-emerald-500" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
-      {/* Barra de búsqueda con autocompletado */}
-      <div className="flex gap-2 flex-col sm:flex-row">
-        <Autocomplete
-          onLoad={onAutocompleteLoad}
-          onPlaceChanged={onPlaceChanged}
-          options={{
-            componentRestrictions: { country: 'pe' },
-            fields: ['formatted_address', 'geometry', 'place_id', 'name'],
-          }}
-          className="flex-1"
-        >
-          <input
-            type="text"
-            placeholder="🔍 Busca tu dirección (calle, referencia, negocio)..."
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-          />
-        </Autocomplete>
-
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
+            📍 Puntos de recojo
+          </h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Gestiona los lugares donde tu delivery recoge los pedidos
+          </p>
+        </div>
         <button
-          type="button"
-          onClick={useMyLocation}
-          className="px-4 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-2 font-medium whitespace-nowrap"
+          onClick={openNew}
+          className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
         >
-          📍 Mi ubicación
+          + Nuevo punto
         </button>
       </div>
 
-      {/* Info de la dirección seleccionada */}
-      {selectedAddress && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-          <p className="text-sm text-emerald-800">
-            <span className="font-semibold">📌 Dirección:</span> {selectedAddress}
+      {/* Empty state */}
+      {locations.length === 0 && (
+        <div className="rounded-2xl border-2 border-dashed border-gray-200 bg-white p-8 text-center">
+          <div className="text-5xl">📍</div>
+          <h3 className="mt-3 text-lg font-bold text-gray-900">
+            Aún no tienes puntos de recojo
+          </h3>
+          <p className="mt-1 text-sm text-gray-600">
+            Crea tus lugares frecuentes (tu casa, proveedores, almacenes) para
+            asignarlos rápidamente al delivery.
           </p>
-          <p className="text-xs text-emerald-600 mt-1">
-            Coords: {markerPosition.lat.toFixed(6)}, {markerPosition.lng.toFixed(6)}
-          </p>
+          <button
+            onClick={openNew}
+            className="mt-4 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-emerald-700"
+          >
+            + Crear mi primer punto
+          </button>
         </div>
       )}
 
-      {/* Mapa */}
-      <GoogleMap
-        mapContainerStyle={mapContainerStyle}
-        center={markerPosition}
-        zoom={initialLocation ? 17 : 14}
-        options={mapOptions}
-        onLoad={onMapLoad}
-        onClick={onMapClick}
-      >
-        <Marker
-          position={markerPosition}
-          draggable={true}
-          onDragEnd={onMarkerDragEnd}
-          animation={google.maps.Animation.DROP}
-        />
-      </GoogleMap>
+      {/* Lista de puntos */}
+      {locations.length > 0 && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {locations.map((loc) => (
+            <div
+              key={loc.id}
+              className="relative rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition hover:shadow-md"
+            >
+              {/* Badge default */}
+              {loc.is_default && (
+                <div className="absolute -top-2 left-4 rounded-full bg-emerald-500 px-3 py-0.5 text-xs font-bold text-white shadow-sm">
+                  ⭐ Default
+                </div>
+              )}
 
-      {/* Instrucciones */}
-      <div className="text-xs text-gray-500 space-y-1">
-        <p>💡 <strong>Busca</strong> tu dirección, <strong>arrastra</strong> el marcador o <strong>haz click</strong> en el mapa</p>
-        <p>📱 <strong>Móvil:</strong> Toca el mapa para mover el pin</p>
-      </div>
+              {/* Badge mapa */}
+              {(loc as any).latitude && (
+                <div className="absolute -top-2 right-14 rounded-full bg-blue-500 px-2 py-0.5 text-xs font-bold text-white shadow-sm">
+                  🗺️ GPS
+                </div>
+              )}
+
+              {/* Menú ⋮ */}
+              <div className="absolute right-3 top-3">
+                <button
+                  onClick={() =>
+                    setMenuOpenId(menuOpenId === loc.id ? null : loc.id)
+                  }
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100"
+                >
+                  ⋮
+                </button>
+                {menuOpenId === loc.id && (
+                  <div className="absolute right-0 top-10 z-10 w-48 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
+                    <button
+                      onClick={() => openEdit(loc)}
+                      className="block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50"
+                    >
+                      ✏️ Editar
+                    </button>
+                    {(loc as any).latitude && (
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${(loc as any).latitude},${(loc as any).longitude}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50"
+                      >
+                        🗺️ Ver en Google Maps
+                      </a>
+                    )}
+                    {!loc.is_default && (
+                      <button
+                        onClick={() => handleSetDefault(loc.id)}
+                        className="block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50"
+                      >
+                        ⭐ Marcar como default
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDelete(loc.id, loc.name)}
+                      className="block w-full border-t border-gray-100 px-4 py-2.5 text-left text-sm text-rose-600 hover:bg-rose-50"
+                    >
+                      🗑️ Eliminar
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Contenido */}
+              <div className="flex items-start gap-3 pr-8">
+                <div className="text-3xl">{guessPickupEmoji(loc.name)}</div>
+                <div className="min-w-0 grow">
+                  <h3 className="truncate text-lg font-bold text-gray-900">
+                    {loc.name}
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-600">
+                    {loc.street}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {loc.district}, {loc.city}
+                  </p>
+
+                  {loc.reference && (
+                    <p className="mt-2 text-xs text-gray-500">
+                      💡 {loc.reference}
+                    </p>
+                  )}
+
+                  {(loc.contact_name || loc.contact_phone) && (
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                      {loc.contact_name && (
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-gray-700">
+                          👤 {loc.contact_name}
+                        </span>
+                      )}
+                      {loc.contact_phone && (
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-gray-700">
+                          📞 {loc.contact_phone}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {loc.notes && (
+                    <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      📝 {loc.notes}
+                    </p>
+                  )}
+
+                  <p className="mt-3 text-xs text-gray-400">
+                    📊 Usado en {loc.usage_count} pedido
+                    {loc.usage_count === 1 ? "" : "s"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ============================================ */}
+      {/* MODAL NUEVO / EDITAR */}
+      {/* ============================================ */}
+      {showModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => !saving && setShowModal(false)}
+        >
+          <div
+            className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-gray-100 p-5">
+              <h3 className="text-xl font-bold text-gray-900">
+                {editingId ? "✏️ Editar punto" : "📍 Nuevo punto de recojo"}
+              </h3>
+              <button
+                onClick={() => setShowModal(false)}
+                disabled={saving}
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="max-h-[75vh] overflow-y-auto p-5">
+              <div className="space-y-4">
+                {/* Nombre */}
+                <Field label="Nombre corto *">
+                  <input
+                    type="text"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    placeholder="Ej: Mi casa, Proveedor Gamarra..."
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+                  />
+                </Field>
+
+                {/* ========================================== */}
+                {/* 🗺️ SELECTOR DE MAPA */}
+                {/* ========================================== */}
+                <div className="rounded-xl border-2 border-emerald-100 bg-emerald-50 p-4">
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div>
+                      <h4 className="text-sm font-bold text-emerald-900">
+                        🗺️ Ubicación exacta (recomendado)
+                      </h4>
+                      <p className="text-xs text-emerald-700 mt-0.5">
+                        Marca tu punto en el mapa y los campos de abajo se rellenarán solos ✨
+                      </p>
+                    </div>
+                    {!showMap && (
+                      <button
+                        type="button"
+                        onClick={() => setShowMap(true)}
+                        className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700"
+                      >
+                        Abrir mapa
+                      </button>
+                    )}
+                  </div>
+
+                  {showMap && (
+                    <LocationPickerMap
+                      initialLocation={
+                        form.latitude && form.longitude
+                          ? {
+                              latitude: form.latitude,
+                              longitude: form.longitude,
+                              formatted_address: form.formatted_address ?? "",
+                              google_place_id: form.google_place_id ?? undefined,
+                            }
+                          : null
+                      }
+                      onLocationSelect={handleLocationSelect}
+                      defaultCity={form.city?.toLowerCase().includes("lima") ? "lima" : "iquitos"}
+                    />
+                  )}
+
+                  {form.latitude && form.longitude && (
+                    <div className="mt-3 flex items-center gap-2 text-xs text-emerald-800">
+                      <span className="rounded-full bg-emerald-200 px-2 py-0.5 font-bold">
+                        ✅ GPS guardado
+                      </span>
+                      <span className="text-emerald-600">
+                        {form.latitude.toFixed(5)}, {form.longitude.toFixed(5)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Dirección */}
+                <Field label="📍 Dirección *">
+                  <input
+                    type="text"
+                    value={form.street}
+                    onChange={(e) => setForm({ ...form, street: e.target.value })}
+                    placeholder="Calle y número"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+                  />
+                </Field>
+
+                {/* Distrito + Ciudad */}
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Distrito *">
+                    <input
+                      type="text"
+                      value={form.district}
+                      onChange={(e) => setForm({ ...form, district: e.target.value })}
+                      placeholder="Ej: San Miguel"
+                      className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+                    />
+                  </Field>
+                  <Field label="Ciudad">
+                    <select
+                      value={form.city}
+                      onChange={(e) => setForm({ ...form, city: e.target.value })}
+                      className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+                    >
+                      <option value="Iquitos">Iquitos</option>
+                      <option value="Lima">Lima</option>
+                    </select>
+                  </Field>
+                </div>
+
+                {/* Referencia */}
+                <Field label="💡 Referencia (opcional)">
+                  <input
+                    type="text"
+                    value={form.reference ?? ""}
+                    onChange={(e) => setForm({ ...form, reference: e.target.value })}
+                    placeholder="Ej: Frente al banco BCP"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+                  />
+                </Field>
+
+                {/* Contacto */}
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="👤 Contacto">
+                    <input
+                      type="text"
+                      value={form.contact_name ?? ""}
+                      onChange={(e) => setForm({ ...form, contact_name: e.target.value })}
+                      placeholder="Nombre"
+                      className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+                    />
+                  </Field>
+                  <Field label="📞 Teléfono">
+                    <input
+                      type="tel"
+                      value={form.contact_phone ?? ""}
+                      onChange={(e) => setForm({ ...form, contact_phone: e.target.value })}
+                      placeholder="999888777"
+                      className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+                    />
+                  </Field>
+                </div>
+
+                {/* Notas */}
+                <Field label="📝 Notas para el delivery (opcional)">
+                  <textarea
+                    value={form.notes ?? ""}
+                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                    placeholder="Ej: Horario 10am-6pm, preguntar por..."
+                    rows={3}
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+                  />
+                </Field>
+
+                {/* Default */}
+                <label className="flex items-center gap-2 rounded-xl bg-gray-50 p-3">
+                  <input
+                    type="checkbox"
+                    checked={form.is_default}
+                    onChange={(e) => setForm({ ...form, is_default: e.target.checked })}
+                    className="h-4 w-4 accent-emerald-600"
+                  />
+                  <span className="text-sm font-medium text-gray-700">
+                    ⭐ Marcar como mi punto por defecto
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3 border-t border-gray-100 p-5">
+              <button
+                onClick={() => setShowModal(false)}
+                disabled={saving}
+                className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {saving ? "Guardando..." : editingId ? "💾 Guardar cambios" : "✅ Crear punto"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// 🧩 SUB-COMPONENTE — Campo con label
+// ============================================
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
+        {label}
+      </label>
+      {children}
     </div>
   );
 }

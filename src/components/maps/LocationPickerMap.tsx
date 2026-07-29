@@ -3,9 +3,7 @@ import { GoogleMap, Marker, Autocomplete, useJsApiLoader } from '@react-google-m
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
-// Librerías necesarias (constante fuera para evitar re-renders)
 const libraries: ('places')[] = ['places'];
-// Centro por defecto: IQUITOS (Plaza de Armas)
 
 const mapContainerStyle = {
   width: '100%',
@@ -21,11 +19,16 @@ const mapOptions = {
   fullscreenControl: true,
 };
 
+// 🆕 Ahora incluye campos parseados desde Google
 export interface LocationData {
   latitude: number;
   longitude: number;
   formatted_address: string;
   google_place_id?: string;
+  // Campos extraídos automáticamente para autorrellenar
+  street?: string;      // "Los Pinos 123"
+  district?: string;    // "Iquitos"
+  city?: string;        // "Maynas" o "Iquitos"
 }
 
 interface LocationPickerMapProps {
@@ -38,6 +41,50 @@ const CITY_CENTERS = {
   iquitos: { lat: -3.7437, lng: -73.2516 },
   lima: { lat: -12.0464, lng: -77.0428 },
 };
+
+/**
+ * 🆕 Parsea address_components de Google para extraer street, district, city
+ */
+function parseAddressComponents(
+  components: google.maps.GeocoderAddressComponent[] | undefined
+): { street: string; district: string; city: string } {
+  if (!components) return { street: '', district: '', city: '' };
+
+  let streetNumber = '';
+  let route = '';
+  let district = '';
+  let city = '';
+
+  for (const c of components) {
+    const types = c.types;
+
+    if (types.includes('street_number')) streetNumber = c.long_name;
+    if (types.includes('route')) route = c.long_name;
+
+    // Distrito puede venir en varios types
+    if (
+      types.includes('sublocality_level_1') ||
+      types.includes('sublocality') ||
+      types.includes('neighborhood') ||
+      types.includes('locality')
+    ) {
+      if (!district) district = c.long_name;
+    }
+
+    // Ciudad principal (locality o admin_area_2)
+    if (types.includes('administrative_area_level_2')) {
+      if (!city) city = c.long_name;
+    }
+
+    // Si no hay admin_area_2, usar locality como ciudad
+    if (!city && types.includes('locality')) {
+      city = c.long_name;
+    }
+  }
+
+  const street = [route, streetNumber].filter(Boolean).join(' ').trim();
+  return { street, district, city };
+}
 
 export default function LocationPickerMap({
   initialLocation,
@@ -75,7 +122,6 @@ export default function LocationPickerMap({
     []
   );
 
-  // Cuando el usuario selecciona un lugar del autocomplete
   const onPlaceChanged = useCallback(() => {
     if (!autocompleteRef.current) return;
 
@@ -87,6 +133,9 @@ export default function LocationPickerMap({
     const address = place.formatted_address || '';
     const placeId = place.place_id || '';
 
+    // 🆕 Parsea componentes
+    const parsed = parseAddressComponents(place.address_components);
+
     setMarkerPosition({ lat, lng });
     setSelectedAddress(address);
     mapRef.current?.panTo({ lat, lng });
@@ -97,10 +146,12 @@ export default function LocationPickerMap({
       longitude: lng,
       formatted_address: address,
       google_place_id: placeId,
+      street: parsed.street || address.split(',')[0]?.trim() || '',
+      district: parsed.district,
+      city: parsed.city || (defaultCity === 'iquitos' ? 'Iquitos' : 'Lima'),
     });
-  }, [onLocationSelect]);
+  }, [onLocationSelect, defaultCity]);
 
-  // Cuando el usuario arrastra el marcador
   const onMarkerDragEnd = useCallback(
     async (e: google.maps.MapMouseEvent) => {
       if (!e.latLng) return;
@@ -108,19 +159,24 @@ export default function LocationPickerMap({
       const lng = e.latLng.lng();
       setMarkerPosition({ lat, lng });
 
-      // Geocoding reverso para obtener dirección
       const geocoder = new google.maps.Geocoder();
       try {
         const response = await geocoder.geocode({ location: { lat, lng } });
         if (response.results[0]) {
-          const address = response.results[0].formatted_address;
-          const placeId = response.results[0].place_id;
+          const result = response.results[0];
+          const address = result.formatted_address;
+          const placeId = result.place_id;
+          const parsed = parseAddressComponents(result.address_components);
+
           setSelectedAddress(address);
           onLocationSelect({
             latitude: lat,
             longitude: lng,
             formatted_address: address,
             google_place_id: placeId,
+            street: parsed.street || address.split(',')[0]?.trim() || '',
+            district: parsed.district,
+            city: parsed.city || (defaultCity === 'iquitos' ? 'Iquitos' : 'Lima'),
           });
         }
       } catch (err) {
@@ -132,10 +188,9 @@ export default function LocationPickerMap({
         });
       }
     },
-    [onLocationSelect]
+    [onLocationSelect, defaultCity]
   );
 
-  // Click en el mapa
   const onMapClick = useCallback(
     async (e: google.maps.MapMouseEvent) => {
       await onMarkerDragEnd(e);
@@ -143,7 +198,6 @@ export default function LocationPickerMap({
     [onMarkerDragEnd]
   );
 
-  // Botón: usar mi ubicación actual
   const useMyLocation = useCallback(() => {
     if (!navigator.geolocation) {
       alert('Tu navegador no soporta geolocalización');
@@ -157,26 +211,35 @@ export default function LocationPickerMap({
         mapRef.current?.panTo({ lat, lng });
         mapRef.current?.setZoom(17);
 
-        // Geocoding reverso
         const geocoder = new google.maps.Geocoder();
-        const response = await geocoder.geocode({ location: { lat, lng } });
-        if (response.results[0]) {
-          const address = response.results[0].formatted_address;
-          const placeId = response.results[0].place_id;
-          setSelectedAddress(address);
-          onLocationSelect({
-            latitude: lat,
-            longitude: lng,
-            formatted_address: address,
-            google_place_id: placeId,
-          });
+        try {
+          const response = await geocoder.geocode({ location: { lat, lng } });
+          if (response.results[0]) {
+            const result = response.results[0];
+            const address = result.formatted_address;
+            const placeId = result.place_id;
+            const parsed = parseAddressComponents(result.address_components);
+
+            setSelectedAddress(address);
+            onLocationSelect({
+              latitude: lat,
+              longitude: lng,
+              formatted_address: address,
+              google_place_id: placeId,
+              street: parsed.street || address.split(',')[0]?.trim() || '',
+              district: parsed.district,
+              city: parsed.city || (defaultCity === 'iquitos' ? 'Iquitos' : 'Lima'),
+            });
+          }
+        } catch (err) {
+          console.error('Error geocoding reverso mi ubicación:', err);
         }
       },
       (err) => {
         alert('No pudimos obtener tu ubicación: ' + err.message);
       }
     );
-  }, [onLocationSelect]);
+  }, [onLocationSelect, defaultCity]);
 
   if (loadError) {
     return (
@@ -202,14 +265,13 @@ export default function LocationPickerMap({
 
   return (
     <div className="space-y-3">
-      {/* Barra de búsqueda con autocompletado */}
       <div className="flex gap-2 flex-col sm:flex-row">
         <Autocomplete
           onLoad={onAutocompleteLoad}
           onPlaceChanged={onPlaceChanged}
           options={{
             componentRestrictions: { country: 'pe' },
-            fields: ['formatted_address', 'geometry', 'place_id', 'name'],
+            fields: ['formatted_address', 'geometry', 'place_id', 'name', 'address_components'],
           }}
           className="flex-1"
         >
@@ -229,7 +291,6 @@ export default function LocationPickerMap({
         </button>
       </div>
 
-      {/* Info de la dirección seleccionada */}
       {selectedAddress && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
           <p className="text-sm text-emerald-800">
@@ -238,10 +299,12 @@ export default function LocationPickerMap({
           <p className="text-xs text-emerald-600 mt-1">
             Coords: {markerPosition.lat.toFixed(6)}, {markerPosition.lng.toFixed(6)}
           </p>
+          <p className="text-xs text-emerald-700 mt-1 font-medium">
+            ✨ Los campos del formulario se autocompletaron
+          </p>
         </div>
       )}
 
-      {/* Mapa */}
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
         center={markerPosition}
@@ -258,7 +321,6 @@ export default function LocationPickerMap({
         />
       </GoogleMap>
 
-      {/* Instrucciones */}
       <div className="text-xs text-gray-500 space-y-1">
         <p>💡 <strong>Busca</strong> tu dirección, <strong>arrastra</strong> el marcador o <strong>haz click</strong> en el mapa</p>
         <p>📱 <strong>Móvil:</strong> Toca el mapa para mover el pin</p>
