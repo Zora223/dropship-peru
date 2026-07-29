@@ -21,20 +21,17 @@ export interface PickupLocation {
   usage_count: number;
   created_at: string;
   updated_at: string;
-  // 🆕 v16 FASE 3
   accepts_pickup?: boolean;
   opening_hours?: Record<string, string[]> | null;
-  // 🆕 v20.7 - Google Maps
   latitude?: number | null;
   longitude?: number | null;
   google_place_id?: string | null;
   formatted_address?: string | null;
 }
 
-// Snapshot que se guarda en orders.pickup_address (JSONB)
 export interface PickupAddressSnapshot {
-  location_id?: string | null; // referencia opcional al punto guardado
-  name?: string | null;        // "Proveedor Gamarra"
+  location_id?: string | null;
+  name?: string | null;
   street: string;
   district: string;
   city: string;
@@ -54,13 +51,19 @@ export type PickupLocationInput = Omit<
 // ============================================
 
 /**
- * Obtiene todos los puntos de recojo del vendor autenticado.
- * Ordenados: default primero, luego por más usados.
+ * 🆕 v20.8 FIX - Obtiene los puntos del vendor autenticado.
+ * Ahora filtra EXPLÍCITAMENTE por vendor_id (auth.uid()).
  */
 export async function getMyPickupLocations(): Promise<PickupLocation[]> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
   const { data, error } = await supabase
     .from("vendor_pickup_locations")
     .select("*")
+    .eq("vendor_id", user.id) // 🆕 FIX v20.8 - Filtro explícito
     .order("is_default", { ascending: false })
     .order("usage_count", { ascending: false })
     .order("created_at", { ascending: false });
@@ -69,13 +72,16 @@ export async function getMyPickupLocations(): Promise<PickupLocation[]> {
   return (data ?? []) as PickupLocation[];
 }
 
-/**
- * Obtiene el punto default del vendor (o null si no tiene).
- */
 export async function getDefaultPickupLocation(): Promise<PickupLocation | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
   const { data, error } = await supabase
     .from("vendor_pickup_locations")
     .select("*")
+    .eq("vendor_id", user.id) // 🆕 FIX v20.8
     .eq("is_default", true)
     .maybeSingle();
 
@@ -83,9 +89,6 @@ export async function getDefaultPickupLocation(): Promise<PickupLocation | null>
   return (data as PickupLocation | null) ?? null;
 }
 
-/**
- * Obtiene un punto por ID.
- */
 export async function getPickupLocationById(
   id: string
 ): Promise<PickupLocation | null> {
@@ -103,9 +106,6 @@ export async function getPickupLocationById(
 // ✏️ CREAR / EDITAR / ELIMINAR
 // ============================================
 
-/**
- * Crea un nuevo punto de recojo.
- */
 export async function createPickupLocation(
   input: PickupLocationInput
 ): Promise<PickupLocation> {
@@ -127,9 +127,6 @@ export async function createPickupLocation(
   return data as PickupLocation;
 }
 
-/**
- * Actualiza un punto existente.
- */
 export async function updatePickupLocation(
   id: string,
   input: Partial<PickupLocationInput>
@@ -145,9 +142,6 @@ export async function updatePickupLocation(
   return data as PickupLocation;
 }
 
-/**
- * Elimina un punto.
- */
 export async function deletePickupLocation(id: string): Promise<void> {
   const { error } = await supabase
     .from("vendor_pickup_locations")
@@ -157,9 +151,6 @@ export async function deletePickupLocation(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-/**
- * Marca un punto como default (desmarca los demás automáticamente).
- */
 export async function setDefaultPickupLocation(id: string): Promise<void> {
   const { error } = await supabase.rpc("set_default_pickup_location", {
     p_location_id: id,
@@ -167,9 +158,6 @@ export async function setDefaultPickupLocation(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-/**
- * Incrementa el contador de uso (llamar al asignar delivery).
- */
 export async function incrementPickupUsage(id: string): Promise<void> {
   const { error } = await supabase.rpc("increment_pickup_usage", {
     p_location_id: id,
@@ -181,24 +169,19 @@ export async function incrementPickupUsage(id: string): Promise<void> {
 // 🔄 CONVERTIR A SNAPSHOT
 // ============================================
 
-/**
- * Convierte un PickupLocation guardado en snapshot para orders.pickup_address.
- * El snapshot se guarda en el pedido para que no cambie si el vendor edita
- * el punto guardado después.
- */
 export function locationToSnapshot(
   location: PickupLocation
 ): PickupAddressSnapshot {
   return {
-    location_id:    location.id,
-    name:           location.name,
-    street:         location.street,
-    district:       location.district,
-    city:           location.city,
-    reference:      location.reference,
-    contact_name:   location.contact_name,
-    contact_phone:  location.contact_phone,
-    notes:          location.notes,
+    location_id: location.id,
+    name: location.name,
+    street: location.street,
+    district: location.district,
+    city: location.city,
+    reference: location.reference,
+    contact_name: location.contact_name,
+    contact_phone: location.contact_phone,
+    notes: location.notes,
   };
 }
 
@@ -206,23 +189,17 @@ export function locationToSnapshot(
 // 🏷️ HELPERS UI
 // ============================================
 
-/**
- * Formatea una dirección de pickup en texto legible.
- */
 export function formatPickupAddress(
   pickup: PickupAddressSnapshot | null | undefined
 ): string {
   if (!pickup) return "Sin punto de recojo";
   const parts: string[] = [];
-  if (pickup.street)   parts.push(pickup.street);
+  if (pickup.street) parts.push(pickup.street);
   if (pickup.district) parts.push(pickup.district);
-  if (pickup.city)     parts.push(pickup.city);
+  if (pickup.city) parts.push(pickup.city);
   return parts.length > 0 ? parts.join(", ") : "Sin dirección";
 }
 
-/**
- * Genera link de Google Maps para navegar al punto.
- */
 export function getPickupMapUrl(
   pickup: PickupAddressSnapshot | null | undefined
 ): string | null {
@@ -231,14 +208,16 @@ export function getPickupMapUrl(
   return `https://www.google.com/maps/search/?api=1&query=${query}`;
 }
 
-/**
- * Emoji sugerido según el nombre del punto (heurística simple).
- */
 export function guessPickupEmoji(name: string): string {
   const lower = name.toLowerCase();
   if (lower.includes("casa") || lower.includes("hogar")) return "🏠";
   if (lower.includes("proveedor") || lower.includes("mayorista")) return "🏬";
-  if (lower.includes("almacén") || lower.includes("almacen") || lower.includes("depósito")) return "📦";
+  if (
+    lower.includes("almacén") ||
+    lower.includes("almacen") ||
+    lower.includes("depósito")
+  )
+    return "📦";
   if (lower.includes("tienda") || lower.includes("local")) return "🏪";
   if (lower.includes("mercado") || lower.includes("gamarra")) return "🏙️";
   if (lower.includes("oficina")) return "🏢";
@@ -249,14 +228,9 @@ export function guessPickupEmoji(name: string): string {
 // 🆕 v16 FASE 3 - Pickup para clientes
 // ============================================
 
-/**
- * 🆕 Obtiene puntos de recojo activos de una tienda (para el checkout del cliente).
- * FIX: stores.owner_id (no vendor_id)
- */
 export async function getStorePickupLocations(
   storeId: string
 ): Promise<PickupLocation[]> {
-  // 1. Obtener el owner_id de la tienda
   const { data: store, error: storeErr } = await supabase
     .from("stores")
     .select("owner_id")
@@ -269,7 +243,6 @@ export async function getStorePickupLocations(
   }
   if (!store) return [];
 
-  // 2. Obtener puntos de recojo activos del vendor (owner)
   const { data, error } = await supabase
     .from("vendor_pickup_locations")
     .select("*")
@@ -289,15 +262,11 @@ export async function getStorePickupLocations(
 // ============================================
 
 export interface TimeSlot {
-  date: string;       // "2026-07-22"
-  day_name: string;   // "Lunes"
-  slots: string[];    // ["09:00-13:00", "15:00-19:00"]
+  date: string;
+  day_name: string;
+  slots: string[];
 }
 
-/**
- * 🆕 Genera franjas horarias disponibles para los próximos N días
- * basado en los horarios del punto de recojo.
- */
 export function generateAvailableSlots(
   openingHours: Record<string, string[]> | null,
   daysAhead: number = 7
@@ -322,7 +291,7 @@ export function generateAvailableSlots(
     const date = new Date(now);
     date.setDate(now.getDate() + i);
 
-    const dayIndex = date.getDay(); // 0=domingo
+    const dayIndex = date.getDay();
     const dayKey = dayKeys[dayIndex];
     const slots = openingHours[dayKey] ?? [];
 
@@ -342,10 +311,6 @@ export function generateAvailableSlots(
   return result;
 }
 
-/**
- * 🆕 Formatea un time_slot guardado en la orden.
- * Ej: "2026-07-22 14:00-17:00" → "Miércoles 22 Jul, 14:00-17:00"
- */
 export function formatTimeSlot(timeSlot: string | null): string {
   if (!timeSlot) return "";
 
@@ -353,15 +318,7 @@ export function formatTimeSlot(timeSlot: string | null): string {
   if (!date || !hours) return timeSlot;
 
   const d = new Date(date + "T00:00:00");
-  const dayNames = [
-    "Dom",
-    "Lun",
-    "Mar",
-    "Mié",
-    "Jue",
-    "Vie",
-    "Sáb",
-  ];
+  const dayNames = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
   const monthNames = [
     "Ene",
     "Feb",
