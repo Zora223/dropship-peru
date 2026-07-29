@@ -4,6 +4,7 @@ import { GoogleMap, useJsApiLoader, Marker, Autocomplete } from '@react-google-m
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 const IQUITOS_CENTER = { lat: -3.7437, lng: -73.2516 };
 const LIBRARIES: ('places')[] = ['places'];
+const LOADER_ID = 'dropship-google-maps-loader';
 
 export interface DeliveryLocation {
   latitude: number;
@@ -24,8 +25,11 @@ export default function DeliveryLocationPicker({
   primaryColor = '#e11d48',
 }: Props) {
   const { isLoaded, loadError } = useJsApiLoader({
+    id: LOADER_ID,
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
     libraries: LIBRARIES,
+    language: 'es',
+    region: 'PE',
   });
 
   const [markerPosition, setMarkerPosition] = useState(IQUITOS_CENTER);

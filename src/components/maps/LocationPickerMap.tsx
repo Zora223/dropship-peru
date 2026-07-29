@@ -2,8 +2,8 @@ import { useState, useCallback, useRef } from 'react';
 import { GoogleMap, Marker, Autocomplete, useJsApiLoader } from '@react-google-maps/api';
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-
-const libraries: ('places')[] = ['places'];
+const LIBRARIES: ('places')[] = ['places'];
+const LOADER_ID = 'dropship-google-maps-loader';
 
 const mapContainerStyle = {
   width: '100%',
@@ -19,16 +19,14 @@ const mapOptions = {
   fullscreenControl: true,
 };
 
-// 🆕 Ahora incluye campos parseados desde Google
 export interface LocationData {
   latitude: number;
   longitude: number;
   formatted_address: string;
   google_place_id?: string;
-  // Campos extraídos automáticamente para autorrellenar
-  street?: string;      // "Los Pinos 123"
-  district?: string;    // "Iquitos"
-  city?: string;        // "Maynas" o "Iquitos"
+  street?: string;
+  district?: string;
+  city?: string;
 }
 
 interface LocationPickerMapProps {
@@ -42,9 +40,6 @@ const CITY_CENTERS = {
   lima: { lat: -12.0464, lng: -77.0428 },
 };
 
-/**
- * 🆕 Parsea address_components de Google para extraer street, district, city
- */
 function parseAddressComponents(
   components: google.maps.GeocoderAddressComponent[] | undefined
 ): { street: string; district: string; city: string } {
@@ -61,7 +56,6 @@ function parseAddressComponents(
     if (types.includes('street_number')) streetNumber = c.long_name;
     if (types.includes('route')) route = c.long_name;
 
-    // Distrito puede venir en varios types
     if (
       types.includes('sublocality_level_1') ||
       types.includes('sublocality') ||
@@ -71,12 +65,10 @@ function parseAddressComponents(
       if (!district) district = c.long_name;
     }
 
-    // Ciudad principal (locality o admin_area_2)
     if (types.includes('administrative_area_level_2')) {
       if (!city) city = c.long_name;
     }
 
-    // Si no hay admin_area_2, usar locality como ciudad
     if (!city && types.includes('locality')) {
       city = c.long_name;
     }
@@ -92,8 +84,9 @@ export default function LocationPickerMap({
   defaultCity = 'iquitos',
 }: LocationPickerMapProps) {
   const { isLoaded, loadError } = useJsApiLoader({
+    id: LOADER_ID,
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-    libraries,
+    libraries: LIBRARIES,
     language: 'es',
     region: 'PE',
   });
@@ -133,7 +126,6 @@ export default function LocationPickerMap({
     const address = place.formatted_address || '';
     const placeId = place.place_id || '';
 
-    // 🆕 Parsea componentes
     const parsed = parseAddressComponents(place.address_components);
 
     setMarkerPosition({ lat, lng });

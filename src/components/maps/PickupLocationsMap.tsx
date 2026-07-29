@@ -3,6 +3,8 @@ import { GoogleMap, Marker, InfoWindow, useJsApiLoader } from '@react-google-map
 import type { PickupLocation } from '../../lib/pickup-locations';
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+const LIBRARIES: ('places')[] = ['places'];
+const LOADER_ID = 'dropship-google-maps-loader';
 
 const mapContainerStyle = {
   width: '100%',
@@ -16,7 +18,7 @@ const mapOptions = {
   streetViewControl: false,
   mapTypeControl: false,
   fullscreenControl: true,
-  gestureHandling: 'greedy' as const, // Móvil: 1 dedo puede mover el mapa
+  gestureHandling: 'greedy' as const,
 };
 
 const CITY_CENTERS = {
@@ -38,8 +40,9 @@ export default function PickupLocationsMap({
   primaryColor = '#e11d48',
 }: Props) {
   const { isLoaded, loadError } = useJsApiLoader({
+    id: LOADER_ID,
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-    libraries: ['places'],
+    libraries: LIBRARIES,
     language: 'es',
     region: 'PE',
   });
@@ -47,19 +50,16 @@ export default function PickupLocationsMap({
   const mapRef = useRef<google.maps.Map | null>(null);
   const [openInfoId, setOpenInfoId] = useState<string | null>(null);
 
-  // Solo puntos con coordenadas
   const locationsWithCoords = useMemo(
     () => locations.filter((l) => l.latitude && l.longitude),
     [locations]
   );
 
-  // Detectar ciudad para centrar el mapa
   const defaultCenter = useMemo(() => {
     const firstCity = locations[0]?.city?.toLowerCase() || '';
     return firstCity.includes('lima') ? CITY_CENTERS.lima : CITY_CENTERS.iquitos;
   }, [locations]);
 
-  // Centro inicial: primer punto con GPS, o centro de ciudad
   const initialCenter = useMemo(() => {
     if (locationsWithCoords.length > 0) {
       return {
@@ -74,7 +74,6 @@ export default function PickupLocationsMap({
     (map: google.maps.Map) => {
       mapRef.current = map;
 
-      // Si hay múltiples puntos → ajustar bounds para verlos todos
       if (locationsWithCoords.length > 1) {
         const bounds = new google.maps.LatLngBounds();
         locationsWithCoords.forEach((loc) => {
@@ -86,7 +85,6 @@ export default function PickupLocationsMap({
     [locationsWithCoords]
   );
 
-  // Cuando cambia el punto seleccionado → zoom a él
   const handleMarkerClick = useCallback(
     (loc: PickupLocation) => {
       onSelect(loc.id);
@@ -118,7 +116,6 @@ export default function PickupLocationsMap({
     );
   }
 
-  // Si no hay puntos con GPS → no mostramos mapa (fallback en lista)
   if (locationsWithCoords.length === 0) {
     return null;
   }
