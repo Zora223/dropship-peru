@@ -24,6 +24,11 @@ export interface PickupLocation {
   // 🆕 v16 FASE 3
   accepts_pickup?: boolean;
   opening_hours?: Record<string, string[]> | null;
+  // 🆕 v20.7 - Google Maps
+  latitude?: number | null;
+  longitude?: number | null;
+  google_place_id?: string | null;
+  formatted_address?: string | null;
 }
 
 // Snapshot que se guarda en orders.pickup_address (JSONB)

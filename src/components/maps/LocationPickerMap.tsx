@@ -5,6 +5,7 @@ const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
 // Librerías necesarias (constante fuera para evitar re-renders)
 const libraries: ('places')[] = ['places'];
+// Centro por defecto: IQUITOS (Plaza de Armas)
 
 const mapContainerStyle = {
   width: '100%',
@@ -74,6 +75,7 @@ export default function LocationPickerMap({
     []
   );
 
+  // Cuando el usuario selecciona un lugar del autocomplete
   const onPlaceChanged = useCallback(() => {
     if (!autocompleteRef.current) return;
 
@@ -98,6 +100,7 @@ export default function LocationPickerMap({
     });
   }, [onLocationSelect]);
 
+  // Cuando el usuario arrastra el marcador
   const onMarkerDragEnd = useCallback(
     async (e: google.maps.MapMouseEvent) => {
       if (!e.latLng) return;
@@ -105,6 +108,7 @@ export default function LocationPickerMap({
       const lng = e.latLng.lng();
       setMarkerPosition({ lat, lng });
 
+      // Geocoding reverso para obtener dirección
       const geocoder = new google.maps.Geocoder();
       try {
         const response = await geocoder.geocode({ location: { lat, lng } });
@@ -131,6 +135,7 @@ export default function LocationPickerMap({
     [onLocationSelect]
   );
 
+  // Click en el mapa
   const onMapClick = useCallback(
     async (e: google.maps.MapMouseEvent) => {
       await onMarkerDragEnd(e);
@@ -138,6 +143,7 @@ export default function LocationPickerMap({
     [onMarkerDragEnd]
   );
 
+  // Botón: usar mi ubicación actual
   const useMyLocation = useCallback(() => {
     if (!navigator.geolocation) {
       alert('Tu navegador no soporta geolocalización');
@@ -151,6 +157,7 @@ export default function LocationPickerMap({
         mapRef.current?.panTo({ lat, lng });
         mapRef.current?.setZoom(17);
 
+        // Geocoding reverso
         const geocoder = new google.maps.Geocoder();
         const response = await geocoder.geocode({ location: { lat, lng } });
         if (response.results[0]) {
