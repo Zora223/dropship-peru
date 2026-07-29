@@ -264,4 +264,4 @@ export default function ProductImageGallery({
       {typeof document !== "undefined" && lightbox && createPortal(lightbox, document.body)}
     </>
   );
-}
+} 

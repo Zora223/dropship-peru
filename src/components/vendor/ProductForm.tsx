@@ -12,6 +12,7 @@ import {
   suggestSku,
   type QualityIssue,
 } from "../../lib/product-quality";
+import ColorPicker, { type ProductColor } from "./ColorPicker"; // 🆕
 import type { DbProduct } from "../../types/database";
 
 interface ProductFormProps {
@@ -49,13 +50,14 @@ export default function ProductForm({
   const [existingImages, setExistingImages] = useState<string[]>([]);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
-  const [removedExistingImages, setRemovedExistingImages] = useState<string[]>(
-    []
-  );
+  const [removedExistingImages, setRemovedExistingImages] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [showAllIssues, setShowAllIssues] = useState(false);
   const [customCategory, setCustomCategory] = useState(false);
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
+
+  // 🆕 Estado de colores
+  const [colors, setColors] = useState<ProductColor[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isEditing = Boolean(initial);
@@ -78,6 +80,12 @@ export default function ProductForm({
         featured: initial.featured,
       });
       setExistingImages(initial.images ?? []);
+
+      // 🆕 Cargar colores si existen
+      const initialColors = (initial as any).colors;
+      if (Array.isArray(initialColors)) {
+        setColors(initialColors.filter((c: any) => c && c.name && c.hex));
+      }
 
       const isPreset = PREDEFINED_CATEGORIES.some(
         (c) => c.value === initial.category || c.label === initial.category
@@ -242,7 +250,6 @@ export default function ProductForm({
     setPendingFiles((prev) => [...prev, ...validFiles]);
     setPreviews((prev) => [...prev, ...validPreviews]);
 
-    // Mostrar errores agrupados
     if (rejected.length > 0) {
       toast.error(
         `${rejected.length} foto${rejected.length > 1 ? "s" : ""} rechazada${
@@ -331,6 +338,7 @@ export default function ProductForm({
         featured: form.featured,
         images: allImages,
         quality_score: quality.score,
+        colors: colors, // 🆕
       };
 
       let result: DbProduct;
@@ -352,7 +360,6 @@ export default function ProductForm({
 
       previews.forEach((url) => URL.revokeObjectURL(url));
 
-      // ✅ Toast de éxito
       toast.success(
         isEditing ? "Producto actualizado" : "Producto creado",
         form.is_active
@@ -428,7 +435,6 @@ export default function ProductForm({
         className="max-h-[95vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* HEADER */}
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white p-6">
           <div>
             <h2 className="text-xl font-bold text-gray-900">
@@ -448,7 +454,7 @@ export default function ProductForm({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5 p-6">
-          {/* PANEL DE CALIDAD (sticky) */}
+          {/* PANEL DE CALIDAD */}
           <div
             id="quality-panel"
             className={`sticky top-22 z-5 rounded-2xl bg-linear-to-br ${getScoreColorClasses()} p-4 shadow-lg`}
@@ -501,7 +507,7 @@ export default function ProductForm({
             </div>
           </div>
 
-          {/* LISTA DE ISSUES */}
+          {/* ISSUES */}
           {visibleIssues.length > 0 && (
             <div className="space-y-1.5">
               {visibleIssues
@@ -734,8 +740,7 @@ export default function ProductForm({
               placeholder="Ej: Polo 100% algodón peinado, corte regular, cuello redondo reforzado. Ideal para uso diario. Disponible en tallas S, M, L, XL. Lavable en agua fría, no usar lejía."
             />
             <p className="mt-1 text-xs text-gray-400">
-              💡 Incluye: material, medidas, cuidados, beneficios, para qué
-              sirve
+              💡 Incluye: material, medidas, cuidados, beneficios, para qué sirve
             </p>
           </div>
 
@@ -763,8 +768,7 @@ export default function ProductForm({
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700">
-                Precio antes{" "}
-                <span className="text-gray-400">(opcional)</span>
+                Precio antes <span className="text-gray-400">(opcional)</span>
               </label>
               <input
                 name="compare_at_price"
@@ -878,8 +882,7 @@ export default function ProductForm({
           {/* MARCA */}
           <div>
             <label className="block text-sm font-semibold text-gray-700">
-              Marca{" "}
-              <span className="text-gray-400">(opcional pero recomendado)</span>
+              Marca <span className="text-gray-400">(opcional pero recomendado)</span>
             </label>
             <input
               name="brand"
@@ -890,6 +893,9 @@ export default function ProductForm({
               placeholder="Ej: Nike, Adidas, Casera, Sin marca"
             />
           </div>
+
+          {/* 🆕 COLORES DISPONIBLES */}
+          <ColorPicker colors={colors} onChange={setColors} />
 
           {/* FEATURED */}
           <label className="flex cursor-pointer items-center gap-3 rounded-xl bg-linear-to-br from-rose-50 to-orange-50 p-4">

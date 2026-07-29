@@ -1,26 +1,15 @@
+// src/lib/vendor-products.ts
 import { supabase } from "./supabase";
 import { uploadMultipleFiles, deleteFileByUrl } from "./storage";
 import type { DbProduct, ProductSource } from "../types/database";
 
 export interface VendorProductWithRealStock extends DbProduct {
-  /**
-   * Stock real disponible:
-   * - Para "catalog": viene de catalog_products.stock (sincronizado con admin)
-   * - Para "own": viene de products.stock (manejado por el vendor)
-   */
   real_stock: number;
-  /**
-   * Si el producto del catálogo fue desactivado por el admin.
-   */
   catalog_inactive: boolean;
 }
 
 /**
  * Lista TODOS los productos de la tienda del vendor.
- */
-/**
- * Lista TODOS los productos de la tienda del vendor.
- * Para productos "catalog": resuelve el stock real desde catalog_products.
  */
 export async function fetchMyProducts(storeId: string): Promise<VendorProductWithRealStock[]> {
   const { data, error } = await supabase
@@ -60,7 +49,7 @@ export interface ImportCatalogProductInput {
   catalogProductId: string;
   name: string;
   description: string | null;
-  price: number; // Precio del vendor (con su margen)
+  price: number;
   stock: number;
   sku: string | null;
   category: string | null;
@@ -142,8 +131,9 @@ export interface CreateOwnProductInput {
   sku: string | null;
   category: string | null;
   is_active: boolean;
-  featured: boolean;  // ← AGREGAR
+  featured: boolean;
   images: string[];
+  colors?: Array<{ name: string; hex: string }>; // 🆕
 }
 
 export async function createOwnProduct(input: CreateOwnProductInput): Promise<DbProduct> {
@@ -162,7 +152,8 @@ export async function createOwnProduct(input: CreateOwnProductInput): Promise<Db
       category: input.category,
       images: input.images,
       is_active: input.is_active,
-      featured: input.featured,  // ← AGREGAR
+      featured: input.featured,
+      colors: input.colors ?? [], // 🆕
     })
     .select()
     .single();
@@ -170,6 +161,7 @@ export async function createOwnProduct(input: CreateOwnProductInput): Promise<Db
   if (error) throw error;
   return data as DbProduct;
 }
+
 /**
  * Actualiza un producto del vendor (precio, stock, etc).
  */
@@ -185,6 +177,8 @@ export async function updateMyProduct(
     category: string | null;
     images: string[];
     is_active: boolean;
+    featured: boolean;
+    colors: Array<{ name: string; hex: string }>; // 🆕
   }>
 ): Promise<DbProduct> {
   const { data, error } = await supabase
@@ -211,22 +205,17 @@ export async function toggleMyProductActive(productId: string, is_active: boolea
 
 /**
  * Elimina un producto.
- * - Si es "own": borra el registro y las fotos del Storage.
- * - Si es "catalog": solo lo quita de la tienda (el catálogo del admin queda intacto).
  */
 export async function deleteMyProduct(productId: string): Promise<void> {
-  // Obtener el producto para saber su source y sus imágenes
   const { data: product } = await supabase
     .from("products")
     .select("source, images")
     .eq("id", productId)
     .single();
 
-  // Eliminar el producto
   const { error } = await supabase.from("products").delete().eq("id", productId);
   if (error) throw error;
 
-  // Si era "own", limpiar imágenes del Storage
   if (product?.source === "own" && Array.isArray(product.images)) {
     for (const url of product.images) {
       try {
@@ -236,7 +225,6 @@ export async function deleteMyProduct(productId: string): Promise<void> {
       }
     }
   }
-  // Si era "catalog", NO tocamos el Storage (las imágenes son del admin)
 }
 
 /**
@@ -248,6 +236,7 @@ export async function uploadProductImages(
 ): Promise<string[]> {
   return uploadMultipleFiles("product-images", files, `vendors/${storeId}`);
 }
+
 /**
  * Marca/desmarca un producto como "Más vendido" (featured).
  */
