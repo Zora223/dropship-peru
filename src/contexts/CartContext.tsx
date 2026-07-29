@@ -1,4 +1,4 @@
-import { createContext, useState, useContext, useMemo } from "react";
+import { createContext, useState, useContext, useMemo, useEffect } from "react";
 import type { ReactNode } from "react";
 import type { ProductSource } from "../types/database";
 
@@ -29,12 +29,53 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
+// 🆕 v20.8 - Clave para localStorage
+const CART_STORAGE_KEY = "dropship-peru-cart-v1";
+
+// 🆕 Leer carrito inicial desde localStorage
+function loadCartFromStorage(): CartItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const saved = localStorage.getItem(CART_STORAGE_KEY);
+    if (!saved) return [];
+    const parsed = JSON.parse(saved);
+    if (!Array.isArray(parsed)) return [];
+    // Validar estructura mínima
+    return parsed.filter(
+      (item) =>
+        item &&
+        typeof item.productId === "string" &&
+        typeof item.storeId === "string" &&
+        typeof item.price === "number" &&
+        typeof item.quantity === "number"
+    );
+  } catch (err) {
+    console.warn("Error leyendo carrito de localStorage:", err);
+    return [];
+  }
+}
+
+// 🆕 Guardar carrito en localStorage
+function saveCartToStorage(items: CartItem[]) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
+  } catch (err) {
+    console.warn("Error guardando carrito en localStorage:", err);
+  }
+}
+
 export function CartProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<CartItem[]>([]);
+  // 🆕 Estado inicial desde localStorage
+  const [items, setItems] = useState<CartItem[]>(() => loadCartFromStorage());
+
+  // 🆕 Persistir cambios en localStorage
+  useEffect(() => {
+    saveCartToStorage(items);
+  }, [items]);
 
   const addItem = (item: Omit<CartItem, "quantity">) => {
     setItems((prev) => {
-      // Si el carrito tiene productos de OTRA tienda, lo vaciamos
       if (prev.length > 0 && prev[0].storeId !== item.storeId) {
         const confirmChange = confirm(
           "Tu carrito tiene productos de otra tienda. ¿Quieres vaciarlo y agregar este producto?"
@@ -67,7 +108,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  const clearCart = () => setItems([]);
+  const clearCart = () => {
+    setItems([]);
+    // 🆕 Limpiar también localStorage
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(CART_STORAGE_KEY);
+    }
+  };
 
   const total = useMemo(
     () => items.reduce((sum, i) => sum + i.price * i.quantity, 0),
