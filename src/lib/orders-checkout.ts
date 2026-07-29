@@ -26,6 +26,10 @@ export interface CheckoutInput {
     district: string;
     city: string;
     reference: string | null;
+    // 🆕 v20.8 - Coordenadas GPS
+    latitude?: number | null;
+    longitude?: number | null;
+    formatted_address?: string | null;
   } | null;
 
   delivery_date?: string | null;
@@ -171,6 +175,11 @@ export async function createOrder(input: CheckoutInput): Promise<DbOrder> {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // 🆕 v20.8 - Extraer coordenadas GPS para columnas dedicadas
+  const shippingLat = input.shipping_address?.latitude ?? null;
+  const shippingLng = input.shipping_address?.longitude ?? null;
+  const shippingFormatted = input.shipping_address?.formatted_address ?? null;
+
   const { data, error } = await supabase
     .from("orders")
     .insert({
@@ -184,6 +193,11 @@ export async function createOrder(input: CheckoutInput): Promise<DbOrder> {
         input.delivery_mode === "home_delivery"
           ? input.shipping_address
           : null,
+
+      // 🆕 v20.8 - Columnas GPS dedicadas para queries eficientes
+      shipping_latitude: shippingLat,
+      shipping_longitude: shippingLng,
+      shipping_formatted_address: shippingFormatted,
 
       delivery_mode: input.delivery_mode,
       delivery_date: input.delivery_date ?? null,
@@ -230,12 +244,11 @@ export async function createOrder(input: CheckoutInput): Promise<DbOrder> {
         vendor_id: input.storeId,
         order_id: order.id,
         movement_type: "delivery_debt",
-        amount: -Math.abs(input.delivery_debt), // Negativo = deuda
+        amount: -Math.abs(input.delivery_debt),
         description: `Delivery pedido #${order.order_number} (S/ ${input.delivery_debt.toFixed(2)})`,
       });
     } catch (balanceErr) {
       console.warn("No se pudo registrar deuda en vendor_balance:", balanceErr);
-      // No bloqueamos la creación del pedido
     }
   }
 

@@ -13,6 +13,8 @@ import {
 } from "../lib/cart-detection";
 import PaymentQrDisplay from "../components/PaymentQrDisplay";
 import PickupLocationsMap from "../components/maps/PickupLocationsMap";
+import DeliveryLocationPicker from "../components/maps/DeliveryLocationPicker";
+import type { DeliveryLocation } from "../components/maps/DeliveryLocationPicker";
 import { fetchPublicStoreById } from "../lib/public-store";
 import {
   getStorePickupLocations,
@@ -128,13 +130,16 @@ export default function PaymentPage() {
     null
   );
 
+  // 🆕 v20.8 - Coordenadas GPS del cliente
+  const [deliveryCoords, setDeliveryCoords] = useState<DeliveryLocation | null>(null);
+
   const [form, setForm] = useState({
     name: "",
     email: "",
     phone: "",
     street: "",
     district: "",
-    city: "Lima",
+    city: "Iquitos",
     reference: "",
     notes: "",
   });
@@ -234,7 +239,6 @@ export default function PaymentPage() {
     return Number(deliverySettings.delivery_cost) || 0;
   }, [deliveryMode, deliverySettings]);
 
-  // 🆕 v20 - Descuento gamificado
   const [discount, setDiscount] = useState<DiscountResult | null>(null);
 
   useEffect(() => {
@@ -251,7 +255,6 @@ export default function PaymentPage() {
 
   const total = Math.max(0, subtotal - discountAmount);
 
-  // 🆕 v20 - Deuda de delivery (si vendor_own)
   const deliveryDebt = useMemo(
     () => calculateDeliveryDebt(cartType, deliveryFee),
     [cartType, deliveryFee]
@@ -343,6 +346,9 @@ export default function PaymentPage() {
                 district: form.district.trim(),
                 city: form.city.trim(),
                 reference: form.reference.trim() || null,
+                latitude: deliveryCoords?.latitude ?? null,
+                longitude: deliveryCoords?.longitude ?? null,
+                formatted_address: deliveryCoords?.formatted_address ?? null,
               }
             : null,
 
@@ -365,7 +371,6 @@ export default function PaymentPage() {
         discount_pct: discountPct,
         discount_tier: discountTier,
 
-        // 🆕 v20 - Sistema de pagos
         cart_type: cartType,
         payment_receiver: paymentReceiver,
         delivery_debt: deliveryDebt,
@@ -386,7 +391,6 @@ export default function PaymentPage() {
 
   const hasPickupAvailable = pickupLocations.length > 0;
 
-  // 🆕 v20 - Filtrar métodos que soportan QR (yape/plin/transfer)
   const qrMethods = enabledPaymentMethods.filter((m) =>
     ["yape", "plin", "transfer"].includes(m.id)
   );
@@ -467,7 +471,6 @@ export default function PaymentPage() {
 
         <form onSubmit={handleSubmit} className="flex flex-col-reverse gap-6 lg:grid lg:grid-cols-3 lg:gap-8">
           <div className="space-y-6 lg:col-span-2">
-            {/* Selector de modo de entrega */}
             {hasPickupAvailable && (
               <div className="rounded-3xl bg-white p-6 shadow-sm">
                 <h2 className="text-lg font-bold text-gray-900">
@@ -544,7 +547,6 @@ export default function PaymentPage() {
               </div>
             )}
 
-            {/* Datos de contacto */}
             <div className="rounded-3xl bg-white p-6 shadow-sm">
               <h2 className="text-lg font-bold text-gray-900">
                 📦 Datos de contacto
@@ -596,9 +598,28 @@ export default function PaymentPage() {
 
                 {deliveryMode === "home_delivery" && (
                   <>
+                    {/* 🗺️ MAPA de ubicación GPS */}
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        📍 Marca tu ubicación exacta en el mapa
+                      </label>
+                      <DeliveryLocationPicker
+                        primaryColor={theme.primary_color}
+                        onLocationSelect={(loc) => {
+                          setDeliveryCoords(loc);
+                          setForm((prev) => ({
+                            ...prev,
+                            street: prev.street || loc.street || loc.formatted_address,
+                            district: prev.district || loc.district || "",
+                            city: prev.city || loc.city || "Iquitos",
+                          }));
+                        }}
+                      />
+                    </div>
+
                     <div className="sm:col-span-2">
                       <label className="block text-sm font-medium text-gray-700">
-                        Dirección
+                        Dirección exacta
                       </label>
                       <input
                         name="street"
@@ -606,13 +627,13 @@ export default function PaymentPage() {
                         value={form.street}
                         onChange={handleChange}
                         className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
-                        placeholder="Av. Arequipa 1234"
+                        placeholder="Jr. Putumayo 456"
                       />
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700">
-                        Distrito
+                        Distrito / Zona
                       </label>
                       <input
                         name="district"
@@ -620,7 +641,7 @@ export default function PaymentPage() {
                         value={form.district}
                         onChange={handleChange}
                         className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
-                        placeholder="Miraflores"
+                        placeholder="Belén / Punchana / San Juan..."
                       />
                     </div>
 
@@ -634,20 +655,20 @@ export default function PaymentPage() {
                         value={form.city}
                         onChange={handleChange}
                         className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
-                        placeholder="Lima"
+                        placeholder="Iquitos"
                       />
                     </div>
 
                     <div className="sm:col-span-2">
                       <label className="block text-sm font-medium text-gray-700">
-                        Referencia opcional
+                        🏠 Referencias (color casa, portón, piso...)
                       </label>
                       <input
                         name="reference"
                         value={form.reference}
                         onChange={handleChange}
                         className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
-                        placeholder="Edificio azul, frente al parque"
+                        placeholder="Casa amarilla, portón negro, 2do piso"
                       />
                     </div>
                   </>
@@ -669,7 +690,6 @@ export default function PaymentPage() {
               </div>
             </div>
 
-            {/* Selector de fecha/hora para DELIVERY */}
             {deliveryMode === "home_delivery" && deliverySlots.length > 0 && (
               <div className="rounded-3xl bg-white p-6 shadow-sm">
                 <h2 className="text-lg font-bold text-gray-900">
@@ -741,7 +761,6 @@ export default function PaymentPage() {
               </div>
             )}
 
-            {/* Selector de punto de recojo */}
             {deliveryMode === "store_pickup" && (
               <div className="rounded-3xl bg-white p-6 shadow-sm">
                 <h2 className="text-lg font-bold text-gray-900">
@@ -754,7 +773,6 @@ export default function PaymentPage() {
                   </div>
                 ) : (
                   <div className="mt-5 space-y-4">
-                    {/* 🗺️ MAPA con todos los puntos */}
                     <PickupLocationsMap
                       locations={pickupLocations}
                       selectedId={selectedPickupId}
@@ -762,7 +780,6 @@ export default function PaymentPage() {
                       primaryColor={theme.primary_color}
                     />
 
-                    {/* Lista de puntos */}
                     <div className="space-y-3">
                       {pickupLocations.map((location) => {
                         const active = selectedPickupId === location.id;
@@ -882,7 +899,6 @@ export default function PaymentPage() {
               </div>
             )}
 
-            {/* 🆕 v20 - Info del tipo de carrito */}
             <div className="rounded-2xl bg-linear-to-br from-purple-50 to-fuchsia-50 border-2 border-purple-200 p-4">
               <div className="flex items-start gap-3">
                 <div className="text-3xl">{cartTypeInfo.emoji}</div>
@@ -897,7 +913,6 @@ export default function PaymentPage() {
               </div>
             </div>
 
-            {/* Método de pago */}
             <div className="rounded-3xl bg-white p-6 shadow-sm">
               <h2 className="text-lg font-bold text-gray-900">
                 💳 Método de pago
@@ -962,7 +977,6 @@ export default function PaymentPage() {
                 })}
               </div>
 
-              {/* 🆕 v20 - QR dinámico según receptor */}
               {selectedMethod &&
                 qrMethods.some((m) => m.id === selectedMethod) && (
                   <div className="mt-6">
@@ -976,7 +990,6 @@ export default function PaymentPage() {
                   </div>
                 )}
 
-              {/* Mensaje para métodos sin QR */}
               {selectedMethod === "card" && (
                 <div className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
                   💳 El pago con tarjeta será gestionado por la plataforma.
@@ -1001,7 +1014,6 @@ export default function PaymentPage() {
             </div>
           </div>
 
-          {/* Resumen */}
           <div className="lg:col-span-1">
             <div className="sticky top-24 overflow-hidden rounded-3xl bg-white shadow-xl">
               <div className="bg-linear-to-br from-gray-900 to-gray-800 px-4 sm:px-6 py-4 sm:py-5 text-white">
@@ -1051,6 +1063,11 @@ export default function PaymentPage() {
                       📅 {selectedPickupSlot}
                     </div>
                   )}
+                  {deliveryMode === "home_delivery" && deliveryCoords && (
+                    <div className="mt-1 text-emerald-600 font-semibold">
+                      ✅ Ubicación GPS confirmada
+                    </div>
+                  )}
                 </div>
 
                 <div className="my-4 border-t border-dashed border-gray-200" />
@@ -1063,11 +1080,11 @@ export default function PaymentPage() {
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Envío</span>
+                    <span className="text-gray-600">
+                      {deliveryMode === "store_pickup" ? "🏪 Recojo" : "🚚 Envío"}
+                    </span>
                     <span className="font-semibold tabular-nums text-emerald-600">
-                      {deliveryMode === "store_pickup"
-                        ? "SIN ENVÍO"
-                        : "🚚 GRATIS"}
+                      GRATIS ✓
                     </span>
                   </div>
 
