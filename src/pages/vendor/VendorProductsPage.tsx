@@ -6,9 +6,11 @@ import {
   fetchMyProducts,
   deleteMyProduct,
   toggleMyProductActive,
+  updateProductPrice,
 } from "../../lib/vendor-products";
 import type { VendorProductWithRealStock } from "../../lib/vendor-products";
 import ProductForm from "../../components/vendor/ProductForm";
+import EditPriceModal from "../../components/vendor/EditPriceModal";
 import type { DbProduct } from "../../types/database";
 
 type Tab = "all" | "imported" | "own";
@@ -62,6 +64,9 @@ export default function VendorProductsPage() {
   const [editing, setEditing] = useState<DbProduct | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("all");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // 🆕 v20.8 - Modal de edición de precio
+  const [editingPrice, setEditingPrice] = useState<VendorProductWithRealStock | null>(null);
 
   const loadProducts = async () => {
     if (!store) return;
@@ -176,6 +181,29 @@ export default function VendorProductsPage() {
     setEditing(null);
   };
 
+  // 🆕 v20.8 - Guardar nuevo precio
+  const handleSavePrice = async (newPrice: number) => {
+    if (!editingPrice) return;
+    try {
+      await updateProductPrice(editingPrice.id, newPrice);
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === editingPrice.id ? { ...p, price: newPrice } : p
+        )
+      );
+      toast.success(
+        "💰 Precio actualizado",
+        `${editingPrice.name} ahora cuesta S/ ${newPrice.toFixed(2)}`
+      );
+    } catch (err) {
+      toast.error(
+        "No se pudo actualizar",
+        err instanceof Error ? err.message : "Intenta de nuevo"
+      );
+      throw err;
+    }
+  };
+
   if (loadingStore || loading) {
     return (
       <div className="flex min-h-100 items-center justify-center">
@@ -234,7 +262,7 @@ export default function VendorProductsPage() {
         </div>
       </div>
 
-      {/* Tabs — scroll horizontal en móvil */}
+      {/* Tabs */}
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
         <div className="flex min-w-max gap-2 border-b border-gray-200">
           {[
@@ -298,6 +326,17 @@ export default function VendorProductsPage() {
         />
       )}
 
+      {/* 🆕 Modal de edición de precio */}
+      <EditPriceModal
+        isOpen={!!editingPrice}
+        productName={editingPrice?.name ?? ""}
+        currentPrice={Number(editingPrice?.price ?? 0)}
+        basePrice={Number(editingPrice?.base_price ?? 0)}
+        suggestedPrice={Number(editingPrice?.suggested_price ?? editingPrice?.price ?? 0)}
+        onClose={() => setEditingPrice(null)}
+        onSave={handleSavePrice}
+      />
+
       {/* Empty state */}
       {filtered.length === 0 ? (
         <div className="rounded-3xl bg-white p-16 text-center shadow-sm">
@@ -343,7 +382,7 @@ export default function VendorProductsPage() {
         </div>
       ) : (
         <>
-          {/* 🖥️ VISTA DESKTOP: Tabla (oculta en <lg) */}
+          {/* 🖥️ VISTA DESKTOP: Tabla */}
           <div className="hidden overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm lg:block">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
@@ -361,6 +400,11 @@ export default function VendorProductsPage() {
                   {filtered.map((product) => {
                     const images = normalizeImages(product.images);
                     const stockConfig = getStockConfig(product.real_stock);
+                    const isCatalog = product.source === "catalog";
+                    const basePrice = Number(product.base_price ?? 0);
+                    const currentPrice = Number(product.price);
+                    const margin = basePrice > 0 ? currentPrice - basePrice : 0;
+                    const marginPct = basePrice > 0 ? ((margin / basePrice) * 100).toFixed(0) : null;
 
                     return (
                       <tr
@@ -392,7 +436,7 @@ export default function VendorProductsPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          {product.source === "catalog" ? (
+                          {isCatalog ? (
                             <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2.5 py-0.5 text-xs font-semibold text-purple-700">
                               🔗 Catálogo
                             </span>
@@ -403,15 +447,31 @@ export default function VendorProductsPage() {
                           )}
                         </td>
                         <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-gray-900">
-                              S/ {Number(product.price).toFixed(2)}
-                            </span>
-                            {product.compare_at_price && (
-                              <span className="text-xs text-gray-400 line-through">
-                                S/{" "}
-                                {Number(product.compare_at_price).toFixed(2)}
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-gray-900">
+                                S/ {currentPrice.toFixed(2)}
                               </span>
+                              {product.compare_at_price && (
+                                <span className="text-xs text-gray-400 line-through">
+                                  S/{" "}
+                                  {Number(product.compare_at_price).toFixed(2)}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* 🆕 Info de margen para productos del catálogo */}
+                            {isCatalog && basePrice > 0 && (
+                              <div className="text-[10px] text-gray-500">
+                                <span title="Costo del proveedor">
+                                  Costo: S/ {basePrice.toFixed(2)}
+                                </span>
+                                {margin > 0 && (
+                                  <span className="ml-1.5 font-bold text-emerald-600">
+                                    (+{marginPct}%)
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </div>
                         </td>
@@ -423,7 +483,7 @@ export default function VendorProductsPage() {
                               {stockConfig.emoji} {stockConfig.label}
                             </span>
 
-                            {product.source === "catalog" && (
+                            {isCatalog && (
                               <span
                                 className="text-[10px] font-medium text-purple-600"
                                 title="El stock lo gestiona el marketplace"
@@ -455,6 +515,16 @@ export default function VendorProductsPage() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex justify-end gap-2">
+                            {/* 🆕 Botón editar precio (para AMBOS tipos) */}
+                            <button
+                              onClick={() => setEditingPrice(product)}
+                              className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100"
+                              title="Cambiar precio de venta"
+                            >
+                              💰 Precio
+                            </button>
+
+                            {/* Editar completo (solo productos propios) */}
                             {product.source === "own" && (
                               <button
                                 onClick={() => openEdit(product)}
@@ -467,9 +537,7 @@ export default function VendorProductsPage() {
                               onClick={() => handleDelete(product)}
                               className="rounded-full bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 transition hover:bg-red-100"
                             >
-                              {product.source === "catalog"
-                                ? "Quitar"
-                                : "🗑 Eliminar"}
+                              {isCatalog ? "Quitar" : "🗑 Eliminar"}
                             </button>
                           </div>
                         </td>
@@ -481,11 +549,17 @@ export default function VendorProductsPage() {
             </div>
           </div>
 
-          {/* 📱 VISTA MÓVIL: Cards (oculta en ≥lg) */}
+          {/* 📱 VISTA MÓVIL: Cards */}
           <div className="grid gap-3 sm:grid-cols-2 lg:hidden">
             {filtered.map((product) => {
               const images = normalizeImages(product.images);
               const stockConfig = getStockConfig(product.real_stock);
+              const isCatalog = product.source === "catalog";
+              const basePrice = Number(product.base_price ?? 0);
+              const currentPrice = Number(product.price);
+              const margin = basePrice > 0 ? currentPrice - basePrice : 0;
+              const marginPct = basePrice > 0 ? ((margin / basePrice) * 100).toFixed(0) : null;
+
               const discount =
                 product.compare_at_price &&
                 Number(product.compare_at_price) > Number(product.price)
@@ -518,9 +592,8 @@ export default function VendorProductsPage() {
                       </div>
                     )}
 
-                    {/* Badges arriba izquierda */}
                     <div className="absolute left-2 top-2 flex flex-col gap-1">
-                      {product.source === "catalog" ? (
+                      {isCatalog ? (
                         <span className="rounded-full bg-purple-500 px-2 py-0.5 text-[10px] font-bold text-white shadow">
                           🔗 Catálogo
                         </span>
@@ -537,7 +610,6 @@ export default function VendorProductsPage() {
                       )}
                     </div>
 
-                    {/* Estado arriba derecha */}
                     <div className="absolute right-2 top-2">
                       <button
                         onClick={() =>
@@ -553,7 +625,6 @@ export default function VendorProductsPage() {
                       </button>
                     </div>
 
-                    {/* Stock abajo derecha */}
                     <div className="absolute bottom-2 right-2">
                       <span
                         className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold shadow ${stockConfig.bg} ${stockConfig.text}`}
@@ -584,7 +655,7 @@ export default function VendorProductsPage() {
                     {/* Precios */}
                     <div className="mt-3 flex items-baseline gap-2">
                       <span className="text-lg font-black text-gray-900">
-                        S/ {Number(product.price).toFixed(2)}
+                        S/ {currentPrice.toFixed(2)}
                       </span>
                       {product.compare_at_price && (
                         <span className="text-xs text-gray-400 line-through">
@@ -593,8 +664,19 @@ export default function VendorProductsPage() {
                       )}
                     </div>
 
-                    {/* Warnings del catálogo */}
-                    {product.source === "catalog" && (
+                    {/* 🆕 Info de margen para productos del catálogo */}
+                    {isCatalog && basePrice > 0 && (
+                      <div className="mt-1 text-[10px] text-gray-500">
+                        Costo: S/ {basePrice.toFixed(2)}
+                        {margin > 0 && (
+                          <span className="ml-1.5 font-bold text-emerald-600">
+                            · Ganas S/ {margin.toFixed(2)} (+{marginPct}%)
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {isCatalog && (
                       <div className="mt-2 text-[10px] font-medium text-purple-600">
                         🔒 Stock del marketplace
                       </div>
@@ -607,7 +689,15 @@ export default function VendorProductsPage() {
                     )}
 
                     {/* Acciones */}
-                    <div className="mt-4 flex gap-2">
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {/* 🆕 Botón editar precio (siempre visible) */}
+                      <button
+                        onClick={() => setEditingPrice(product)}
+                        className="flex-1 rounded-xl bg-emerald-500 py-2 text-xs font-bold text-white transition hover:bg-emerald-600"
+                      >
+                        💰 Precio
+                      </button>
+
                       {product.source === "own" && (
                         <button
                           onClick={() => openEdit(product)}
@@ -619,13 +709,9 @@ export default function VendorProductsPage() {
 
                       <button
                         onClick={() => handleDelete(product)}
-                        className={`rounded-xl bg-red-50 py-2 text-xs font-bold text-red-700 transition hover:bg-red-100 ${
-                          product.source === "own" ? "px-3" : "flex-1"
-                        }`}
+                        className="rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-700 transition hover:bg-red-100"
                       >
-                        {product.source === "catalog"
-                          ? "Quitar de mi tienda"
-                          : "🗑"}
+                        🗑
                       </button>
                     </div>
                   </div>

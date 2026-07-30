@@ -6,17 +6,20 @@ import type { DbProduct, ProductSource } from "../types/database";
 export interface VendorProductWithRealStock extends DbProduct {
   real_stock: number;
   catalog_inactive: boolean;
+  base_price?: number; // 🆕 v20.8 - Precio base del catálogo (para calcular margen)
+  suggested_price?: number; // 🆕 v20.8 - Precio sugerido del catálogo
 }
 
 /**
  * Lista TODOS los productos de la tienda del vendor.
+ * 🆕 v20.8 - Ahora trae base_price y suggested_price del catálogo
  */
 export async function fetchMyProducts(storeId: string): Promise<VendorProductWithRealStock[]> {
   const { data, error } = await supabase
     .from("products")
     .select(`
       *,
-      catalog:catalog_products!products_catalog_product_id_fkey(stock, is_active)
+      catalog:catalog_products!products_catalog_product_id_fkey(stock, is_active, base_price, suggested_price)
     `)
     .eq("store_id", storeId)
     .order("created_at", { ascending: false });
@@ -25,18 +28,24 @@ export async function fetchMyProducts(storeId: string): Promise<VendorProductWit
   if (!data) return [];
 
   return data.map((p) => {
-    const catalog = (p as unknown as { catalog: { stock: number; is_active: boolean } | null }).catalog;
+    const catalog = (p as unknown as {
+      catalog: {
+        stock: number;
+        is_active: boolean;
+        base_price: number;
+        suggested_price: number;
+      } | null;
+    }).catalog;
 
-    const real_stock = p.source === "catalog" && catalog
-      ? catalog.stock
-      : p.stock;
-
+    const real_stock = p.source === "catalog" && catalog ? catalog.stock : p.stock;
     const catalog_inactive = p.source === "catalog" && catalog ? !catalog.is_active : false;
 
     return {
       ...(p as DbProduct),
       real_stock,
       catalog_inactive,
+      base_price: catalog?.base_price,
+      suggested_price: catalog?.suggested_price,
     } as VendorProductWithRealStock;
   });
 }
@@ -133,7 +142,7 @@ export interface CreateOwnProductInput {
   is_active: boolean;
   featured: boolean;
   images: string[];
-  colors?: Array<{ name: string; hex: string }>; // 🆕
+  colors?: Array<{ name: string; hex: string }>;
 }
 
 export async function createOwnProduct(input: CreateOwnProductInput): Promise<DbProduct> {
@@ -153,7 +162,7 @@ export async function createOwnProduct(input: CreateOwnProductInput): Promise<Db
       images: input.images,
       is_active: input.is_active,
       featured: input.featured,
-      colors: input.colors ?? [], // 🆕
+      colors: input.colors ?? [],
     })
     .select()
     .single();
@@ -178,7 +187,7 @@ export async function updateMyProduct(
     images: string[];
     is_active: boolean;
     featured: boolean;
-    colors: Array<{ name: string; hex: string }>; // 🆕
+    colors: Array<{ name: string; hex: string }>;
   }>
 ): Promise<DbProduct> {
   const { data, error } = await supabase
@@ -189,6 +198,58 @@ export async function updateMyProduct(
     .single();
 
   if (error) throw error;
+  return data as DbProduct;
+}
+
+/**
+ * 🆕 v20.8 - Actualiza SOLO el precio de un producto del vendor.
+ * Valida que sea mayor al precio base del catálogo (si aplica).
+ */
+export async function updateProductPrice(
+  productId: string,
+  newPrice: number
+): Promise<DbProduct> {
+  // 1. Obtener el producto con su catálogo
+  const { data: product, error: fetchError } = await supabase
+    .from("products")
+    .select(`
+      id,
+      source,
+      catalog_product_id,
+      catalog:catalog_products!products_catalog_product_id_fkey(base_price)
+    `)
+    .eq("id", productId)
+    .single();
+
+  if (fetchError) throw new Error(fetchError.message);
+
+  // 2. Si es producto del catálogo, validar que precio > base_price
+  if (product.source === "catalog") {
+    const catalog = (product as any).catalog;
+    if (catalog && newPrice <= Number(catalog.base_price)) {
+      throw new Error(
+        `El precio debe ser mayor a S/ ${Number(catalog.base_price).toFixed(2)} (costo del proveedor)`
+      );
+    }
+  }
+
+  // 3. Validar precio positivo
+  if (newPrice <= 0) {
+    throw new Error("El precio debe ser mayor a 0");
+  }
+
+  // 4. Actualizar
+  const { data, error } = await supabase
+    .from("products")
+    .update({
+      price: newPrice,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", productId)
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
   return data as DbProduct;
 }
 
