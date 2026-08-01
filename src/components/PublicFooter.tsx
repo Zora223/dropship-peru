@@ -113,7 +113,7 @@ export default function PublicFooter() {
                     <div className="text-xs text-slate-500 group-hover:text-slate-400">
                       WhatsApp
                     </div>
-                    <div className="font-medium">+51 930 415 718</div>
+                    <div className="font-medium">+51 916 146 396</div>
                   </div>
                 </a>
               </li>
