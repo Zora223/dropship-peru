@@ -10,7 +10,7 @@ import {
 
 export default function PublicFooter() {
   const currentYear = new Date().getFullYear();
-  const whatsappNumber = "51930415718";
+  const whatsappNumber = "51916146396";
   const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
     "Hola! Me interesa conocer más sobre Dropship Perú"
   )}`;
