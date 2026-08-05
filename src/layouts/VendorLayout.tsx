@@ -1,3 +1,4 @@
+// src/layouts/VendorLayout.tsx
 import { useState, useEffect } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 
@@ -8,12 +9,19 @@ const navItems = [
   { to: "/vendor/orders", label: "Pedidos", icon: "🧾" },
   { to: "/vendor/reviews", label: "Reseñas", icon: "⭐" },
   { to: "/vendor/analytics", label: "Analytics", icon: "📈" },
-  { to: "/vendor/pickup-locations", label: "Puntos de recojo", icon: "📍" }, // 🆕 v13
-  { to: "/vendor/delivery-settings", label: "Horarios de entrega", icon: "🚚" }, // 🆕 v16 FASE 3
+  { to: "/vendor/pickup-locations", label: "Puntos de recojo", icon: "📍" },
+  { to: "/vendor/delivery-settings", label: "Horarios de entrega", icon: "🚚" },
   { to: "/vendor/payments", label: "Métodos de cobro", icon: "💳" },
   { to: "/vendor/theme", label: "Personalizar tienda", icon: "🎨" },
   { to: "/vendor/settings", label: "Configuración", icon: "⚙️" },
 ];
+
+// ✅ Item especial AI (separado para darle estilo propio)
+const aiNavItem = {
+  to: "/vendor/ai",
+  label: "Dropship AI",
+  icon: "🤖",
+};
 
 function isActivePath(pathname: string, to: string, exact?: boolean) {
   if (exact) return pathname === to;
@@ -39,45 +47,75 @@ export default function VendorLayout() {
     };
   }, [isDrawerOpen]);
 
-  const SidebarContent = () => (
-    <>
-      <div className="text-xs font-bold uppercase tracking-wider text-gray-400">
-        Mi tienda
-      </div>
+  const SidebarContent = () => {
+    const isAiActive = isActivePath(location.pathname, aiNavItem.to);
 
-      <nav className="mt-4 space-y-1">
-        {navItems.map((item) => {
-          const active = isActivePath(location.pathname, item.to, item.exact);
-
-          return (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={`flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
-                active
-                  ? "bg-rose-600 text-white shadow-sm"
-                  : "text-gray-700 hover:bg-rose-50"
-              }`}
-            >
-              <span className="text-base">{item.icon}</span>
-              <span>{item.label}</span>
-            </Link>
-          );
-        })}
-      </nav>
-
-      <div className="mt-8 rounded-2xl bg-rose-50 p-4">
-        <div className="text-xs font-bold uppercase tracking-wider text-rose-700">
-          Tu cartera protegida
+    return (
+      <>
+        <div className="text-xs font-bold uppercase tracking-wider text-gray-400">
+          Mi tienda
         </div>
 
-        <p className="mt-2 text-xs leading-relaxed text-rose-800">
-          Tus clientes ingresan por tu enlace directo y ven solo tu tienda,
-          marca y productos.
-        </p>
-      </div>
-    </>
-  );
+        <nav className="mt-4 space-y-1">
+          {/* ✅ Link AI con estilo especial PRIMERO (destacado) */}
+          <Link
+            to={aiNavItem.to}
+            className={`flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+              isAiActive
+                ? "bg-linear-to-r from-purple-600 to-pink-600 text-white shadow-sm"
+                : "bg-linear-to-r from-purple-50 to-pink-50 text-purple-700 hover:from-purple-100 hover:to-pink-100"
+            }`}
+          >
+            <span className="text-base">{aiNavItem.icon}</span>
+            <span className="flex-1">{aiNavItem.label}</span>
+            {/* Badge NUEVO */}
+            {!isAiActive && (
+              <span className="rounded-full bg-linear-to-r from-purple-500 to-pink-500 px-2 py-0.5 text-[10px] font-bold text-white shadow">
+                NUEVO
+              </span>
+            )}
+          </Link>
+
+          {/* Separador visual */}
+          <div className="my-2 border-t border-gray-100" />
+
+          {/* Items normales */}
+          {navItems.map((item) => {
+            const active = isActivePath(
+              location.pathname,
+              item.to,
+              item.exact
+            );
+
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={`flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+                  active
+                    ? "bg-rose-600 text-white shadow-sm"
+                    : "text-gray-700 hover:bg-rose-50"
+                }`}
+              >
+                <span className="text-base">{item.icon}</span>
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="mt-8 rounded-2xl bg-rose-50 p-4">
+          <div className="text-xs font-bold uppercase tracking-wider text-rose-700">
+            Tu cartera protegida
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-rose-800">
+            Tus clientes ingresan por tu enlace directo y ven solo tu tienda,
+            marca y productos.
+          </p>
+        </div>
+      </>
+    );
+  };
 
   return (
     <div className="flex min-h-[calc(100vh-73px)]">
@@ -150,9 +188,10 @@ export default function VendorLayout() {
             Mi tienda
           </span>
         </div>
-<div className="mx-auto max-w-6xl w-full min-w-0">
-  <Outlet />
-</div>
+
+        <div className="mx-auto max-w-6xl w-full min-w-0">
+          <Outlet />
+        </div>
       </main>
     </div>
   );

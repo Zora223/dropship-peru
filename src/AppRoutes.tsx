@@ -1,13 +1,14 @@
 // src/AppRoutes.tsx
 import VendorDeliverySettingsPage from "./pages/vendor/VendorDeliverySettingsPage";
 import AdminWhatsappTemplatesPage from "./pages/admin/AdminWhatsappTemplatesPage";
-import AdminWhatsappLogsPage from "./pages/admin/AdminWhatsappLogsPage"; // 🆕 v13
+import AdminWhatsappLogsPage from "./pages/admin/AdminWhatsappLogsPage";
 import VendorOnboardingPage from "./pages/vendor/VendorOnboardingPage";
-import SupplierRegisterPage from "./pages/SupplierRegisterPage"; // 🆕 v13 - Registro proveedor
+import SupplierRegisterPage from "./pages/SupplierRegisterPage";
 import { Routes, Route } from "react-router-dom";
-import AdminSupplierPayoutsPage from "./pages/admin/AdminSupplierPayoutsPage"; // 🆕 v19
-import AdminSettingsPage from "./pages/admin/AdminSettingsPage"; // 🆕 v19
-import AdminDiscountsPage from "./pages/admin/AdminDiscountsPage"; // 🆕 v19
+import AdminSupplierPayoutsPage from "./pages/admin/AdminSupplierPayoutsPage";
+import AdminSettingsPage from "./pages/admin/AdminSettingsPage";
+import AdminDiscountsPage from "./pages/admin/AdminDiscountsPage";
+
 // Páginas legales
 import TermsPage from "./pages/legal/TermsPage";
 import PrivacyPage from "./pages/legal/PrivacyPage";
@@ -38,8 +39,8 @@ import AdminOrdersPage from "./pages/admin/AdminOrdersPage";
 import AdminPaymentMethodsPage from "./pages/admin/AdminPaymentMethodsPage";
 import AdminDeliveriesPage from "./pages/admin/AdminDeliveriesPage";
 import AdminDeliveryPaymentsPage from "./pages/admin/AdminDeliveryPaymentsPage";
-import AdminWhatsappPage from "./pages/admin/AdminWhatsappPage"; // 🆕 FASE 5B
-import { PaymentValidationsPage } from "./pages/admin/PaymentValidationsPage"; // 🆕 v16 - OCR
+import AdminWhatsappPage from "./pages/admin/AdminWhatsappPage";
+import { PaymentValidationsPage } from "./pages/admin/PaymentValidationsPage";
 
 import VendorLayout from "./layouts/VendorLayout";
 import VendorDashboard from "./pages/vendor/VendorDashboard";
@@ -51,7 +52,9 @@ import VendorThemePage from "./pages/vendor/VendorThemePage";
 import VendorSettingsPage from "./pages/vendor/VendorSettingsPage";
 import VendorReviewsPage from "./pages/vendor/VendorReviewsPage";
 import VendorAnalyticsPage from "./pages/vendor/VendorAnalyticsPage";
-import VendorPickupLocationsPage from "./pages/vendor/VendorPickupLocationsPage"; // 🆕 v13
+import VendorPickupLocationsPage from "./pages/vendor/VendorPickupLocationsPage";
+// ✅ Import Dropship AI Page
+import DropshipAIPage from "./pages/vendor/DropshipAIPage";
 
 import CustomerLayout from "./layouts/CustomerLayout";
 import CustomerDashboard from "./pages/customer/CustomerDashboard";
@@ -67,7 +70,7 @@ import DeliveryOrderDetailPage from "./pages/delivery/DeliveryOrderDetailPage";
 import DeliveryEarningsPage from "./pages/delivery/DeliveryEarningsPage";
 import DeliveryProfilePage from "./pages/delivery/DeliveryProfilePage";
 
-// 🏭 Supplier (proveedor mayorista) - 🆕 v13
+// 🏭 Supplier
 import SupplierLayout from "./layouts/SupplierLayout";
 import SupplierDashboard from "./pages/supplier/SupplierDashboard";
 import SupplierProfilePage from "./pages/supplier/SupplierProfilePage";
@@ -85,22 +88,20 @@ export default function AppRoutes() {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/crear-tienda" element={<VendorOnboardingPage />} />
-      <Route path="/registro-proveedor" element={<SupplierRegisterPage />} /> {/* 🆕 v13 */}
-      {/* ═══ Páginas legales ═══ */}
-<Route path="/terminos" element={<TermsPage />} />
-<Route path="/privacidad" element={<PrivacyPage />} />
-<Route path="/cookies" element={<CookiesPage />} />
-<Route path="/nosotros" element={<AboutPage />} />
+      <Route path="/registro-proveedor" element={<SupplierRegisterPage />} />
+
+      {/* Legales */}
+      <Route path="/terminos" element={<TermsPage />} />
+      <Route path="/privacidad" element={<PrivacyPage />} />
+      <Route path="/cookies" element={<CookiesPage />} />
+      <Route path="/nosotros" element={<AboutPage />} />
 
       {/* Tienda pública */}
       <Route path="/tienda/:slug" element={<StorePage />} />
       <Route path="/store/:slug" element={<StorePage />} />
-
       <Route path="/checkout" element={<CheckoutPage />} />
       <Route path="/payment" element={<PaymentPage />} />
       <Route path="/order-success" element={<OrderSuccessPage />} />
-
-      {/* Tracking público */}
       <Route path="/pedido/:orderNumber" element={<OrderTrackingPage />} />
 
       {/* Admin */}
@@ -113,22 +114,22 @@ export default function AppRoutes() {
         }
       >
         <Route index element={<AdminDashboard />} />
-        <Route path="settings" element={<AdminSettingsPage />} /> {/* 🆕 v19 */}
-        <Route path="discounts" element={<AdminDiscountsPage />} /> {/* 🆕 v19 */}
+        <Route path="settings" element={<AdminSettingsPage />} />
+        <Route path="discounts" element={<AdminDiscountsPage />} />
         <Route path="theme" element={<AdminThemePage />} />
         <Route path="catalog" element={<AdminCatalogPage />} />
         <Route path="suppliers" element={<AdminSuppliersPage />} />
         <Route path="users" element={<AdminUsersPage />} />
         <Route path="deliveries" element={<AdminDeliveriesPage />} />
         <Route path="delivery-payments" element={<AdminDeliveryPaymentsPage />} />
-        <Route path="supplier-payouts" element={<AdminSupplierPayoutsPage />} /> {/* 🆕 v19 */}
+        <Route path="supplier-payouts" element={<AdminSupplierPayoutsPage />} />
         <Route path="stores" element={<AdminStoresPage />} />
         <Route path="orders" element={<AdminOrdersPage />} />
         <Route path="payments" element={<AdminPaymentMethodsPage />} />
-        <Route path="payment-validations" element={<PaymentValidationsPage />} /> {/* 🆕 v16 - OCR */}
-        <Route path="whatsapp" element={<AdminWhatsappPage />} /> {/* 🆕 FASE 5B */}
-        <Route path="whatsapp-templates" element={<AdminWhatsappTemplatesPage />} /> {/* 🆕 FASE 5B Etapa 4 */}
-        <Route path="whatsapp-logs" element={<AdminWhatsappLogsPage />} /> {/* 🆕 v13 */}
+        <Route path="payment-validations" element={<PaymentValidationsPage />} />
+        <Route path="whatsapp" element={<AdminWhatsappPage />} />
+        <Route path="whatsapp-templates" element={<AdminWhatsappTemplatesPage />} />
+        <Route path="whatsapp-logs" element={<AdminWhatsappLogsPage />} />
       </Route>
 
       {/* Vendor */}
@@ -147,10 +148,12 @@ export default function AppRoutes() {
         <Route path="orders" element={<VendorOrdersPage />} />
         <Route path="reviews" element={<VendorReviewsPage />} />
         <Route path="analytics" element={<VendorAnalyticsPage />} />
-        <Route path="pickup-locations" element={<VendorPickupLocationsPage />} /> {/* 🆕 v13 */}
+        <Route path="pickup-locations" element={<VendorPickupLocationsPage />} />
         <Route path="payments" element={<VendorPaymentsPage />} />
         <Route path="theme" element={<VendorThemePage />} />
         <Route path="settings" element={<VendorSettingsPage />} />
+        {/* ✅ Ruta Dropship AI */}
+        <Route path="ai" element={<DropshipAIPage />} />
       </Route>
 
       {/* Customer */}
@@ -168,7 +171,7 @@ export default function AppRoutes() {
         <Route path="addresses" element={<CustomerAddressesPage />} />
       </Route>
 
-      {/* 🛵 Delivery */}
+      {/* Delivery */}
       <Route
         path="/delivery"
         element={
@@ -184,7 +187,7 @@ export default function AppRoutes() {
         <Route path="profile" element={<DeliveryProfilePage />} />
       </Route>
 
-      {/* 🏭 Supplier - 🆕 v13 */}
+      {/* Supplier */}
       <Route
         path="/supplier"
         element={

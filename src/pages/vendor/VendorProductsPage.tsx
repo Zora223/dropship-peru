@@ -1,3 +1,4 @@
+// src/pages/vendor/VendorProductsPage.tsx
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMyStore } from "../../hooks/useMyStore";
@@ -11,6 +12,8 @@ import {
 import type { VendorProductWithRealStock } from "../../lib/vendor-products";
 import ProductForm from "../../components/vendor/ProductForm";
 import EditPriceModal from "../../components/vendor/EditPriceModal";
+// ✅ CAMBIO 1 — Import DropshipAIModal
+import DropshipAIModal from "../../components/vendor/DropshipAIModal";
 import type { DbProduct } from "../../types/database";
 
 type Tab = "all" | "imported" | "own";
@@ -65,8 +68,13 @@ export default function VendorProductsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // 🆕 v20.8 - Modal de edición de precio
-  const [editingPrice, setEditingPrice] = useState<VendorProductWithRealStock | null>(null);
+  // v20.8 — Modal de edición de precio
+  const [editingPrice, setEditingPrice] =
+    useState<VendorProductWithRealStock | null>(null);
+
+  // ✅ CAMBIO 2 — Estado para el modal de AI
+  const [aiProduct, setAiProduct] =
+    useState<VendorProductWithRealStock | null>(null);
 
   const loadProducts = async () => {
     if (!store) return;
@@ -181,7 +189,7 @@ export default function VendorProductsPage() {
     setEditing(null);
   };
 
-  // 🆕 v20.8 - Guardar nuevo precio
+  // v20.8 — Guardar nuevo precio
   const handleSavePrice = async (newPrice: number) => {
     if (!editingPrice) return;
     try {
@@ -246,6 +254,14 @@ export default function VendorProductsPage() {
         </div>
 
         <div className="flex gap-2">
+          {/* ✅ CAMBIO 3 — Botón rápido AI en el header */}
+          <Link
+            to="/vendor/ai"
+            className="rounded-full bg-gradient-to-r from-purple-500 to-pink-500 px-4 py-2.5 text-sm font-semibold text-white shadow transition hover:from-purple-600 hover:to-pink-600"
+          >
+            🤖 Dropship AI
+          </Link>
+
           <Link
             to="/vendor/catalog"
             className="rounded-full bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50"
@@ -326,16 +342,33 @@ export default function VendorProductsPage() {
         />
       )}
 
-      {/* 🆕 Modal de edición de precio */}
+      {/* Modal de edición de precio */}
       <EditPriceModal
         isOpen={!!editingPrice}
         productName={editingPrice?.name ?? ""}
         currentPrice={Number(editingPrice?.price ?? 0)}
         basePrice={Number(editingPrice?.base_price ?? 0)}
-        suggestedPrice={Number(editingPrice?.suggested_price ?? editingPrice?.price ?? 0)}
+        suggestedPrice={Number(
+          editingPrice?.suggested_price ?? editingPrice?.price ?? 0
+        )}
         onClose={() => setEditingPrice(null)}
         onSave={handleSavePrice}
       />
+
+      {/* ✅ CAMBIO 4 — Modal Dropship AI */}
+      {aiProduct && (
+        <DropshipAIModal
+          isOpen={!!aiProduct}
+          onClose={() => setAiProduct(null)}
+          product={{
+            id: aiProduct.id,
+            name: aiProduct.name,
+            description: aiProduct.description ?? "",
+            price: Number(aiProduct.price),
+            category: aiProduct.category ?? "",
+          }}
+        />
+      )}
 
       {/* Empty state */}
       {filtered.length === 0 ? (
@@ -403,8 +436,12 @@ export default function VendorProductsPage() {
                     const isCatalog = product.source === "catalog";
                     const basePrice = Number(product.base_price ?? 0);
                     const currentPrice = Number(product.price);
-                    const margin = basePrice > 0 ? currentPrice - basePrice : 0;
-                    const marginPct = basePrice > 0 ? ((margin / basePrice) * 100).toFixed(0) : null;
+                    const margin =
+                      basePrice > 0 ? currentPrice - basePrice : 0;
+                    const marginPct =
+                      basePrice > 0
+                        ? ((margin / basePrice) * 100).toFixed(0)
+                        : null;
 
                     return (
                       <tr
@@ -435,6 +472,7 @@ export default function VendorProductsPage() {
                             </div>
                           </div>
                         </td>
+
                         <td className="px-6 py-4">
                           {isCatalog ? (
                             <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2.5 py-0.5 text-xs font-semibold text-purple-700">
@@ -446,6 +484,7 @@ export default function VendorProductsPage() {
                             </span>
                           )}
                         </td>
+
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1">
                             <div className="flex items-center gap-2">
@@ -459,8 +498,6 @@ export default function VendorProductsPage() {
                                 </span>
                               )}
                             </div>
-
-                            {/* 🆕 Info de margen para productos del catálogo */}
                             {isCatalog && basePrice > 0 && (
                               <div className="text-[10px] text-gray-500">
                                 <span title="Costo del proveedor">
@@ -475,6 +512,7 @@ export default function VendorProductsPage() {
                             )}
                           </div>
                         </td>
+
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1">
                             <span
@@ -482,7 +520,6 @@ export default function VendorProductsPage() {
                             >
                               {stockConfig.emoji} {stockConfig.label}
                             </span>
-
                             {isCatalog && (
                               <span
                                 className="text-[10px] font-medium text-purple-600"
@@ -491,7 +528,6 @@ export default function VendorProductsPage() {
                                 🔒 Stock del marketplace
                               </span>
                             )}
-
                             {product.catalog_inactive && (
                               <span className="text-[10px] font-bold text-red-600">
                                 ❌ Desactivado por marketplace
@@ -499,6 +535,7 @@ export default function VendorProductsPage() {
                             )}
                           </div>
                         </td>
+
                         <td className="px-6 py-4">
                           <button
                             onClick={() =>
@@ -513,9 +550,20 @@ export default function VendorProductsPage() {
                             {product.is_active ? "Activo" : "Inactivo"}
                           </button>
                         </td>
+
+                        {/* ✅ CAMBIO 5A — Botones desktop con AI */}
                         <td className="px-6 py-4">
                           <div className="flex justify-end gap-2">
-                            {/* 🆕 Botón editar precio (para AMBOS tipos) */}
+                            {/* Botón AI */}
+                            <button
+                              onClick={() => setAiProduct(product)}
+                              className="rounded-full bg-gradient-to-r from-purple-500 to-pink-500 px-3 py-1.5 text-xs font-bold text-white transition hover:from-purple-600 hover:to-pink-600"
+                              title="Generar contenido de marketing con IA"
+                            >
+                              🤖 AI
+                            </button>
+
+                            {/* Botón editar precio */}
                             <button
                               onClick={() => setEditingPrice(product)}
                               className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100"
@@ -524,7 +572,7 @@ export default function VendorProductsPage() {
                               💰 Precio
                             </button>
 
-                            {/* Editar completo (solo productos propios) */}
+                            {/* Editar completo (solo propios) */}
                             {product.source === "own" && (
                               <button
                                 onClick={() => openEdit(product)}
@@ -533,6 +581,7 @@ export default function VendorProductsPage() {
                                 Editar
                               </button>
                             )}
+
                             <button
                               onClick={() => handleDelete(product)}
                               className="rounded-full bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 transition hover:bg-red-100"
@@ -558,7 +607,10 @@ export default function VendorProductsPage() {
               const basePrice = Number(product.base_price ?? 0);
               const currentPrice = Number(product.price);
               const margin = basePrice > 0 ? currentPrice - basePrice : 0;
-              const marginPct = basePrice > 0 ? ((margin / basePrice) * 100).toFixed(0) : null;
+              const marginPct =
+                basePrice > 0
+                  ? ((margin / basePrice) * 100).toFixed(0)
+                  : null;
 
               const discount =
                 product.compare_at_price &&
@@ -602,7 +654,6 @@ export default function VendorProductsPage() {
                           ✨ Propio
                         </span>
                       )}
-
                       {discount && (
                         <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white shadow">
                           -{discount}%
@@ -664,7 +715,6 @@ export default function VendorProductsPage() {
                       )}
                     </div>
 
-                    {/* 🆕 Info de margen para productos del catálogo */}
                     {isCatalog && basePrice > 0 && (
                       <div className="mt-1 text-[10px] text-gray-500">
                         Costo: S/ {basePrice.toFixed(2)}
@@ -688,9 +738,17 @@ export default function VendorProductsPage() {
                       </div>
                     )}
 
-                    {/* Acciones */}
+                    {/* ✅ CAMBIO 5B — Botones móvil con AI */}
                     <div className="mt-4 flex flex-wrap gap-2">
-                      {/* 🆕 Botón editar precio (siempre visible) */}
+                      {/* Botón AI */}
+                      <button
+                        onClick={() => setAiProduct(product)}
+                        className="flex-1 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 py-2 text-xs font-bold text-white transition hover:from-purple-600 hover:to-pink-600"
+                      >
+                        🤖 AI
+                      </button>
+
+                      {/* Botón precio */}
                       <button
                         onClick={() => setEditingPrice(product)}
                         className="flex-1 rounded-xl bg-emerald-500 py-2 text-xs font-bold text-white transition hover:bg-emerald-600"
