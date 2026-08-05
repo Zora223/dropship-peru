@@ -12,8 +12,9 @@ import {
 import type { VendorProductWithRealStock } from "../../lib/vendor-products";
 import ProductForm from "../../components/vendor/ProductForm";
 import EditPriceModal from "../../components/vendor/EditPriceModal";
-// ✅ CAMBIO 1 — Import DropshipAIModal
 import DropshipAIModal from "../../components/vendor/DropshipAIModal";
+import PhotoStudioAIModal from "../../components/vendor/PhotoStudioAIModal";
+import { getMySubscription, type AISubscription } from "../../lib/dropship-ai";
 import type { DbProduct } from "../../types/database";
 
 type Tab = "all" | "imported" | "own";
@@ -72,9 +73,16 @@ export default function VendorProductsPage() {
   const [editingPrice, setEditingPrice] =
     useState<VendorProductWithRealStock | null>(null);
 
-  // ✅ CAMBIO 2 — Estado para el modal de AI
+  // Modal Dropship AI (texto)
   const [aiProduct, setAiProduct] =
     useState<VendorProductWithRealStock | null>(null);
+
+  // Modal Photo Studio AI (imágenes)
+  const [photoAiProduct, setPhotoAiProduct] =
+    useState<VendorProductWithRealStock | null>(null);
+  const [aiSubscription, setAiSubscription] = useState<AISubscription | null>(
+    null
+  );
 
   const loadProducts = async () => {
     if (!store) return;
@@ -93,10 +101,24 @@ export default function VendorProductsPage() {
     }
   };
 
+  // Cargar subscripción AI (para saber créditos)
+  const loadAISubscription = async () => {
+    try {
+      const sub = await getMySubscription();
+      setAiSubscription(sub);
+    } catch (err) {
+      console.error("Error cargando subscripción AI:", err);
+    }
+  };
+
   useEffect(() => {
     if (store) loadProducts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store]);
+
+  useEffect(() => {
+    loadAISubscription();
+  }, []);
 
   const counts = useMemo(() => {
     return {
@@ -254,10 +276,10 @@ export default function VendorProductsPage() {
         </div>
 
         <div className="flex gap-2">
-          {/* ✅ CAMBIO 3 — Botón rápido AI en el header */}
+          {/* Botón rápido Dropship AI */}
           <Link
             to="/vendor/ai"
-            className="rounded-full bg-gradient-to-r from-purple-500 to-pink-500 px-4 py-2.5 text-sm font-semibold text-white shadow transition hover:from-purple-600 hover:to-pink-600"
+            className="rounded-full bg-linear-to-r from-purple-500 to-pink-500 px-4 py-2.5 text-sm font-semibold text-white shadow transition hover:from-purple-600 hover:to-pink-600"
           >
             🤖 Dropship AI
           </Link>
@@ -355,17 +377,31 @@ export default function VendorProductsPage() {
         onSave={handleSavePrice}
       />
 
-      {/* ✅ CAMBIO 4 — Modal Dropship AI */}
+      {/* Modal Dropship AI (texto) */}
       {aiProduct && (
         <DropshipAIModal
           isOpen={!!aiProduct}
           onClose={() => setAiProduct(null)}
-          product={{
-            id: aiProduct.id,
-            name: aiProduct.name,
-            description: aiProduct.description ?? "",
-            price: Number(aiProduct.price),
-            category: aiProduct.category ?? "",
+          product={aiProduct}
+        />
+      )}
+
+      {/* Modal Photo Studio AI (imágenes) */}
+      {photoAiProduct && aiSubscription && (
+        <PhotoStudioAIModal
+          isOpen={!!photoAiProduct}
+          onClose={() => setPhotoAiProduct(null)}
+          vendorId={aiSubscription.vendor_id}
+          productId={photoAiProduct.id}
+          productName={photoAiProduct.name}
+          productDescription={photoAiProduct.description || undefined}
+          productImageUrl={normalizeImages(photoAiProduct.images)[0]}
+          creditsRemaining={aiSubscription.credits_remaining}
+          plan={aiSubscription.plan}
+          onCreditsUpdate={(newCredits) => {
+            setAiSubscription((prev) =>
+              prev ? { ...prev, credits_remaining: newCredits } : prev
+            );
           }}
         />
       )}
@@ -551,16 +587,25 @@ export default function VendorProductsPage() {
                           </button>
                         </td>
 
-                        {/* ✅ CAMBIO 5A — Botones desktop con AI */}
+                        {/* Botones desktop */}
                         <td className="px-6 py-4">
                           <div className="flex justify-end gap-2">
-                            {/* Botón AI */}
+                            {/* Botón AI (texto) */}
                             <button
                               onClick={() => setAiProduct(product)}
-                              className="rounded-full bg-gradient-to-r from-purple-500 to-pink-500 px-3 py-1.5 text-xs font-bold text-white transition hover:from-purple-600 hover:to-pink-600"
+                              className="rounded-full bg-linear-to-r from-purple-500 to-pink-500 px-3 py-1.5 text-xs font-bold text-white transition hover:from-purple-600 hover:to-pink-600"
                               title="Generar contenido de marketing con IA"
                             >
                               🤖 AI
+                            </button>
+
+                            {/* Botón Photo Studio AI */}
+                            <button
+                              onClick={() => setPhotoAiProduct(product)}
+                              className="rounded-full bg-linear-to-r from-pink-500 to-orange-500 px-3 py-1.5 text-xs font-bold text-white transition hover:from-pink-600 hover:to-orange-600"
+                              title="Photo Studio AI - Generar imágenes profesionales"
+                            >
+                              📸 Foto
                             </button>
 
                             {/* Botón editar precio */}
@@ -738,39 +783,56 @@ export default function VendorProductsPage() {
                       </div>
                     )}
 
-                    {/* ✅ CAMBIO 5B — Botones móvil con AI */}
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {/* Botón AI */}
+                    {/* Botones móvil */}
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      {/* Botón AI (texto) */}
                       <button
                         onClick={() => setAiProduct(product)}
-                        className="flex-1 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 py-2 text-xs font-bold text-white transition hover:from-purple-600 hover:to-pink-600"
+                        className="rounded-xl bg-linear-to-r from-purple-500 to-pink-500 py-2 text-xs font-bold text-white transition hover:from-purple-600 hover:to-pink-600"
                       >
-                        🤖 AI
+                        🤖 AI Texto
+                      </button>
+
+                      {/* Botón Photo Studio AI */}
+                      <button
+                        onClick={() => setPhotoAiProduct(product)}
+                        className="rounded-xl bg-linear-to-r from-pink-500 to-orange-500 py-2 text-xs font-bold text-white transition hover:from-pink-600 hover:to-orange-600"
+                      >
+                        📸 AI Foto
                       </button>
 
                       {/* Botón precio */}
                       <button
                         onClick={() => setEditingPrice(product)}
-                        className="flex-1 rounded-xl bg-emerald-500 py-2 text-xs font-bold text-white transition hover:bg-emerald-600"
+                        className="rounded-xl bg-emerald-500 py-2 text-xs font-bold text-white transition hover:bg-emerald-600"
                       >
                         💰 Precio
                       </button>
 
-                      {product.source === "own" && (
+                      {product.source === "own" ? (
                         <button
                           onClick={() => openEdit(product)}
-                          className="flex-1 rounded-xl bg-gray-900 py-2 text-xs font-bold text-white transition hover:bg-gray-800"
+                          className="rounded-xl bg-gray-900 py-2 text-xs font-bold text-white transition hover:bg-gray-800"
                         >
                           ✏️ Editar
                         </button>
+                      ) : (
+                        <button
+                          onClick={() => handleDelete(product)}
+                          className="rounded-xl bg-red-50 py-2 text-xs font-bold text-red-700 transition hover:bg-red-100"
+                        >
+                          🗑 Quitar
+                        </button>
                       )}
 
-                      <button
-                        onClick={() => handleDelete(product)}
-                        className="rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-700 transition hover:bg-red-100"
-                      >
-                        🗑
-                      </button>
+                      {product.source === "own" && (
+                        <button
+                          onClick={() => handleDelete(product)}
+                          className="col-span-2 rounded-xl bg-red-50 py-2 text-xs font-bold text-red-700 transition hover:bg-red-100"
+                        >
+                          🗑 Eliminar producto
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
