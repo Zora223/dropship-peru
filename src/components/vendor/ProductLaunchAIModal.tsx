@@ -1,5 +1,6 @@
 // src/components/vendor/ProductLaunchAIModal.tsx
 // 🍌 Product Launch AI - Wizard con progreso animado
+// v22.2.1 - Con debug + flex layout + safety
 
 import { useState, useEffect } from "react";
 import {
@@ -24,8 +25,8 @@ type Step = "confirm" | "generating" | "completed" | "error";
 const GENERATION_STAGES = [
   { pct: 10, icon: "🔍", label: "Analizando tu producto...", duration: 2000 },
   { pct: 30, icon: "🎯", label: "Detectando categoría automáticamente...", duration: 2000 },
-  { pct: 50, icon: "🍌", label: "Nano Banana está creando magia...", duration: 8000 },
-  { pct: 70, icon: "💾", label: "Guardando imagen profesional...", duration: 2000 },
+  { pct: 50, icon: "🍌", label: "Groq está creando magia...", duration: 8000 },
+  { pct: 70, icon: "💾", label: "Guardando contenido...", duration: 2000 },
   { pct: 85, icon: "✍️", label: "Generando captions virales...", duration: 3000 },
   { pct: 95, icon: "🏷️", label: "Optimizando hashtags para Perú...", duration: 2000 },
   { pct: 100, icon: "✨", label: "¡Kit completo listo!", duration: 500 },
@@ -51,6 +52,26 @@ export default function ProductLaunchAIModal({
   const isUnlimited = plan === "business";
   const canAfford = isUnlimited || credits >= CREDITS_COST;
 
+  // 🔥 DEBUG: log de props cada vez que se abre
+  useEffect(() => {
+    if (isOpen) {
+      console.log("🍌 [Launch AI Modal] Abierto con:", {
+        step,
+        credits: initialCredits,
+        plan,
+        canAfford,
+        params: {
+          product_id: params.product_id,
+          product_name: params.product_name,
+          product_price: params.product_price,
+          product_price_type: typeof params.product_price,
+          input_image_url: params.input_image_url,
+          has_image: !!params.input_image_url,
+        },
+      });
+    }
+  }, [isOpen, initialCredits, plan]);
+
   useEffect(() => {
     if (isOpen) {
       setStep("confirm");
@@ -62,7 +83,6 @@ export default function ProductLaunchAIModal({
     }
   }, [isOpen, initialCredits]);
 
-  // Animación de progreso simulada mientras espera respuesta real
   useEffect(() => {
     if (step !== "generating") return;
 
@@ -88,14 +108,16 @@ export default function ProductLaunchAIModal({
     setError(null);
 
     try {
+      console.log("🚀 [Launch AI] Enviando request...");
       const response = await generateLaunchKit(params);
+      console.log("✅ [Launch AI] Respuesta:", response);
+
       setResultKit(response.kit);
       setCredits(response.credits_remaining);
       onCreditsUpdate?.(response.credits_remaining);
       setProgress(100);
       setCurrentStage(GENERATION_STAGES.length - 1);
 
-      // Pequeña pausa para que el usuario vea el 100%
       setTimeout(() => {
         setStep("completed");
         onSuccess?.(response.kit);
@@ -103,6 +125,7 @@ export default function ProductLaunchAIModal({
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Error al generar el kit";
+      console.error("🔴 [Launch AI] Error:", err);
       setError(message);
       setStep("error");
     }
@@ -119,7 +142,6 @@ export default function ProductLaunchAIModal({
 
   if (!isOpen) return null;
 
-  // Si está completado, mostrar el viewer del kit
   if (step === "completed" && resultKit) {
     return (
       <ProductLaunchKitViewer
@@ -130,17 +152,20 @@ export default function ProductLaunchAIModal({
     );
   }
 
+  // 🔥 Safety: precio siempre número
+  const safePrice = Number(params.product_price) || 0;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
       onClick={step === "confirm" ? handleClose : undefined}
     >
       <div
-        className="relative w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-3xl bg-white shadow-2xl"
+        className="relative w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-3xl bg-white shadow-2xl flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header con gradiente */}
-        <div className="relative bg-linear-to-br from-purple-600 via-pink-600 to-orange-500 p-6 text-white">
+        {/* Header */}
+        <div className="relative bg-linear-to-br from-purple-600 via-pink-600 to-orange-500 p-6 text-white shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="text-4xl animate-bounce">🍌</div>
@@ -164,7 +189,6 @@ export default function ProductLaunchAIModal({
             )}
           </div>
 
-          {/* Créditos badge */}
           <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/20 px-4 py-1.5 backdrop-blur">
             <span className="text-xs font-bold">
               {isUnlimited ? "♾️ ILIMITADO" : `⚡ ${credits} créditos`}
@@ -172,12 +196,11 @@ export default function ProductLaunchAIModal({
           </div>
         </div>
 
-        {/* Body */}
-        <div className="p-6 overflow-y-auto" style={{ minHeight: '400px' }}>
+        {/* Body - CON FLEX-1 PARA OCUPAR EL ESPACIO */}
+        <div className="flex-1 overflow-y-auto p-6 min-h-0">
           {/* STEP 1: CONFIRMAR */}
           {step === "confirm" && (
             <div className="space-y-6">
-              {/* Título */}
               <div className="text-center">
                 <h3 className="text-2xl font-black text-gray-900">
                   ✨ Kit Completo de Marketing
@@ -189,22 +212,26 @@ export default function ProductLaunchAIModal({
 
               {/* Preview del producto */}
               <div className="rounded-2xl bg-gray-50 p-4 flex items-center gap-4">
-                {params.input_image_url && (
+                {params.input_image_url ? (
                   <img
                     src={params.input_image_url}
                     alt={params.product_name}
                     className="h-20 w-20 rounded-xl object-cover shadow-md"
                   />
+                ) : (
+                  <div className="h-20 w-20 rounded-xl bg-gray-200 flex items-center justify-center text-3xl">
+                    📦
+                  </div>
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-bold uppercase tracking-wider text-gray-500">
                     Producto
                   </div>
                   <h4 className="mt-0.5 truncate text-lg font-bold text-gray-900">
-                    {params.product_name}
+                    {params.product_name || "Sin nombre"}
                   </h4>
                   <div className="text-sm font-semibold text-purple-600">
-                    S/ {params.product_price.toFixed(2)}
+                    S/ {safePrice.toFixed(2)}
                   </div>
                 </div>
               </div>
@@ -216,13 +243,14 @@ export default function ProductLaunchAIModal({
                 </h4>
                 <ul className="space-y-2 text-sm">
                   {[
-                    { icon: "📸", label: "Imagen publicitaria PRO (nivel agencia)" },
+                    { icon: "📸", label: "Imagen del producto lista" },
                     { icon: "🎯", label: "Detección automática de categoría" },
                     { icon: "📝", label: "Caption para Instagram (viral)" },
                     { icon: "📘", label: "Caption para Facebook" },
                     { icon: "🏷️", label: "15 hashtags optimizados para Perú" },
                     { icon: "💬", label: "Mensaje WhatsApp Broadcast" },
                     { icon: "📧", label: "Email marketing profesional" },
+                    { icon: "🚀", label: "Botones 1-tap para publicar" },
                   ].map((item, i) => (
                     <li key={i} className="flex items-center gap-2 text-gray-800">
                       <span className="text-lg">{item.icon}</span>
@@ -247,19 +275,17 @@ export default function ProductLaunchAIModal({
                 </div>
               </div>
 
-              {/* Error de créditos */}
               {!canAfford && (
                 <div className="rounded-xl border-2 border-red-200 bg-red-50 p-4 text-center">
                   <p className="text-sm font-bold text-red-800">
                     ⚠️ Créditos insuficientes
                   </p>
                   <p className="mt-1 text-xs text-red-600">
-                    Necesitas {CREDITS_COST} créditos y tienes {credits}. Actualiza tu plan.
+                    Necesitas {CREDITS_COST} créditos y tienes {credits}.
                   </p>
                 </div>
               )}
 
-              {/* Botones */}
               <div className="flex gap-3">
                 <button
                   onClick={handleClose}
@@ -270,15 +296,14 @@ export default function ProductLaunchAIModal({
                 <button
                   onClick={handleGenerate}
                   disabled={!canAfford}
-                  className="flex-1 rounded-xl bg-linear-to-r from-purple-600 via-pink-600 to-orange-500 py-3 text-sm font-black text-white shadow-lg transition hover:shadow-xl active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-lg"
+                  className="flex-1 rounded-xl bg-linear-to-r from-purple-600 via-pink-600 to-orange-500 py-3 text-sm font-black text-white shadow-lg transition hover:shadow-xl active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   🚀 GENERAR KIT AHORA
                 </button>
               </div>
 
-              {/* Info tecnología */}
               <div className="text-center text-xs text-gray-400">
-                🍌 Nano Banana (Gemini 2.5) + 🧠 Llama 3.3 · Tiempo estimado: 30-45s
+                🍌 Groq Llama 3.3 · Tiempo estimado: 15-30s
               </div>
             </div>
           )}
@@ -286,13 +311,11 @@ export default function ProductLaunchAIModal({
           {/* STEP 2: GENERANDO */}
           {step === "generating" && (
             <div className="py-8 space-y-6">
-              {/* Animación central */}
               <div className="text-center">
                 <div className="relative inline-block">
                   <div className="text-7xl animate-bounce">
                     {GENERATION_STAGES[currentStage].icon}
                   </div>
-                  {/* Círculo pulsante */}
                   <div className="absolute inset-0 rounded-full bg-linear-to-r from-purple-400/30 to-pink-400/30 animate-ping" />
                 </div>
 
@@ -300,11 +323,10 @@ export default function ProductLaunchAIModal({
                   {GENERATION_STAGES[currentStage].label}
                 </h3>
                 <p className="mt-2 text-sm text-gray-500">
-                  Esto tomará entre 30 y 60 segundos
+                  Esto tomará entre 15 y 30 segundos
                 </p>
               </div>
 
-              {/* Barra de progreso */}
               <div>
                 <div className="mb-2 flex items-center justify-between text-sm">
                   <span className="font-bold text-gray-700">Progreso</span>
@@ -318,7 +340,6 @@ export default function ProductLaunchAIModal({
                 </div>
               </div>
 
-              {/* Lista de stages */}
               <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
                 {GENERATION_STAGES.map((stage, index) => {
                   const isCompleted = index < currentStage;
@@ -351,10 +372,9 @@ export default function ProductLaunchAIModal({
                 })}
               </div>
 
-              {/* Tip */}
               <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 text-center">
                 <p className="text-xs text-blue-800">
-                  💡 <strong>Tip:</strong> No cierres esta ventana. Puedes minimizar el navegador si quieres.
+                  💡 <strong>Tip:</strong> No cierres esta ventana.
                 </p>
               </div>
             </div>
