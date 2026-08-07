@@ -12,7 +12,9 @@ import {
   suggestSku,
   type QualityIssue,
 } from "../../lib/product-quality";
-import ColorPicker, { type ProductColor } from "./ColorPicker"; // 🆕
+import ColorPicker, { type ProductColor } from "./ColorPicker";
+import ProductLaunchAIModal from "./ProductLaunchAIModal"; // 🆕
+import { getAISubscription } from "../../lib/ai-subscription"; // 🆕 (ver nota abajo)
 import type { DbProduct } from "../../types/database";
 
 interface ProductFormProps {
@@ -55,9 +57,14 @@ export default function ProductForm({
   const [showAllIssues, setShowAllIssues] = useState(false);
   const [customCategory, setCustomCategory] = useState(false);
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
-
-  // 🆕 Estado de colores
   const [colors, setColors] = useState<ProductColor[]>([]);
+
+  // 🆕 Estados Launch AI
+  const [showLaunchOffer, setShowLaunchOffer] = useState(false);
+  const [showLaunchModal, setShowLaunchModal] = useState(false);
+  const [savedProduct, setSavedProduct] = useState<DbProduct | null>(null);
+  const [aiCredits, setAiCredits] = useState(0);
+  const [aiPlan, setAiPlan] = useState<string>("starter");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isEditing = Boolean(initial);
@@ -81,7 +88,6 @@ export default function ProductForm({
       });
       setExistingImages(initial.images ?? []);
 
-      // 🆕 Cargar colores si existen
       const initialColors = (initial as any).colors;
       if (Array.isArray(initialColors)) {
         setColors(initialColors.filter((c: any) => c && c.name && c.hex));
@@ -338,7 +344,7 @@ export default function ProductForm({
         featured: form.featured,
         images: allImages,
         quality_score: quality.score,
-        colors: colors, // 🆕
+        colors: colors,
       };
 
       let result: DbProduct;
@@ -368,6 +374,27 @@ export default function ProductForm({
       );
 
       onSaved(result);
+
+      // 🆕 LAUNCH AI OFFER — Solo si tiene imágenes y es producto nuevo o recién publicado
+      if (allImages.length > 0 && form.is_active) {
+        setSavedProduct(result);
+
+        // Cargar suscripción AI del vendor
+        try {
+          const sub = await getAISubscription();
+          setAiCredits(sub?.credits_remaining ?? 0);
+          setAiPlan(sub?.plan ?? "starter");
+        } catch (err) {
+          console.warn("No se pudo cargar suscripción AI:", err);
+          setAiCredits(0);
+          setAiPlan("starter");
+        }
+
+        setShowLaunchOffer(true);
+        setSaving(false);
+        return; // No cerramos el modal aún
+      }
+
       onClose();
     } catch (err) {
       console.error(err);
@@ -378,6 +405,22 @@ export default function ProductForm({
     } finally {
       setSaving(false);
     }
+  };
+
+  // 🆕 Handlers Launch AI
+  const handleAcceptLaunchAI = () => {
+    setShowLaunchOffer(false);
+    setShowLaunchModal(true);
+  };
+
+  const handleSkipLaunchAI = () => {
+    setShowLaunchOffer(false);
+    onClose();
+  };
+
+  const handleLaunchAIClose = () => {
+    setShowLaunchModal(false);
+    onClose();
   };
 
   // ========== UI HELPERS ==========
@@ -427,565 +470,651 @@ export default function ProductForm({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="max-h-[95vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white p-6">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">
-              {isEditing ? "Editar producto" : "Nuevo producto propio"}
-            </h2>
-            <p className="mt-1 text-xs text-gray-500">
-              Completa todos los campos para publicar con calidad ⭐
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-2xl text-gray-400 hover:text-gray-600"
-            aria-label="Cerrar"
-          >
-            ×
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-5 p-6">
-          {/* PANEL DE CALIDAD */}
+    <>
+      {/* 🆕 POPUP DE OFERTA LAUNCH AI */}
+      {showLaunchOffer && savedProduct && (
+        <div
+         className="fixed inset-0 z-55 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={handleSkipLaunchAI}
+        >
           <div
-            id="quality-panel"
-            className={`sticky top-22 z-5 rounded-2xl bg-linear-to-br ${getScoreColorClasses()} p-4 shadow-lg`}
+            className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">{quality.levelEmoji}</span>
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-wider opacity-90">
-                    Calidad del producto
-                  </div>
-                  <div className="text-lg font-black leading-tight">
-                    {quality.score}% · {quality.levelLabel}
-                  </div>
+            {/* Header animado */}
+            <div className="relative bg-linear-to-br from-purple-600 via-pink-600 to-orange-500 p-8 text-center text-white overflow-hidden">
+              <div className="absolute -top-8 -right-8 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
+              <div className="absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
+
+              <div className="relative">
+                <div className="text-6xl mb-3 animate-bounce">🍌</div>
+                <h3 className="text-2xl font-black">
+                  ¡Producto publicado!
+                </h3>
+                <p className="mt-2 text-sm opacity-90">
+                  ¿Quieres que la AI prepare TODO el marketing por ti?
+                </p>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              <div className="rounded-xl bg-linear-to-br from-purple-50 to-pink-50 border-2 border-purple-100 p-4">
+                <div className="text-xs font-bold uppercase tracking-wider text-purple-700 mb-2">
+                  🎁 Product Launch AI incluye:
                 </div>
+                <ul className="space-y-1.5 text-sm text-gray-700">
+                  <li>📸 Imagen publicitaria PRO</li>
+                  <li>📝 Captions Instagram & Facebook</li>
+                  <li>🏷️ 15 hashtags optimizados</li>
+                  <li>💬 Mensaje WhatsApp Broadcast</li>
+                  <li>📧 Email marketing completo</li>
+                </ul>
               </div>
 
-              <div className="text-right">
-                {quality.errorCount > 0 && (
-                  <div className="text-xs font-bold">
-                    ❌ {quality.errorCount} error
-                    {quality.errorCount !== 1 && "es"}
-                  </div>
-                )}
-                {quality.warningCount > 0 && (
-                  <div className="text-xs font-bold opacity-90">
-                    ⚠️ {quality.warningCount} sugerencia
-                    {quality.warningCount !== 1 && "s"}
-                  </div>
-                )}
+              <div className="text-center text-xs text-gray-500">
+                ⚡ Solo 15 créditos · ⏱️ 30-45 segundos
               </div>
-            </div>
 
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/20">
-              <div
-                className={`h-full ${getScoreBarColor()} transition-all duration-500 ease-out`}
-                style={{ width: `${quality.score}%` }}
-              />
-            </div>
-
-            <div className="mt-2 text-xs font-medium">
-              {quality.level === "poor" &&
-                "🔒 Necesitas 60%+ para publicar el producto"}
-              {quality.level === "fair" &&
-                "✓ Ya puedes publicar, pero mejora los puntos marcados para vender más"}
-              {quality.level === "good" &&
-                "🎯 ¡Bien! Tu producto está listo para vender"}
-              {quality.level === "excellent" &&
-                "🌟 ¡Excelente calidad! Tu producto destacará"}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={handleSkipLaunchAI}
+                  className="flex-1 rounded-xl border-2 border-gray-200 py-3 text-sm font-bold text-gray-700 transition hover:bg-gray-50"
+                >
+                  Ahora no
+                </button>
+                <button
+                  onClick={handleAcceptLaunchAI}
+                  className="flex-1 rounded-xl bg-linear-to-r from-purple-600 via-pink-600 to-orange-500 py-3 text-sm font-black text-white shadow-lg transition hover:shadow-xl active:scale-95"
+                >
+                  🚀 Sí, Launch AI
+                </button>
+              </div>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* ISSUES */}
-          {visibleIssues.length > 0 && (
-            <div className="space-y-1.5">
-              {visibleIssues
-                .slice(0, showAllIssues ? undefined : 5)
-                .map((issue, i) => (
-                  <div
-                    key={i}
-                    className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${getIssueClasses(
-                      issue.type
-                    )}`}
-                  >
-                    <span className="shrink-0">{getIssueIcon(issue.type)}</span>
-                    <span className="flex-1">{issue.message}</span>
+      {/* 🆕 MODAL LAUNCH AI */}
+      {showLaunchModal && savedProduct && (
+        <ProductLaunchAIModal
+          isOpen={showLaunchModal}
+          onClose={handleLaunchAIClose}
+          params={{
+            product_id: savedProduct.id,
+            product_name: savedProduct.name,
+            product_description: savedProduct.description ?? "",
+            product_price: Number(savedProduct.price),
+            product_category: savedProduct.category ?? undefined,
+            input_image_url: savedProduct.images?.[0] ?? "",
+          }}
+          creditsRemaining={aiCredits}
+          plan={aiPlan}
+          onCreditsUpdate={setAiCredits}
+        />
+      )}
+
+      {/* MODAL PRINCIPAL (todo lo que ya tenías) */}
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+        onClick={onClose}
+      >
+        <div
+          className="max-h-[95vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white p-6">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">
+                {isEditing ? "Editar producto" : "Nuevo producto propio"}
+              </h2>
+              <p className="mt-1 text-xs text-gray-500">
+                Completa todos los campos para publicar con calidad ⭐
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-2xl text-gray-400 hover:text-gray-600"
+              aria-label="Cerrar"
+            >
+              ×
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5 p-6">
+            {/* PANEL DE CALIDAD */}
+            <div
+              id="quality-panel"
+              className={`sticky top-22 z-5 rounded-2xl bg-linear-to-br ${getScoreColorClasses()} p-4 shadow-lg`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">{quality.levelEmoji}</span>
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wider opacity-90">
+                      Calidad del producto
+                    </div>
+                    <div className="text-lg font-black leading-tight">
+                      {quality.score}% · {quality.levelLabel}
+                    </div>
                   </div>
-                ))}
-              {!showAllIssues && quality.issues.length > 5 && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllIssues(true)}
-                  className="text-xs font-semibold text-gray-500 hover:text-gray-700 underline"
-                >
-                  Ver {quality.issues.length - 5} más...
-                </button>
-              )}
-              {showAllIssues && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllIssues(false)}
-                  className="text-xs font-semibold text-gray-500 hover:text-gray-700 underline"
-                >
-                  Ver menos
-                </button>
-              )}
-            </div>
-          )}
+                </div>
 
-          {/* FOTOS */}
-          <div>
-            <div className="flex items-center justify-between">
-              <label className="block text-sm font-semibold text-gray-700">
-                📸 Fotos del producto <span className="text-red-500">*</span>
-              </label>
-              <span
-                className={`text-xs font-medium ${
-                  totalImages === 0
-                    ? "text-red-600"
-                    : totalImages < 3
-                    ? "text-yellow-600"
-                    : "text-emerald-600"
-                }`}
-              >
-                {totalImages}/{MAX_IMAGES} fotos
-              </span>
-            </div>
-            <p className="mt-1 text-xs text-gray-500">
-              💡 Sube 3+ fotos desde ángulos diferentes para vender más
-            </p>
-
-            <div className="mt-3 grid grid-cols-3 gap-3 sm:grid-cols-4">
-              {existingImages.map((url, i) => (
-                <div
-                  key={`existing-${i}`}
-                  className={`group relative aspect-square overflow-hidden rounded-xl border-2 transition ${
-                    i === 0
-                      ? "border-rose-400 ring-2 ring-rose-100"
-                      : "border-gray-200"
-                  }`}
-                >
-                  <img
-                    src={url}
-                    alt={`Imagen ${i + 1}`}
-                    className="h-full w-full object-cover"
-                  />
-                  {i === 0 ? (
-                    <span className="absolute left-1 top-1 rounded-full bg-rose-500 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white shadow">
-                      Principal
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => makeExistingPrincipal(url)}
-                      className="absolute left-1 top-1 rounded-full bg-black/70 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white shadow opacity-0 transition group-hover:opacity-100"
-                    >
-                      ⭐ Hacer principal
-                    </button>
+                <div className="text-right">
+                  {quality.errorCount > 0 && (
+                    <div className="text-xs font-bold">
+                      ❌ {quality.errorCount} error
+                      {quality.errorCount !== 1 && "es"}
+                    </div>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => removeExisting(url)}
-                    className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-xs text-white opacity-0 transition group-hover:opacity-100"
-                  >
-                    ×
-                  </button>
+                  {quality.warningCount > 0 && (
+                    <div className="text-xs font-bold opacity-90">
+                      ⚠️ {quality.warningCount} sugerencia
+                      {quality.warningCount !== 1 && "s"}
+                    </div>
+                  )}
                 </div>
-              ))}
+              </div>
 
-              {previews.map((url, i) => (
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/20">
                 <div
-                  key={`pending-${i}`}
-                  className="group relative aspect-square overflow-hidden rounded-xl border-2 border-emerald-300"
-                >
-                  <img
-                    src={url}
-                    alt={`Nueva ${i + 1}`}
-                    className="h-full w-full object-cover"
-                  />
-                  <span className="absolute left-1 top-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white shadow">
-                    Nueva
-                  </span>
+                  className={`h-full ${getScoreBarColor()} transition-all duration-500 ease-out`}
+                  style={{ width: `${quality.score}%` }}
+                />
+              </div>
+
+              <div className="mt-2 text-xs font-medium">
+                {quality.level === "poor" &&
+                  "🔒 Necesitas 60%+ para publicar el producto"}
+                {quality.level === "fair" &&
+                  "✓ Ya puedes publicar, pero mejora los puntos marcados para vender más"}
+                {quality.level === "good" &&
+                  "🎯 ¡Bien! Tu producto está listo para vender"}
+                {quality.level === "excellent" &&
+                  "🌟 ¡Excelente calidad! Tu producto destacará"}
+              </div>
+            </div>
+
+            {/* ISSUES */}
+            {visibleIssues.length > 0 && (
+              <div className="space-y-1.5">
+                {visibleIssues
+                  .slice(0, showAllIssues ? undefined : 5)
+                  .map((issue, i) => (
+                    <div
+                      key={i}
+                      className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${getIssueClasses(
+                        issue.type
+                      )}`}
+                    >
+                      <span className="shrink-0">{getIssueIcon(issue.type)}</span>
+                      <span className="flex-1">{issue.message}</span>
+                    </div>
+                  ))}
+                {!showAllIssues && quality.issues.length > 5 && (
                   <button
                     type="button"
-                    onClick={() => removePending(i)}
-                    className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-xs text-white opacity-0 transition group-hover:opacity-100"
+                    onClick={() => setShowAllIssues(true)}
+                    className="text-xs font-semibold text-gray-500 hover:text-gray-700 underline"
                   >
-                    ×
+                    Ver {quality.issues.length - 5} más...
                   </button>
-                </div>
-              ))}
-
-              {totalImages < MAX_IMAGES && (
-                <label
-                  className={`flex aspect-square cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed transition ${
-                    totalImages === 0
-                      ? "border-red-300 bg-red-50/50 hover:border-red-500 hover:bg-red-50"
-                      : "border-gray-300 hover:border-rose-500 hover:bg-rose-50/30"
-                  }`}
-                >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleFileChange}
-                    className="hidden"
-                    disabled={saving}
-                  />
-                  <div
-                    className={`text-2xl ${
-                      totalImages === 0 ? "text-red-400" : "text-gray-400"
-                    }`}
+                )}
+                {showAllIssues && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllIssues(false)}
+                    className="text-xs font-semibold text-gray-500 hover:text-gray-700 underline"
                   >
-                    +
-                  </div>
-                  <div
-                    className={`mt-1 text-[10px] font-semibold ${
-                      totalImages === 0 ? "text-red-500" : "text-gray-500"
-                    }`}
-                  >
-                    {totalImages === 0 ? "Obligatorio" : "Agregar"}
-                  </div>
-                </label>
-              )}
-            </div>
+                    Ver menos
+                  </button>
+                )}
+              </div>
+            )}
 
-            <p className="mt-2 text-xs text-gray-400">
-              JPG, PNG o WebP. Máximo {MAX_IMAGE_MB}MB. Mínimo{" "}
-              {MIN_IMAGE_DIMENSION}x{MIN_IMAGE_DIMENSION}px.
-            </p>
-          </div>
-
-          {/* NOMBRE */}
-          <div>
-            <div className="flex items-center justify-between">
-              <label className="block text-sm font-semibold text-gray-700">
-                Nombre del producto <span className="text-red-500">*</span>
-              </label>
-              <span
-                className={`text-xs font-medium ${
-                  nameLen === 0
-                    ? "text-red-600"
-                    : nameLen < 10
-                    ? "text-yellow-600"
-                    : nameLen > 100
-                    ? "text-red-600"
-                    : "text-emerald-600"
-                }`}
-              >
-                {nameLen}/100
-              </span>
-            </div>
-            <input
-              name="name"
-              required
-              value={form.name}
-              onChange={handleChange}
-              maxLength={120}
-              className={`mt-1.5 w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:bg-white ${
-                getFieldError("name")
-                  ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
-                  : "border-gray-200 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
-              }`}
-              placeholder="Ej: Polo de algodón manga corta color negro talla M"
-            />
-            <p className="mt-1 text-xs text-gray-400">
-              💡 Sé específico: material + tipo + color + talla
-            </p>
-          </div>
-
-          {/* DESCRIPCIÓN */}
-          <div>
-            <div className="flex items-center justify-between">
-              <label className="block text-sm font-semibold text-gray-700">
-                Descripción <span className="text-red-500">*</span>
-              </label>
-              <span
-                className={`text-xs font-medium ${
-                  descLen === 0
-                    ? "text-red-600"
-                    : descLen < 50
-                    ? "text-red-600"
-                    : descLen < 150
-                    ? "text-yellow-600"
-                    : "text-emerald-600"
-                }`}
-              >
-                {descLen}/50 mín
-              </span>
-            </div>
-            <textarea
-              name="description"
-              rows={4}
-              value={form.description}
-              onChange={handleChange}
-              maxLength={1500}
-              className={`mt-1.5 w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:bg-white ${
-                getFieldError("description")
-                  ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
-                  : "border-gray-200 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
-              }`}
-              placeholder="Ej: Polo 100% algodón peinado, corte regular, cuello redondo reforzado. Ideal para uso diario. Disponible en tallas S, M, L, XL. Lavable en agua fría, no usar lejía."
-            />
-            <p className="mt-1 text-xs text-gray-400">
-              💡 Incluye: material, medidas, cuidados, beneficios, para qué sirve
-            </p>
-          </div>
-
-          {/* PRECIOS */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700">
-                Precio venta (S/) <span className="text-red-500">*</span>
-              </label>
-              <input
-                name="price"
-                type="number"
-                step="0.01"
-                min="0.01"
-                required
-                value={form.price}
-                onChange={handleChange}
-                className={`mt-1.5 w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:bg-white ${
-                  getFieldError("price")
-                    ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
-                    : "border-gray-200 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
-                }`}
-                placeholder="0.00"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700">
-                Precio antes <span className="text-gray-400">(opcional)</span>
-              </label>
-              <input
-                name="compare_at_price"
-                type="number"
-                step="0.01"
-                min="0"
-                value={form.compare_at_price}
-                onChange={handleChange}
-                className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
-                placeholder="0.00"
-              />
-              <p className="mt-1 text-xs text-gray-400">Se mostrará tachado</p>
-            </div>
-          </div>
-
-          {/* STOCK + SKU */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700">
-                Stock <span className="text-red-500">*</span>
-              </label>
-              <input
-                name="stock"
-                type="number"
-                min="0"
-                required
-                value={form.stock}
-                onChange={handleChange}
-                className={`mt-1.5 w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:bg-white ${
-                  getFieldError("stock")
-                    ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
-                    : "border-gray-200 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
-                }`}
-                placeholder="0"
-              />
-            </div>
+            {/* FOTOS */}
             <div>
               <div className="flex items-center justify-between">
                 <label className="block text-sm font-semibold text-gray-700">
-                  Código (SKU)
+                  📸 Fotos del producto <span className="text-red-500">*</span>
                 </label>
-                <button
-                  type="button"
-                  onClick={handleSuggestSku}
-                  className="text-[11px] font-semibold text-rose-600 hover:text-rose-800"
+                <span
+                  className={`text-xs font-medium ${
+                    totalImages === 0
+                      ? "text-red-600"
+                      : totalImages < 3
+                      ? "text-yellow-600"
+                      : "text-emerald-600"
+                  }`}
                 >
-                  🎲 Generar
-                </button>
+                  {totalImages}/{MAX_IMAGES} fotos
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                💡 Sube 3+ fotos desde ángulos diferentes para vender más
+              </p>
+
+              <div className="mt-3 grid grid-cols-3 gap-3 sm:grid-cols-4">
+                {existingImages.map((url, i) => (
+                  <div
+                    key={`existing-${i}`}
+                    className={`group relative aspect-square overflow-hidden rounded-xl border-2 transition ${
+                      i === 0
+                        ? "border-rose-400 ring-2 ring-rose-100"
+                        : "border-gray-200"
+                    }`}
+                  >
+                    <img
+                      src={url}
+                      alt={`Imagen ${i + 1}`}
+                      className="h-full w-full object-cover"
+                    />
+                    {i === 0 ? (
+                      <span className="absolute left-1 top-1 rounded-full bg-rose-500 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white shadow">
+                        Principal
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => makeExistingPrincipal(url)}
+                        className="absolute left-1 top-1 rounded-full bg-black/70 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white shadow opacity-0 transition group-hover:opacity-100"
+                      >
+                        ⭐ Hacer principal
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeExisting(url)}
+                      className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-xs text-white opacity-0 transition group-hover:opacity-100"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+
+                {previews.map((url, i) => (
+                  <div
+                    key={`pending-${i}`}
+                    className="group relative aspect-square overflow-hidden rounded-xl border-2 border-emerald-300"
+                  >
+                    <img
+                      src={url}
+                      alt={`Nueva ${i + 1}`}
+                      className="h-full w-full object-cover"
+                    />
+                    <span className="absolute left-1 top-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white shadow">
+                      Nueva
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removePending(i)}
+                      className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-xs text-white opacity-0 transition group-hover:opacity-100"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+
+                {totalImages < MAX_IMAGES && (
+                  <label
+                    className={`flex aspect-square cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed transition ${
+                      totalImages === 0
+                        ? "border-red-300 bg-red-50/50 hover:border-red-500 hover:bg-red-50"
+                        : "border-gray-300 hover:border-rose-500 hover:bg-rose-50/30"
+                    }`}
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleFileChange}
+                      className="hidden"
+                      disabled={saving}
+                    />
+                    <div
+                      className={`text-2xl ${
+                        totalImages === 0 ? "text-red-400" : "text-gray-400"
+                      }`}
+                    >
+                      +
+                    </div>
+                    <div
+                      className={`mt-1 text-[10px] font-semibold ${
+                        totalImages === 0 ? "text-red-500" : "text-gray-500"
+                      }`}
+                    >
+                      {totalImages === 0 ? "Obligatorio" : "Agregar"}
+                    </div>
+                  </label>
+                )}
+              </div>
+
+              <p className="mt-2 text-xs text-gray-400">
+                JPG, PNG o WebP. Máximo {MAX_IMAGE_MB}MB. Mínimo{" "}
+                {MIN_IMAGE_DIMENSION}x{MIN_IMAGE_DIMENSION}px.
+              </p>
+            </div>
+
+            {/* NOMBRE */}
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="block text-sm font-semibold text-gray-700">
+                  Nombre del producto <span className="text-red-500">*</span>
+                </label>
+                <span
+                  className={`text-xs font-medium ${
+                    nameLen === 0
+                      ? "text-red-600"
+                      : nameLen < 10
+                      ? "text-yellow-600"
+                      : nameLen > 100
+                      ? "text-red-600"
+                      : "text-emerald-600"
+                  }`}
+                >
+                  {nameLen}/100
+                </span>
               </div>
               <input
-                name="sku"
-                value={form.sku}
+                name="name"
+                required
+                value={form.name}
                 onChange={handleChange}
-                maxLength={30}
-                className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20 font-mono uppercase"
-                placeholder="COD-001"
-              />
-            </div>
-          </div>
-
-          {/* CATEGORÍA */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700">
-              Categoría <span className="text-red-500">*</span>
-            </label>
-
-            {!customCategory ? (
-              <select
-                name="category"
-                value={form.category}
-                onChange={handleCategoryChange}
+                maxLength={120}
                 className={`mt-1.5 w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:bg-white ${
-                  getFieldError("category")
+                  getFieldError("name")
                     ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
                     : "border-gray-200 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
                 }`}
-              >
-                <option value="">-- Selecciona una categoría --</option>
-                {PREDEFINED_CATEGORIES.map((cat) => (
-                  <option key={cat.value} value={cat.label}>
-                    {cat.label}
-                  </option>
-                ))}
-                <option value="__custom__">➕ Crear categoría personalizada</option>
-              </select>
-            ) : (
-              <div className="mt-1.5 flex gap-2">
+                placeholder="Ej: Polo de algodón manga corta color negro talla M"
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                💡 Sé específico: material + tipo + color + talla
+              </p>
+            </div>
+
+            {/* DESCRIPCIÓN */}
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="block text-sm font-semibold text-gray-700">
+                  Descripción <span className="text-red-500">*</span>
+                </label>
+                <span
+                  className={`text-xs font-medium ${
+                    descLen === 0
+                      ? "text-red-600"
+                      : descLen < 50
+                      ? "text-red-600"
+                      : descLen < 150
+                      ? "text-yellow-600"
+                      : "text-emerald-600"
+                  }`}
+                >
+                  {descLen}/50 mín
+                </span>
+              </div>
+              <textarea
+                name="description"
+                rows={4}
+                value={form.description}
+                onChange={handleChange}
+                maxLength={1500}
+                className={`mt-1.5 w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:bg-white ${
+                  getFieldError("description")
+                    ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                    : "border-gray-200 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
+                }`}
+                placeholder="Ej: Polo 100% algodón peinado, corte regular, cuello redondo reforzado. Ideal para uso diario. Disponible en tallas S, M, L, XL. Lavable en agua fría, no usar lejía."
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                💡 Incluye: material, medidas, cuidados, beneficios, para qué sirve
+              </p>
+            </div>
+
+            {/* PRECIOS */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700">
+                  Precio venta (S/) <span className="text-red-500">*</span>
+                </label>
                 <input
+                  name="price"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  required
+                  value={form.price}
+                  onChange={handleChange}
+                  className={`mt-1.5 w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:bg-white ${
+                    getFieldError("price")
+                      ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                      : "border-gray-200 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
+                  }`}
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700">
+                  Precio antes <span className="text-gray-400">(opcional)</span>
+                </label>
+                <input
+                  name="compare_at_price"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.compare_at_price}
+                  onChange={handleChange}
+                  className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
+                  placeholder="0.00"
+                />
+                <p className="mt-1 text-xs text-gray-400">Se mostrará tachado</p>
+              </div>
+            </div>
+
+            {/* STOCK + SKU */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700">
+                  Stock <span className="text-red-500">*</span>
+                </label>
+                <input
+                  name="stock"
+                  type="number"
+                  min="0"
+                  required
+                  value={form.stock}
+                  onChange={handleChange}
+                  className={`mt-1.5 w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:bg-white ${
+                    getFieldError("stock")
+                      ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                      : "border-gray-200 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
+                  }`}
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-sm font-semibold text-gray-700">
+                    Código (SKU)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleSuggestSku}
+                    className="text-[11px] font-semibold text-rose-600 hover:text-rose-800"
+                  >
+                    🎲 Generar
+                  </button>
+                </div>
+                <input
+                  name="sku"
+                  value={form.sku}
+                  onChange={handleChange}
+                  maxLength={30}
+                  className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20 font-mono uppercase"
+                  placeholder="COD-001"
+                />
+              </div>
+            </div>
+
+            {/* CATEGORÍA */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700">
+                Categoría <span className="text-red-500">*</span>
+              </label>
+
+              {!customCategory ? (
+                <select
                   name="category"
                   value={form.category}
-                  onChange={handleChange}
-                  maxLength={40}
-                  className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
-                  placeholder="Ej: Productos gourmet"
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCustomCategory(false);
-                    setForm((prev) => ({ ...prev, category: "" }));
-                  }}
-                  className="rounded-xl border border-gray-200 px-3 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+                  onChange={handleCategoryChange}
+                  className={`mt-1.5 w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:bg-white ${
+                    getFieldError("category")
+                      ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                      : "border-gray-200 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
+                  }`}
                 >
-                  Cancelar
-                </button>
-              </div>
-            )}
-          </div>
+                  <option value="">-- Selecciona una categoría --</option>
+                  {PREDEFINED_CATEGORIES.map((cat) => (
+                    <option key={cat.value} value={cat.label}>
+                      {cat.label}
+                    </option>
+                  ))}
+                  <option value="__custom__">➕ Crear categoría personalizada</option>
+                </select>
+              ) : (
+                <div className="mt-1.5 flex gap-2">
+                  <input
+                    name="category"
+                    value={form.category}
+                    onChange={handleChange}
+                    maxLength={40}
+                    className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
+                    placeholder="Ej: Productos gourmet"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomCategory(false);
+                      setForm((prev) => ({ ...prev, category: "" }));
+                    }}
+                    className="rounded-xl border border-gray-200 px-3 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              )}
+            </div>
 
-          {/* MARCA */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700">
-              Marca <span className="text-gray-400">(opcional pero recomendado)</span>
-            </label>
-            <input
-              name="brand"
-              value={form.brand}
-              onChange={handleChange}
-              maxLength={50}
-              className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
-              placeholder="Ej: Nike, Adidas, Casera, Sin marca"
-            />
-          </div>
-
-          {/* 🆕 COLORES DISPONIBLES */}
-          <ColorPicker colors={colors} onChange={setColors} />
-
-          {/* FEATURED */}
-          <label className="flex cursor-pointer items-center gap-3 rounded-xl bg-linear-to-br from-rose-50 to-orange-50 p-4">
-            <input
-              name="featured"
-              type="checkbox"
-              checked={form.featured}
-              onChange={handleChange}
-              className="h-5 w-5 rounded border-gray-300 text-rose-600 focus:ring-rose-500"
-            />
+            {/* MARCA */}
             <div>
-              <div className="text-sm font-semibold text-gray-900">
-                🔥 Marcar como "Más vendido"
-              </div>
-              <div className="text-xs text-gray-500">
-                Destaca este producto en tu tienda con una insignia llamativa
-              </div>
+              <label className="block text-sm font-semibold text-gray-700">
+                Marca <span className="text-gray-400">(opcional pero recomendado)</span>
+              </label>
+              <input
+                name="brand"
+                value={form.brand}
+                onChange={handleChange}
+                maxLength={50}
+                className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
+                placeholder="Ej: Nike, Adidas, Casera, Sin marca"
+              />
             </div>
-          </label>
 
-          {/* PUBLICAR */}
-          <label
-            className={`flex cursor-pointer items-center gap-3 rounded-xl p-4 border-2 transition ${
-              isBlocked
-                ? "border-red-200 bg-red-50"
-                : form.is_active
-                ? "border-emerald-200 bg-emerald-50"
-                : "border-gray-200 bg-gray-50"
-            }`}
-          >
-            <input
-              name="is_active"
-              type="checkbox"
-              checked={form.is_active}
-              onChange={handleChange}
-              className="h-5 w-5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-            />
-            <div className="flex-1">
-              <div className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                {form.is_active
-                  ? "🌐 Publicar en mi tienda"
-                  : "📁 Guardar como borrador"}
-                {isBlocked && (
-                  <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
-                    🔒 BLOQUEADO
-                  </span>
-                )}
-              </div>
-              <div className="text-xs text-gray-500 mt-0.5">
-                {form.is_active
-                  ? isBlocked
-                    ? `Necesitas ${60 - quality.score}% más de calidad para publicar`
-                    : "Los clientes podrán verlo y comprarlo"
-                  : "Solo tú lo verás. Podrás publicarlo cuando quieras."}
-              </div>
-            </div>
-          </label>
+            {/* COLORES */}
+            <ColorPicker colors={colors} onChange={setColors} />
 
-          {/* BOTONES */}
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={saving}
-              className="flex-1 rounded-xl border border-gray-200 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving || (isBlocked && form.is_active)}
-              className={`flex-1 rounded-xl py-3 text-sm font-semibold shadow transition disabled:opacity-50 disabled:cursor-not-allowed ${
-                isBlocked && form.is_active
-                  ? "bg-gray-300 text-gray-500"
-                  : "bg-gray-900 text-white hover:bg-gray-800"
+            {/* FEATURED */}
+            <label className="flex cursor-pointer items-center gap-3 rounded-xl bg-linear-to-br from-rose-50 to-orange-50 p-4">
+              <input
+                name="featured"
+                type="checkbox"
+                checked={form.featured}
+                onChange={handleChange}
+                className="h-5 w-5 rounded border-gray-300 text-rose-600 focus:ring-rose-500"
+              />
+              <div>
+                <div className="text-sm font-semibold text-gray-900">
+                  🔥 Marcar como "Más vendido"
+                </div>
+                <div className="text-xs text-gray-500">
+                  Destaca este producto en tu tienda con una insignia llamativa
+                </div>
+              </div>
+            </label>
+
+            {/* PUBLICAR */}
+            <label
+              className={`flex cursor-pointer items-center gap-3 rounded-xl p-4 border-2 transition ${
+                isBlocked
+                  ? "border-red-200 bg-red-50"
+                  : form.is_active
+                  ? "border-emerald-200 bg-emerald-50"
+                  : "border-gray-200 bg-gray-50"
               }`}
             >
-              {saving
-                ? "Guardando..."
-                : isBlocked && form.is_active
-                ? `🔒 Calidad insuficiente (${quality.score}%)`
-                : isEditing
-                ? "Guardar cambios"
-                : form.is_active
-                ? "🚀 Publicar producto"
-                : "💾 Guardar borrador"}
-            </button>
-          </div>
-        </form>
+              <input
+                name="is_active"
+                type="checkbox"
+                checked={form.is_active}
+                onChange={handleChange}
+                className="h-5 w-5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              <div className="flex-1">
+                <div className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                  {form.is_active
+                    ? "🌐 Publicar en mi tienda"
+                    : "📁 Guardar como borrador"}
+                  {isBlocked && (
+                    <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                      🔒 BLOQUEADO
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  {form.is_active
+                    ? isBlocked
+                      ? `Necesitas ${60 - quality.score}% más de calidad para publicar`
+                      : "Los clientes podrán verlo y comprarlo"
+                    : "Solo tú lo verás. Podrás publicarlo cuando quieras."}
+                </div>
+              </div>
+            </label>
+
+            {/* BOTONES */}
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={saving}
+                className="flex-1 rounded-xl border border-gray-200 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={saving || (isBlocked && form.is_active)}
+                className={`flex-1 rounded-xl py-3 text-sm font-semibold shadow transition disabled:opacity-50 disabled:cursor-not-allowed ${
+                  isBlocked && form.is_active
+                    ? "bg-gray-300 text-gray-500"
+                    : "bg-gray-900 text-white hover:bg-gray-800"
+                }`}
+              >
+                {saving
+                  ? "Guardando..."
+                  : isBlocked && form.is_active
+                  ? `🔒 Calidad insuficiente (${quality.score}%)`
+                  : isEditing
+                  ? "Guardar cambios"
+                  : form.is_active
+                  ? "🚀 Publicar producto"
+                  : "💾 Guardar borrador"}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
