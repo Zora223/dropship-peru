@@ -1,3 +1,6 @@
+// src/components/vendor/ProductForm.tsx
+// 🍌 v22.1 - Con Auto-Fill AI integrado
+
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
   createOwnProduct,
@@ -13,8 +16,11 @@ import {
   type QualityIssue,
 } from "../../lib/product-quality";
 import ColorPicker, { type ProductColor } from "./ColorPicker";
-import ProductLaunchAIModal from "./ProductLaunchAIModal"; // 🆕
-import { getAISubscription } from "../../lib/ai-subscription"; // 🆕 (ver nota abajo)
+import ProductLaunchAIModal from "./ProductLaunchAIModal";
+import AutoFillHero from "./AutoFillHero"; // 🆕
+import FieldFillButton from "./FieldFillButton"; // 🆕
+import { getAISubscription } from "../../lib/ai-subscription";
+import type { AutoFillData } from "../../lib/auto-fill-ai";
 import type { DbProduct } from "../../types/database";
 
 interface ProductFormProps {
@@ -66,6 +72,9 @@ export default function ProductForm({
   const [aiCredits, setAiCredits] = useState(0);
   const [aiPlan, setAiPlan] = useState<string>("starter");
 
+  // 🆕 URL de la imagen para Auto-Fill (primera disponible)
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isEditing = Boolean(initial);
 
@@ -93,6 +102,11 @@ export default function ProductForm({
         setColors(initialColors.filter((c: any) => c && c.name && c.hex));
       }
 
+      // Si tiene imagen, usarla para Auto-Fill
+      if (initial.images && initial.images.length > 0) {
+        setUploadedImageUrl(initial.images[0]);
+      }
+
       const isPreset = PREDEFINED_CATEGORIES.some(
         (c) => c.value === initial.category || c.label === initial.category
       );
@@ -114,6 +128,22 @@ export default function ProductForm({
       previews.forEach((url) => URL.revokeObjectURL(url));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 🆕 Cargar suscripción AI al montar
+  useEffect(() => {
+    const loadAI = async () => {
+      try {
+        const sub = await getAISubscription();
+        if (sub) {
+          setAiCredits(sub.credits_remaining);
+          setAiPlan(sub.plan);
+        }
+      } catch (err) {
+        console.warn("No se pudo cargar AI subscription:", err);
+      }
+    };
+    loadAI();
   }, []);
 
   // ========== SCORE ==========
@@ -170,6 +200,66 @@ export default function ProductForm({
     }
     setForm((prev) => ({ ...prev, sku: suggestSku(prev.name) }));
     toast.success("SKU generado", "Puedes editarlo si quieres");
+  };
+
+  // 🆕 Aplicar datos de Auto-Fill AI al form
+  const applyAutoFillData = (data: AutoFillData) => {
+    setForm((prev) => {
+      const updates: any = { ...prev };
+      if (data.name) updates.name = data.name;
+      if (data.description) updates.description = data.description;
+      if (data.category) {
+        updates.category = data.category;
+        // Verificar si es preset o custom
+        const isPreset = PREDEFINED_CATEGORIES.some(
+          (c) => c.label === data.category
+        );
+        setCustomCategory(!isPreset);
+      }
+      if (data.price_suggested && !prev.price) {
+        updates.price = String(data.price_suggested);
+      }
+      if (data.brand_suggested && !prev.brand) {
+        updates.brand = data.brand_suggested;
+      }
+      return updates;
+    });
+
+    // Aplicar colores detectados si el vendor no ha agregado ninguno
+    if (data.colors_detected && data.colors_detected.length > 0 && colors.length === 0) {
+      const detectedColors: ProductColor[] = data.colors_detected.map((name) => ({
+        name: name.charAt(0).toUpperCase() + name.slice(1),
+        hex: getHexFromColorName(name),
+      }));
+      setColors(detectedColors);
+    }
+
+    toast.success(
+      "🪄 Auto-Fill completado",
+      "Revisa los campos y ajusta si es necesario"
+    );
+  };
+
+  // Helper para convertir nombre de color a hex aproximado
+  const getHexFromColorName = (name: string): string => {
+    const map: Record<string, string> = {
+      rojo: "#EF4444",
+      azul: "#3B82F6",
+      verde: "#10B981",
+      amarillo: "#F59E0B",
+      negro: "#000000",
+      blanco: "#FFFFFF",
+      gris: "#6B7280",
+      rosa: "#EC4899",
+      morado: "#8B5CF6",
+      naranja: "#F97316",
+      marrón: "#78350F",
+      celeste: "#7DD3FC",
+      beige: "#D6D3D1",
+      dorado: "#F59E0B",
+      plateado: "#9CA3AF",
+    };
+    return map[name.toLowerCase()] || "#6B7280";
   };
 
   const validateImage = (
@@ -256,6 +346,18 @@ export default function ProductForm({
     setPendingFiles((prev) => [...prev, ...validFiles]);
     setPreviews((prev) => [...prev, ...validPreviews]);
 
+    // 🆕 Subir la PRIMERA imagen para Auto-Fill (si no hay ya una)
+    if (validFiles.length > 0 && !uploadedImageUrl) {
+      try {
+        const urls = await uploadProductImages(storeId, [validFiles[0]]);
+        if (urls.length > 0) {
+          setUploadedImageUrl(urls[0]);
+        }
+      } catch (err) {
+        console.warn("No se pudo subir imagen temporal para AI:", err);
+      }
+    }
+
     if (rejected.length > 0) {
       toast.error(
         `${rejected.length} foto${rejected.length > 1 ? "s" : ""} rechazada${
@@ -284,6 +386,9 @@ export default function ProductForm({
   const removeExisting = (url: string) => {
     setExistingImages((prev) => prev.filter((u) => u !== url));
     setRemovedExistingImages((prev) => [...prev, url]);
+    if (uploadedImageUrl === url) {
+      setUploadedImageUrl(existingImages[0] || null);
+    }
   };
 
   const makeExistingPrincipal = (url: string) => {
@@ -291,6 +396,7 @@ export default function ProductForm({
       const filtered = prev.filter((u) => u !== url);
       return [url, ...filtered];
     });
+    setUploadedImageUrl(url); // Actualizar la que se usa para AI
     toast.info("Imagen principal actualizada");
   };
 
@@ -323,11 +429,21 @@ export default function ProductForm({
     setSaving(true);
     try {
       let newImageUrls: string[] = [];
-      if (pendingFiles.length > 0) {
-        newImageUrls = await uploadProductImages(storeId, pendingFiles);
+      // Si la primera imagen ya está subida (por Auto-Fill), no la volvemos a subir
+      const filesToUpload = uploadedImageUrl
+        ? pendingFiles.slice(1)
+        : pendingFiles;
+      const alreadyUploadedUrls = uploadedImageUrl ? [uploadedImageUrl] : [];
+
+      if (filesToUpload.length > 0) {
+        newImageUrls = await uploadProductImages(storeId, filesToUpload);
       }
 
-      const allImages = [...existingImages, ...newImageUrls];
+      const allImages = [
+        ...existingImages,
+        ...alreadyUploadedUrls.filter((u) => !existingImages.includes(u)),
+        ...newImageUrls,
+      ];
 
       const payload: any = {
         name: form.name.trim(),
@@ -375,24 +491,19 @@ export default function ProductForm({
 
       onSaved(result);
 
-      // 🆕 LAUNCH AI OFFER — Solo si tiene imágenes y es producto nuevo o recién publicado
+      // 🍌 LAUNCH AI OFFER
       if (allImages.length > 0 && form.is_active) {
         setSavedProduct(result);
-
-        // Cargar suscripción AI del vendor
         try {
           const sub = await getAISubscription();
           setAiCredits(sub?.credits_remaining ?? 0);
           setAiPlan(sub?.plan ?? "starter");
         } catch (err) {
           console.warn("No se pudo cargar suscripción AI:", err);
-          setAiCredits(0);
-          setAiPlan("starter");
         }
-
         setShowLaunchOffer(true);
         setSaving(false);
-        return; // No cerramos el modal aún
+        return;
       }
 
       onClose();
@@ -407,7 +518,6 @@ export default function ProductForm({
     }
   };
 
-  // 🆕 Handlers Launch AI
   const handleAcceptLaunchAI = () => {
     setShowLaunchOffer(false);
     setShowLaunchModal(true);
@@ -469,35 +579,31 @@ export default function ProductForm({
     return issue?.message || null;
   };
 
+  const aiEnabled = aiCredits > 0 || aiPlan === "business";
+
   return (
     <>
-      {/* 🆕 POPUP DE OFERTA LAUNCH AI */}
+      {/* POPUP OFERTA LAUNCH AI */}
       {showLaunchOffer && savedProduct && (
         <div
-         className="fixed inset-0 z-55 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-55 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
           onClick={handleSkipLaunchAI}
         >
           <div
             className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header animado */}
             <div className="relative bg-linear-to-br from-purple-600 via-pink-600 to-orange-500 p-8 text-center text-white overflow-hidden">
               <div className="absolute -top-8 -right-8 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
               <div className="absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
-
               <div className="relative">
                 <div className="text-6xl mb-3 animate-bounce">🍌</div>
-                <h3 className="text-2xl font-black">
-                  ¡Producto publicado!
-                </h3>
+                <h3 className="text-2xl font-black">¡Producto publicado!</h3>
                 <p className="mt-2 text-sm opacity-90">
                   ¿Quieres que la AI prepare TODO el marketing por ti?
                 </p>
               </div>
             </div>
-
-            {/* Body */}
             <div className="p-6 space-y-4">
               <div className="rounded-xl bg-linear-to-br from-purple-50 to-pink-50 border-2 border-purple-100 p-4">
                 <div className="text-xs font-bold uppercase tracking-wider text-purple-700 mb-2">
@@ -511,11 +617,9 @@ export default function ProductForm({
                   <li>📧 Email marketing completo</li>
                 </ul>
               </div>
-
               <div className="text-center text-xs text-gray-500">
                 ⚡ Solo 15 créditos · ⏱️ 30-45 segundos
               </div>
-
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={handleSkipLaunchAI}
@@ -535,7 +639,7 @@ export default function ProductForm({
         </div>
       )}
 
-      {/* 🆕 MODAL LAUNCH AI */}
+      {/* MODAL LAUNCH AI */}
       {showLaunchModal && savedProduct && (
         <ProductLaunchAIModal
           isOpen={showLaunchModal}
@@ -554,7 +658,7 @@ export default function ProductForm({
         />
       )}
 
-      {/* MODAL PRINCIPAL (todo lo que ya tenías) */}
+      {/* MODAL PRINCIPAL */}
       <div
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
         onClick={onClose}
@@ -599,7 +703,6 @@ export default function ProductForm({
                     </div>
                   </div>
                 </div>
-
                 <div className="text-right">
                   {quality.errorCount > 0 && (
                     <div className="text-xs font-bold">
@@ -615,14 +718,12 @@ export default function ProductForm({
                   )}
                 </div>
               </div>
-
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/20">
                 <div
                   className={`h-full ${getScoreBarColor()} transition-all duration-500 ease-out`}
                   style={{ width: `${quality.score}%` }}
                 />
               </div>
-
               <div className="mt-2 text-xs font-medium">
                 {quality.level === "poor" &&
                   "🔒 Necesitas 60%+ para publicar el producto"}
@@ -796,25 +897,49 @@ export default function ProductForm({
               </p>
             </div>
 
+            {/* 🆕 AUTO-FILL HERO BUTTON */}
+            {aiEnabled && (
+              <AutoFillHero
+                imageUrl={uploadedImageUrl}
+                creditsRemaining={aiCredits}
+                plan={aiPlan}
+                onFillComplete={applyAutoFillData}
+                onCreditsUpdate={setAiCredits}
+                disabled={saving}
+              />
+            )}
+
             {/* NOMBRE */}
             <div>
               <div className="flex items-center justify-between">
                 <label className="block text-sm font-semibold text-gray-700">
                   Nombre del producto <span className="text-red-500">*</span>
                 </label>
-                <span
-                  className={`text-xs font-medium ${
-                    nameLen === 0
-                      ? "text-red-600"
-                      : nameLen < 10
-                      ? "text-yellow-600"
-                      : nameLen > 100
-                      ? "text-red-600"
-                      : "text-emerald-600"
-                  }`}
-                >
-                  {nameLen}/100
-                </span>
+                <div className="flex items-center gap-2">
+                  {aiEnabled && uploadedImageUrl && (
+                    <FieldFillButton
+                      imageUrl={uploadedImageUrl}
+                      field="name"
+                      creditsRemaining={aiCredits}
+                      plan={aiPlan}
+                      onFillComplete={applyAutoFillData}
+                      onCreditsUpdate={setAiCredits}
+                    />
+                  )}
+                  <span
+                    className={`text-xs font-medium ${
+                      nameLen === 0
+                        ? "text-red-600"
+                        : nameLen < 10
+                        ? "text-yellow-600"
+                        : nameLen > 100
+                        ? "text-red-600"
+                        : "text-emerald-600"
+                    }`}
+                  >
+                    {nameLen}/100
+                  </span>
+                </div>
               </div>
               <input
                 name="name"
@@ -840,19 +965,31 @@ export default function ProductForm({
                 <label className="block text-sm font-semibold text-gray-700">
                   Descripción <span className="text-red-500">*</span>
                 </label>
-                <span
-                  className={`text-xs font-medium ${
-                    descLen === 0
-                      ? "text-red-600"
-                      : descLen < 50
-                      ? "text-red-600"
-                      : descLen < 150
-                      ? "text-yellow-600"
-                      : "text-emerald-600"
-                  }`}
-                >
-                  {descLen}/50 mín
-                </span>
+                <div className="flex items-center gap-2">
+                  {aiEnabled && uploadedImageUrl && (
+                    <FieldFillButton
+                      imageUrl={uploadedImageUrl}
+                      field="description"
+                      creditsRemaining={aiCredits}
+                      plan={aiPlan}
+                      onFillComplete={applyAutoFillData}
+                      onCreditsUpdate={setAiCredits}
+                    />
+                  )}
+                  <span
+                    className={`text-xs font-medium ${
+                      descLen === 0
+                        ? "text-red-600"
+                        : descLen < 50
+                        ? "text-red-600"
+                        : descLen < 150
+                        ? "text-yellow-600"
+                        : "text-emerald-600"
+                    }`}
+                  >
+                    {descLen}/50 mín
+                  </span>
+                </div>
               </div>
               <textarea
                 name="description"
@@ -875,9 +1012,21 @@ export default function ProductForm({
             {/* PRECIOS */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700">
-                  Precio venta (S/) <span className="text-red-500">*</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-sm font-semibold text-gray-700">
+                    Precio venta (S/) <span className="text-red-500">*</span>
+                  </label>
+                  {aiEnabled && uploadedImageUrl && (
+                    <FieldFillButton
+                      imageUrl={uploadedImageUrl}
+                      field="price"
+                      creditsRemaining={aiCredits}
+                      plan={aiPlan}
+                      onFillComplete={applyAutoFillData}
+                      onCreditsUpdate={setAiCredits}
+                    />
+                  )}
+                </div>
                 <input
                   name="price"
                   type="number"
@@ -959,9 +1108,21 @@ export default function ProductForm({
 
             {/* CATEGORÍA */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700">
-                Categoría <span className="text-red-500">*</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="block text-sm font-semibold text-gray-700">
+                  Categoría <span className="text-red-500">*</span>
+                </label>
+                {aiEnabled && uploadedImageUrl && (
+                  <FieldFillButton
+                    imageUrl={uploadedImageUrl}
+                    field="category"
+                    creditsRemaining={aiCredits}
+                    plan={aiPlan}
+                    onFillComplete={applyAutoFillData}
+                    onCreditsUpdate={setAiCredits}
+                  />
+                )}
+              </div>
 
               {!customCategory ? (
                 <select
