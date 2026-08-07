@@ -58,8 +58,7 @@ export default function ProductLaunchKitViewer({
 
   // 🔥 URL base del sitio + link de la tienda
   const baseUrl = window.location.origin;
-  const storeUrl = storeSlug ? `${baseUrl}/tienda/${storeSlug}` : baseUrl;
-  const productUrl = storeSlug
+    const productUrl = storeSlug
     ? `${baseUrl}/tienda/${storeSlug}?producto=${kit.product_id}`
     : baseUrl;
 
@@ -450,7 +449,7 @@ export default function ProductLaunchKitViewer({
                 </div>
 
                 {/* Preview compacto */}
-                <div className="rounded-xl overflow-hidden bg-gray-100 border-2 border-gray-200 max-w-[200px] mx-auto">
+                <div className="rounded-xl overflow-hidden bg-gray-100 border-2 border-gray-200 max-w-50 mx-auto">
                   <img
                     src={kit.enhanced_image_url || kit.original_image_url}
                     alt="Producto"
