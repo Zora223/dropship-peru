@@ -1,5 +1,6 @@
 // supabase/functions/product-launch-ai/index.ts
-// 🍌 Product Launch AI - Kit completo de marketing con Gemini 2.5 Flash Image (Nano Banana)
+// 🍌 Product Launch AI v2 - Solo textos con Groq (SIN Gemini)
+// Marketing kit completo: captions + hashtags + WhatsApp + email
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -11,15 +12,10 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Gemini API
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
-const GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image-preview";
-const GEMINI_TEXT_MODEL = "gemini-2.0-flash-exp";
-const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
-
-// Groq (para texto rápido)
+// Groq
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "llama-3.3-70b-versatile";
+const CREDITS_COST = 15;
 
 interface RequestBody {
   product_id: string;
@@ -34,9 +30,8 @@ interface RequestBody {
 }
 
 // ============================================
-// SMART CATEGORY DETECTOR
+// DETECCIÓN DE CATEGORÍA
 // ============================================
-
 type ProductCategory =
   | "clothing_female"
   | "clothing_male"
@@ -56,540 +51,234 @@ function detectProductCategory(
   category: string
 ): ProductCategory {
   const text = `${name} ${description} ${category}`.toLowerCase();
+  const matches = (keywords: string[]) => keywords.some((kw) => text.includes(kw));
 
-  const matches = (keywords: string[]) =>
-    keywords.some((kw) => text.includes(kw));
-
-  // 👗 ROPA MUJER
-  if (
-    matches([
-      "blusa", "polo mujer", "jean mujer", "falda", "vestido", "chompa mujer",
-      "chaqueta mujer", "pantalon mujer", "short mujer", "top", "crop",
-      "brasier", "sujetador", "leggins", "ropa mujer", "ropa femenina",
-    ])
-  ) {
-    return "clothing_female";
-  }
-
-  // 👔 ROPA HOMBRE
-  if (
-    matches([
-      "camisa hombre", "polo hombre", "terno", "pantalon hombre", "short hombre",
-      "chompa hombre", "chaqueta hombre", "ropa hombre",
-    ])
-  ) {
-    return "clothing_male";
-  }
-
-  // 🧸 JUGUETES
-  if (
-    matches([
-      "juguete", "muneca", "muñeca", "peluche", "lego", "bloques", "carrito",
-      "carro juguete", "figura", "accion", "rompecabezas", "didactico",
-      "juego infantil", "juego niño", "pelota juguete",
-    ])
-  ) {
-    return "toys";
-  }
-
-  // 💎 BISUTERÍA/ACCESORIOS
-  if (
-    matches([
-      "gancho", "collet", "vincha", "liga", "arete", "pulsera", "collar",
-      "anillo", "bisuteria", "accesorio cabello", "diadema", "hebilla",
-      "aretes", "pendientes", "brazalete",
-    ])
-  ) {
-    return "accessories";
-  }
-
-  // 📱 ELECTRÓNICA
-  if (
-    matches([
-      "audifono", "audífono", "celular", "cargador", "cable", "usb", "bocina",
-      "parlante", "reloj inteligente", "smartwatch", "auricular", "audifonos",
-      "tablet", "laptop", "mouse", "teclado", "power bank", "powerbank",
-    ])
-  ) {
-    return "electronics";
-  }
-
-  // 💄 BELLEZA
-  if (
-    matches([
-      "labial", "labios", "sombra", "polvo", "base", "mascara", "crema",
-      "serum", "perfume", "maquillaje", "corrector", "rubor", "delineador",
-      "esmalte", "brillo", "kit maquillaje",
-    ])
-  ) {
-    return "beauty";
-  }
-
-  // 🐕 MASCOTAS
-  if (
-    matches([
-      "perro", "gato", "mascota", "cama para", "juguete para perro",
-      "juguete para gato", "correa", "plato mascota", "comedero", "arenero",
-      "collar mascota", "rascador",
-    ])
-  ) {
-    return "pets";
-  }
-
-  // 🍳 COCINA
-  if (
-    matches([
-      "olla", "sarten", "sartén", "utensilio", "cuchara", "cuchillo cocina",
-      "tabla picar", "colador", "rallador", "batidor", "espatula", "espátula",
-      "recipiente cocina", "envase cocina",
-    ])
-  ) {
-    return "kitchen";
-  }
-
-  // 🏠 HOGAR/DECORACIÓN
-  if (
-    matches([
-      "decoracion", "mueble", "lampara", "lámpara", "cortina", "almohada",
-      "cojin", "cojín", "sabanas", "sábanas", "edredon", "edredón", "florero",
-      "cuadro", "alfombra", "manta",
-    ])
-  ) {
-    return "home";
-  }
-
-  // ⚽ DEPORTES
-  if (
-    matches([
-      "deportivo", "fitness", "yoga", "gimnasio", "pesa", "mancuerna",
-      "proteina", "proteína", "suplemento", "pelota deporte", "colchoneta",
-      "banda elastica", "tenis deportivo",
-    ])
-  ) {
-    return "sports";
-  }
-
+  if (matches(["blusa", "polo mujer", "jean mujer", "falda", "vestido", "chompa mujer", "chaqueta mujer", "pantalon mujer", "short mujer", "top", "crop", "brasier", "leggins", "ropa mujer", "ropa femenina"])) return "clothing_female";
+  if (matches(["camisa hombre", "polo hombre", "terno", "pantalon hombre", "short hombre", "chompa hombre", "chaqueta hombre", "ropa hombre"])) return "clothing_male";
+  if (matches(["juguete", "muñeca", "peluche", "lego", "bloques", "carrito", "figura", "rompecabezas", "didactico", "juego infantil"])) return "toys";
+  if (matches(["arete", "pulsera", "collar", "anillo", "bisuteria", "vincha", "diadema", "hebilla", "brazalete"])) return "accessories";
+  if (matches(["audifono", "celular", "cargador", "cable", "usb", "parlante", "smartwatch", "auricular", "tablet", "laptop", "mouse", "teclado", "power bank"])) return "electronics";
+  if (matches(["labial", "sombra", "polvo", "base", "mascara", "crema", "serum", "perfume", "maquillaje", "esmalte"])) return "beauty";
+  if (matches(["perro", "gato", "mascota", "cama para", "correa", "comedero", "arenero"])) return "pets";
+  if (matches(["olla", "sarten", "utensilio", "cuchara", "cuchillo cocina", "tabla picar", "colador", "rallador"])) return "kitchen";
+  if (matches(["decoracion", "mueble", "lampara", "cortina", "almohada", "cojin", "sabanas", "edredon", "florero", "cuadro", "alfombra"])) return "home";
+  if (matches(["deportivo", "fitness", "yoga", "gimnasio", "pesa", "mancuerna", "proteina", "pelota deporte", "colchoneta"])) return "sports";
   return "generic";
 }
 
 // ============================================
-// SMART PROMPT ENGINE (10 categorías)
+// GROQ - TEXTO
 // ============================================
-
-function buildImagePrompt(
-  productName: string,
-  category: ProductCategory
-): string {
-  const BASE_QUALITY = `
-Formato: Imagen cuadrada 1:1, resolución 2048x2048, calidad 4K.
-La imagen NO debe parecer generada por IA. Debe verse como fotografía publicitaria real.
-Optimizada para Instagram, Facebook, TikTok, Marketplace y catálogos digitales.
-
-ENCABEZADO SUPERIOR:
-Colocar en la parte superior el texto "${productName}" con tipografía moderna, gruesa, elegante, centrada, con ligera sombra. Color según fondo (blanco, dorado o negro). Debe captar atención inmediatamente.
-
-MEJORA FOTOGRÁFICA PROFESIONAL:
-- Aumentar ligeramente brillo, contraste y nitidez
-- Mejorar iluminación
-- Resaltar colores reales sin sobresaturar
-- Mantener 100% fidelidad al producto original
-- Apariencia natural
-
-RESTRICCIONES CRÍTICAS:
-- NO modificar color, forma, diseño, material, textura, empaque, etiquetas o marca del producto
-- NO deformar el producto
-- NO inventar detalles que no existan
-- NO alterar proporciones
-- El producto debe verse 100% idéntico al original
-
-CALIDAD FINAL:
-Hiperrealista, nítida, alta definición, acabado premium, composición impecable, iluminación profesional, sombras naturales, profundidad de campo realista, sin artefactos, sin ruido.
-`;
-
-  const PROMPTS: Record<ProductCategory, string> = {
-    clothing_female: `
-${BASE_QUALITY}
-
-PRESENTACIÓN OBLIGATORIA:
-La prenda SIEMPRE debe aparecer PUESTA en una modelo femenina joven, elegante y atractiva.
-Bajo ninguna circunstancia mostrar la prenda sola, doblada, colgada en un gancho, sobre un maniquí o flotando.
-
-MODELO:
-- Debe vestir exactamente la prenda de la imagen de referencia
-- Pose natural y elegante estilo campaña de moda profesional
-- Ocupar 80-90% del encuadre
-- Transmitir: elegancia, confianza, naturalidad, belleza, sofisticación
-- No ocultar detalles importantes con cabello, brazos o accesorios
-
-FONDO:
-Boutique moderna y elegante de moda femenina.
-Elementos: escaparates, maniquíes, percheros modernos, vestidos, blusas, jeans, chaquetas, carteras, zapatos, espejos, plantas, decoración minimalista.
-Iluminación cálida tipo boutique de lujo.
-Efecto bokeh suave.
-
-ESTILO PUBLICITARIO:
-Inspirado en campañas internacionales de moda femenina premium.
-Debe transmitir: elegancia, glamour, calidad, exclusividad, modernidad.
-`,
-
-    clothing_male: `
-${BASE_QUALITY}
-
-PRESENTACIÓN OBLIGATORIA:
-La prenda SIEMPRE debe aparecer PUESTA en un modelo masculino joven y elegante.
-NO mostrar la prenda sola, colgada o sobre maniquí.
-
-MODELO:
-- Debe vestir exactamente la prenda de la imagen de referencia
-- Pose masculina natural y sofisticada
-- Ocupar 80-90% del encuadre
-- Transmitir: confianza, elegancia, modernidad, estilo urbano
-
-FONDO:
-Boutique moderna masculina o setting urbano premium.
-Elementos: ropa masculina en exhibición, iluminación profesional, decoración minimalista moderna.
-Efecto bokeh suave.
-
-ESTILO: Campaña masculina internacional premium.
-`,
-
-    toys: `
-${BASE_QUALITY}
-
-PRESENTACIÓN PRINCIPAL:
-El juguete debe ocupar 65-70% del espacio, perfectamente centrado.
-Proyectar calidad premium, diversión, seguridad.
-
-FONDO:
-Tienda moderna de juguetes con estanterías, exhibidores, muñecas, peluches, bloques, figuras, rompecabezas, juguetes educativos, decoración colorida y elegante. Iluminación cálida. Efecto bokeh.
-
-IMAGEN CIRCULAR (obligatoria):
-Agregar círculo en esquina inferior derecha (25% del tamaño total).
-Dentro del círculo: un niño o niña usando el juguete con alegría, diversión, entusiasmo natural.
-Borde del círculo: fino, limpio, elegante.
-
-ESTILO: Campaña oficial de marca internacional de juguetes.
-Transmitir: diversión, calidad, seguridad, creatividad, entretenimiento.
-`,
-
-    accessories: `
-${BASE_QUALITY}
-
-PRESENTACIÓN PRINCIPAL:
-El accesorio debe ocupar 65-70% del espacio, perfectamente centrado.
-Sombras suaves y reflejos naturales para dar profundidad.
-
-FONDO:
-Tienda moderna y elegante de bisutería y accesorios femeninos.
-Elementos: vitrinas iluminadas, estantes modernos, exhibidores, bisutería fina, aretes, pulseras, collares, accesorios para cabello, maquillaje. Iluminación cálida tipo boutique.
-Efecto bokeh suave.
-
-IMAGEN CIRCULAR (obligatoria):
-Agregar círculo en esquina inferior derecha (25% del tamaño total).
-Dentro: modelo joven y elegante usando el accesorio de manera natural y atractiva.
-Modelo transmite: elegancia, naturalidad, confianza, belleza, estilo moderno.
-Borde del círculo: fino, elegante, limpio.
-
-ESTILO: Boutique premium de accesorios femeninos internacional.
-`,
-
-    electronics: `
-${BASE_QUALITY}
-
-PRESENTACIÓN PRINCIPAL:
-El producto electrónico debe ocupar 65-70% del espacio, perfectamente centrado.
-Iluminación tipo estudio tecnológico con reflejos elegantes.
-
-FONDO:
-Setting tecnológico moderno y minimalista.
-Elementos: superficie oscura tipo cristal, luces LED sutiles, ambiente futurista, gradient sutil, decoración tech premium.
-Efecto bokeh con luces bokeh coloridas suaves.
-
-ESTILO: Campaña de Apple, Samsung o marca tech premium.
-Transmitir: innovación, calidad, tecnología avanzada, elegancia moderna.
-`,
-
-    beauty: `
-${BASE_QUALITY}
-
-PRESENTACIÓN PRINCIPAL:
-El producto de belleza debe ocupar 60-65% del espacio, con composición elegante.
-Puede incluir elementos decorativos: pétalos de rosa, gotas de agua, mármol.
-
-FONDO:
-Setting beauty premium tipo Sephora o Dior.
-Elementos: superficie de mármol, iluminación suave dorada o rosa, decoración femenina elegante, flores frescas, ambiente spa/beauty lounge.
-Efecto bokeh suave.
-
-IMAGEN CIRCULAR (obligatoria):
-Agregar círculo en esquina inferior derecha (25% del tamaño total).
-Dentro: modelo femenina joven aplicándose o mostrando el producto con belleza natural.
-Piel radiante, expresión serena y elegante.
-Borde del círculo: fino, dorado o blanco.
-
-ESTILO: Campaña beauty internacional premium.
-`,
-
-    pets: `
-${BASE_QUALITY}
-
-PRESENTACIÓN PRINCIPAL:
-El producto para mascotas debe ocupar 60-65% del espacio.
-
-FONDO:
-Setting hogar acogedor con toques pet-friendly.
-Elementos: sala moderna, alfombras suaves, luz natural, ambiente cálido.
-Efecto bokeh.
-
-IMAGEN CIRCULAR (obligatoria):
-Agregar círculo en esquina inferior derecha (25% del tamaño total).
-Dentro: mascota (perro o gato según corresponda) usando o disfrutando el producto felizmente.
-Expresión alegre y natural.
-Borde del círculo: fino y elegante.
-
-ESTILO: Campaña de marca premium de productos para mascotas.
-Transmitir: cariño, calidad, bienestar animal.
-`,
-
-    kitchen: `
-${BASE_QUALITY}
-
-PRESENTACIÓN PRINCIPAL:
-El utensilio/producto de cocina debe ocupar 60-65% del espacio.
-
-FONDO:
-Cocina moderna premium tipo revista de decoración.
-Elementos: encimera de mármol o madera, iluminación natural, utensilios profesionales al fondo desenfocados, plantas aromáticas, ambiente gourmet.
-Efecto bokeh.
-
-IMAGEN CIRCULAR (opcional):
-Círculo en esquina inferior derecha con producto en uso durante preparación de comida.
-
-ESTILO: Campaña de marca premium de utensilios de cocina.
-Transmitir: calidad, funcionalidad, elegancia culinaria.
-`,
-
-    home: `
-${BASE_QUALITY}
-
-PRESENTACIÓN PRINCIPAL:
-El producto de hogar debe ocupar 65-70% del espacio.
-
-FONDO:
-Interior moderno estilo revista Architectural Digest.
-Elementos: sala minimalista, luz natural cálida, decoración nórdica o moderna, texturas naturales.
-Efecto bokeh suave.
-
-ESTILO: Campaña IKEA premium o West Elm.
-Transmitir: elegancia, confort, modernidad, calidez hogareña.
-`,
-
-    sports: `
-${BASE_QUALITY}
-
-PRESENTACIÓN PRINCIPAL:
-El producto deportivo debe ocupar 65-70% del espacio.
-
-FONDO:
-Gimnasio moderno tipo Equinox o setting outdoor deportivo.
-Elementos: equipos profesionales al fondo, iluminación dinámica, ambiente motivador.
-Efecto bokeh dinámico.
-
-IMAGEN CIRCULAR (obligatoria):
-Círculo en esquina inferior derecha con atleta usando el producto en acción.
-Pose dinámica y motivadora.
-
-ESTILO: Campaña Nike, Adidas o Under Armour.
-Transmitir: energía, rendimiento, motivación, calidad deportiva.
-`,
-
-    generic: `
-${BASE_QUALITY}
-
-PRESENTACIÓN PRINCIPAL:
-El producto debe ocupar 65-70% del espacio, perfectamente centrado.
-
-FONDO:
-Setting comercial premium moderno.
-Elementos: superficie elegante, iluminación profesional de estudio, decoración minimalista sofisticada.
-Efecto bokeh suave.
-
-ESTILO: Campaña publicitaria premium internacional.
-Transmitir: calidad, elegancia, profesionalismo, exclusividad.
-`,
-  };
-
-  return PROMPTS[category];
-}
-
-// ============================================
-// GEMINI IMAGE GENERATION (Nano Banana)
-// ============================================
-
-async function generateImageWithGemini(
-  prompt: string,
-  imageBase64: string,
-  mimeType: string
-): Promise<string> {
-  const url = `${GEMINI_BASE_URL}/${GEMINI_IMAGE_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-
-  const requestBody = {
-    contents: [
-      {
-        parts: [
-          { text: prompt },
-          {
-            inline_data: {
-              mime_type: mimeType,
-              data: imageBase64,
-            },
-          },
-        ],
-      },
-    ],
-    generationConfig: {
-      responseModalities: ["IMAGE"],
-    },
-  };
-
-  console.log("🍌 Llamando a Nano Banana...");
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(requestBody),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error("❌ Gemini error:", errorText);
-    throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
-  }
-
-  const data = await response.json();
-  console.log("✅ Gemini respondió");
-
-  // Extraer imagen base64 de la respuesta
-  const parts = data.candidates?.[0]?.content?.parts;
-  if (!parts) throw new Error("No hay parts en la respuesta de Gemini");
-
-  const imagePart = parts.find((p: any) => p.inline_data || p.inlineData);
-  if (!imagePart) throw new Error("No se encontró imagen en la respuesta");
-
-  const base64Result =
-    imagePart.inline_data?.data || imagePart.inlineData?.data;
-  if (!base64Result) throw new Error("Imagen base64 vacía");
-
-  return base64Result;
-}
-
-// ============================================
-// GROQ TEXT GENERATION (Kit de marketing)
-// ============================================
-
-async function generateMarketingKit(data: {
-  productName: string;
-  productDescription: string;
-  productPrice: number;
-  category: ProductCategory;
-  storeName: string;
-  storeCity: string;
-  storePhone?: string;
-}): Promise<{
-  caption_instagram: string;
-  caption_facebook: string;
-  hashtags: string[];
-  whatsapp_message: string;
-  email_subject: string;
-  email_body: string;
-}> {
-  const prompt = `Eres un experto en marketing digital peruano. Genera un KIT COMPLETO DE MARKETING para este producto.
-
-PRODUCTO:
-- Nombre: ${data.productName}
-- Descripción: ${data.productDescription || "Sin descripción"}
-- Precio: S/ ${data.productPrice.toFixed(2)}
-- Categoría detectada: ${data.category}
-
-TIENDA:
-- Nombre: ${data.storeName}
-- Ciudad: ${data.storeCity}
-${data.storePhone ? `- WhatsApp: +51 ${data.storePhone}` : ""}
-
-Genera EXACTAMENTE en formato JSON válido (sin markdown, sin backticks):
-
-{
-  "caption_instagram": "caption viral para Instagram, máx 2000 chars, con emojis moderados, sin hashtags al final, con CTA claro",
-  "caption_facebook": "caption para Facebook, más informativo, máx 3000 chars, orientado a comunidad",
-  "hashtags": ["#tag1", "#tag2", ...15 hashtags mix populares/medios/nicho/locales de Peru"],
-  "whatsapp_message": "mensaje broadcast personalizado, máx 800 chars, con *negrita* de WhatsApp, emojis, CTA a responder",
-  "email_subject": "asunto atractivo máx 50 chars",
-  "email_body": "email completo con saludo, hook, desarrollo, precio, CTA, cierre. Máx 1500 palabras. Formato limpio con saltos de línea."
-}
-
-REGLAS:
-- Español peruano natural (soles, chévere, bacán)
-- Menciona ${data.storeCity} de forma natural
-- Precio destacado
-- Auténtico, no robótico
-- CTA claro en cada pieza
-
-Solo el JSON. Nada más.`;
+async function callGroq(prompt: string, temperature = 0.8): Promise<string> {
+  const groqApiKey = Deno.env.get("GROQ_API_KEY");
+  if (!groqApiKey) throw new Error("GROQ_API_KEY no configurada");
 
   const response = await fetch(GROQ_API_URL, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${Deno.env.get("GROQ_API_KEY")}`,
       "Content-Type": "application/json",
+      Authorization: `Bearer ${groqApiKey}`,
     },
     body: JSON.stringify({
       model: GROQ_MODEL,
       messages: [{ role: "user", content: prompt }],
-      temperature: 0.85,
-      max_tokens: 4096,
-      response_format: { type: "json_object" },
+      temperature,
+      max_tokens: 1024,
     }),
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Groq error: ${error}`);
+    const err = await response.text();
+    throw new Error(`Groq error ${response.status}: ${err}`);
   }
 
-  const result = await response.json();
-  const content = result.choices?.[0]?.message?.content ?? "{}";
-  return JSON.parse(content);
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content?.trim() || "";
 }
 
 // ============================================
-// MAIN HANDLER
+// GENERADORES DE CONTENIDO
 // ============================================
+async function generateInstagramCaption(
+  productName: string,
+  price: number,
+  category: ProductCategory
+): Promise<string> {
+  const prompt = `Eres un copywriter viral de Instagram para e-commerce peruano.
 
-serve(async (req) => {
-  const startTime = Date.now();
-  console.log("🚀 Product Launch AI - Request received");
+Genera un caption ATRACTIVO y VIRAL para Instagram para este producto:
+- Nombre: ${productName}
+- Precio: S/ ${price.toFixed(2)}
+- Categoría: ${category}
 
+REGLAS:
+- Máximo 220 caracteres
+- Empieza con 1 emoji fuerte
+- 1 pregunta que genere engagement
+- 1 CTA claro (llamada a la acción)
+- 2-3 emojis en total
+- Habla al cliente de "tú"
+- Crea urgencia sutil
+- NO uses "compra ahora" (usa "descubre", "consíguelo")
+- NO menciones descuentos si no los sabes
+
+Responde SOLO el caption, sin explicaciones, sin comillas.`;
+
+  return await callGroq(prompt, 0.9);
+}
+
+async function generateFacebookCaption(
+  productName: string,
+  price: number,
+  category: ProductCategory
+): Promise<string> {
+  const prompt = `Eres un copywriter de Facebook para e-commerce peruano.
+
+Genera un post ATRACTIVO para Facebook para:
+- Nombre: ${productName}
+- Precio: S/ ${price.toFixed(2)}
+- Categoría: ${category}
+
+REGLAS:
+- Máximo 350 caracteres
+- Empieza con emoji y hook fuerte
+- 2-3 beneficios emocionales (no técnicos)
+- 1 CTA claro
+- 3-4 emojis estratégicos
+- Habla al cliente de "tú"
+- Estilo más informativo que Instagram
+- NO uses "compra ahora"
+
+Responde SOLO el post, sin explicaciones, sin comillas.`;
+
+  return await callGroq(prompt, 0.8);
+}
+
+async function generateHashtags(
+  productName: string,
+  category: ProductCategory
+): Promise<string[]> {
+  const prompt = `Genera 15 hashtags optimizados para Instagram/TikTok Perú para este producto:
+- Nombre: ${productName}
+- Categoría: ${category}
+
+REGLAS:
+- Mezcla de trending + nichos + geolocalización
+- Incluye hashtags Perú (#peru, #lima, #compraslocalperu)
+- Incluye hashtags de categoría específica
+- Formato: cada hashtag empieza con #
+- Sin espacios, sin mayúsculas
+- Un hashtag por línea
+- SOLO los hashtags, sin numeración, sin explicaciones
+
+Ejemplo formato:
+#hashtag1
+#hashtag2
+#hashtag3`;
+
+  const raw = await callGroq(prompt, 0.6);
+  const hashtags = raw
+    .split(/\n|\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.startsWith("#") && t.length > 2)
+    .slice(0, 15);
+
+  return hashtags.length > 0
+    ? hashtags
+    : ["#peru", "#compraslocalperu", "#emprendimientoperu", "#lima", "#dropshipperu"];
+}
+
+async function generateWhatsAppMessage(
+  productName: string,
+  price: number,
+  storeName: string,
+  storePhone: string
+): Promise<string> {
+  const prompt = `Eres un experto en marketing WhatsApp para tiendas peruanas.
+
+Genera un mensaje persuasivo para enviar por WhatsApp Broadcast/Estado:
+- Producto: ${productName}
+- Precio: S/ ${price.toFixed(2)}
+- Tienda: ${storeName}
+
+REGLAS:
+- Máximo 300 caracteres
+- Empieza con emoji fuerte + saludo cálido
+- 1 línea vendedora
+- Precio destacado con emoji 💰
+- CTA claro: "Escríbeme al ${storePhone}" o "Responde este mensaje"
+- 3-4 emojis estratégicos
+- Tono cercano peruano
+- Máximo 4 líneas separadas por saltos
+
+Responde SOLO el mensaje, sin explicaciones, sin comillas.`;
+
+  return await callGroq(prompt, 0.8);
+}
+
+async function generateEmailSubject(productName: string): Promise<string> {
+  const prompt = `Genera un asunto ATRACTIVO para email marketing sobre: ${productName}
+
+REGLAS:
+- Máximo 50 caracteres
+- Genera curiosidad o urgencia
+- Puede usar 1-2 emojis
+- NO uses "compra ahora" o "descuento"
+
+Responde SOLO el asunto, sin comillas, sin explicaciones.`;
+
+  return await callGroq(prompt, 0.9);
+}
+
+async function generateEmailBody(
+  productName: string,
+  price: number,
+  storeName: string
+): Promise<string> {
+  const prompt = `Genera el cuerpo de un email marketing profesional para:
+- Producto: ${productName}
+- Precio: S/ ${price.toFixed(2)}
+- Tienda: ${storeName}
+
+REGLAS:
+- Estructura: Saludo + Hook + Beneficios + CTA + Cierre
+- Máximo 500 caracteres
+- Tono cercano y profesional
+- 2-3 emojis estratégicos
+- Habla al cliente de "tú"
+- CTA: "Descúbrelo aquí" o "Conócelo"
+- Cierre con nombre de tienda
+
+Responde SOLO el cuerpo del email, sin asunto, sin comillas.`;
+
+  return await callGroq(prompt, 0.8);
+}
+
+// ============================================
+// HANDLER PRINCIPAL
+// ============================================
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  const startTime = Date.now();
+
   try {
-    // 1. Autenticación
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(
-        JSON.stringify({ error: "No autorizado" }),
+        JSON.stringify({ error: "No authorization header" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const supabaseUser = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { data: { user }, error: userError } = await supabaseUser.auth.getUser();
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
 
     if (userError || !user) {
       return new Response(
@@ -598,237 +287,151 @@ serve(async (req) => {
       );
     }
 
-    const vendorId = user.id;
-    console.log("✅ Usuario:", vendorId);
-
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    // 2. Parse body
     const body: RequestBody = await req.json();
     const {
       product_id,
       product_name,
-      product_description,
-      product_category,
+      product_description = "",
+      product_category = "",
       product_price,
       input_image_url,
-      store_name,
-      store_city,
-      store_phone,
+      store_name = "Mi tienda",
+      store_phone = "",
     } = body;
 
-    if (!product_name || !input_image_url || !product_id) {
+    if (!product_id || !product_name || !input_image_url) {
       return new Response(
-        JSON.stringify({ error: "Faltan campos requeridos" }),
+        JSON.stringify({ error: "Faltan datos requeridos" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // 3. Verificar créditos (15 créditos por kit completo)
-    const CREDITS_COST = 15;
-    const { data: subscription } = await supabaseAdmin
-      .from("ai_subscriptions")
-      .select("credits_remaining, plan")
-      .eq("vendor_id", vendorId)
-      .single();
+    console.log(`🍌 Launch AI: ${product_name} (user: ${user.email})`);
 
-    if (!subscription) {
+    // ========================================
+    // VERIFICAR CRÉDITOS
+    // ========================================
+    const { data: subscription, error: subError } = await supabase
+      .from("ai_subscriptions")
+      .select("*")
+      .eq("vendor_id", user.id)
+      .maybeSingle();
+
+    if (subError || !subscription) {
       return new Response(
-        JSON.stringify({ error: "Sin subscripción activa" }),
+        JSON.stringify({ error: "No tienes suscripción AI activa." }),
         { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (subscription.plan !== "business" && subscription.credits_remaining < CREDITS_COST) {
+    const isUnlimited = subscription.plan === "business";
+    if (!isUnlimited && subscription.credits_remaining < CREDITS_COST) {
       return new Response(
         JSON.stringify({
-          error: "Créditos insuficientes",
-          credits_needed: CREDITS_COST,
-          credits_available: subscription.credits_remaining,
+          error: `Créditos insuficientes. Necesitas ${CREDITS_COST} y tienes ${subscription.credits_remaining}`,
+          credits_remaining: subscription.credits_remaining,
         }),
         { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // 4. Consumir créditos
-    const { data: creditsOk } = await supabaseAdmin.rpc("consume_ai_credits", {
-      p_vendor_id: vendorId,
-      p_credits: CREDITS_COST,
-    });
-
-    if (!creditsOk) {
-      return new Response(
-        JSON.stringify({ error: "Error al consumir créditos" }),
-        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // 5. Detectar categoría automáticamente
+    // ========================================
+    // GENERAR CONTENIDO EN PARALELO
+    // ========================================
     const detectedCategory = detectProductCategory(
       product_name,
-      product_description || "",
-      product_category || ""
+      product_description,
+      product_category
     );
-    console.log("🎯 Categoría detectada:", detectedCategory);
+    console.log(`🎯 Categoría detectada: ${detectedCategory}`);
 
-    // 6. Crear registro en product_launch_kits
-    const { data: kit, error: kitError } = await supabaseAdmin
-      .from("product_launch_kits")
-      .insert({
-        vendor_id: vendorId,
-        product_id,
-        detected_category: detectedCategory,
-        original_image_url: input_image_url,
-        status: "generating",
-        progress: 10,
-        credits_used: CREDITS_COST,
-      })
-      .select()
-      .single();
+    console.log("🧠 Generando contenido con Groq...");
+    const [
+      captionInstagram,
+      captionFacebook,
+      hashtags,
+      whatsappMessage,
+      emailSubject,
+      emailBody,
+    ] = await Promise.all([
+      generateInstagramCaption(product_name, product_price, detectedCategory),
+      generateFacebookCaption(product_name, product_price, detectedCategory),
+      generateHashtags(product_name, detectedCategory),
+      generateWhatsAppMessage(product_name, product_price, store_name, store_phone),
+      generateEmailSubject(product_name),
+      generateEmailBody(product_name, product_price, store_name),
+    ]);
 
-    if (kitError) throw new Error(`Error creando kit: ${kitError.message}`);
+    console.log("✅ Contenido generado");
 
-    // 7. Descargar imagen original y convertir a base64
-    console.log("📥 Descargando imagen original...");
-    const imageResponse = await fetch(input_image_url);
-    if (!imageResponse.ok) throw new Error("No se pudo descargar la imagen");
-
-    const imageBuffer = await imageResponse.arrayBuffer();
-    const imageBytes = new Uint8Array(imageBuffer);
-    const mimeType = imageResponse.headers.get("content-type") || "image/jpeg";
-
-    // Convertir a base64
-    let binary = "";
-    const chunkSize = 8192;
-    for (let i = 0; i < imageBytes.length; i += chunkSize) {
-      const chunk = imageBytes.slice(i, i + chunkSize);
-      binary += String.fromCharCode(...chunk);
+    // ========================================
+    // DESCONTAR CRÉDITOS
+    // ========================================
+    if (!isUnlimited) {
+      const newCredits = subscription.credits_remaining - CREDITS_COST;
+      const newUsed = (subscription.total_used || 0) + CREDITS_COST;
+      await supabase
+        .from("ai_subscriptions")
+        .update({
+          credits_remaining: newCredits,
+          total_used: newUsed,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("vendor_id", user.id);
+      console.log(`💳 Créditos: ${subscription.credits_remaining} → ${newCredits}`);
     }
-    const imageBase64 = btoa(binary);
 
-    console.log(`📊 Imagen cargada: ${imageBytes.length} bytes, tipo: ${mimeType}`);
-
-    // 8. Generar imagen mejorada con Gemini
-    await supabaseAdmin
-      .from("product_launch_kits")
-      .update({ progress: 30 })
-      .eq("id", kit.id);
-
-    const imagePrompt = buildImagePrompt(product_name, detectedCategory);
-    const generatedImageBase64 = await generateImageWithGemini(
-      imagePrompt,
-      imageBase64,
-      mimeType
-    );
-
-    // 9. Subir imagen generada al bucket
-    console.log("💾 Guardando imagen generada...");
-    await supabaseAdmin
-      .from("product_launch_kits")
-      .update({ progress: 60 })
-      .eq("id", kit.id);
-
-    const generatedBinaryString = atob(generatedImageBase64);
-    const generatedBytes = new Uint8Array(generatedBinaryString.length);
-    for (let i = 0; i < generatedBinaryString.length; i++) {
-      generatedBytes[i] = generatedBinaryString.charCodeAt(i);
-    }
-    const generatedBlob = new Blob([generatedBytes], { type: "image/png" });
-
-    const timestamp = Date.now();
-    const fileName = `${vendorId}/${timestamp}-${detectedCategory}.png`;
-
-    const { error: uploadError } = await supabaseAdmin.storage
-      .from("product-launch-images")
-      .upload(fileName, generatedBlob, {
-        contentType: "image/png",
-        upsert: false,
-      });
-
-    if (uploadError) throw new Error(`Error subiendo imagen: ${uploadError.message}`);
-
-    const { data: urlData } = supabaseAdmin.storage
-      .from("product-launch-images")
-      .getPublicUrl(fileName);
-
-    const enhancedImageUrl = urlData.publicUrl;
-    console.log("✅ Imagen guardada:", enhancedImageUrl);
-
-    // 10. Generar kit de marketing (texto) con Groq
-    await supabaseAdmin
-      .from("product_launch_kits")
-      .update({ progress: 80, enhanced_image_url: enhancedImageUrl })
-      .eq("id", kit.id);
-
-    const marketingKit = await generateMarketingKit({
-      productName: product_name,
-      productDescription: product_description || "",
-      productPrice: product_price,
-      category: detectedCategory,
-      storeName: store_name || "Mi Tienda",
-      storeCity: store_city || "Iquitos",
-      storePhone: store_phone,
-    });
-
-    // 11. Actualizar kit con todo el contenido
+    // ========================================
+    // GUARDAR KIT EN BD
+    // ========================================
     const generationTime = Date.now() - startTime;
 
-    const { data: finalKit, error: updateError } = await supabaseAdmin
+    const kit = {
+      product_id,
+      vendor_id: user.id,
+      detected_category: detectedCategory,
+      original_image_url: input_image_url,
+      enhanced_image_url: input_image_url, // 🔥 IGUAL a la original (por ahora)
+      caption_instagram: captionInstagram,
+      caption_facebook: captionFacebook,
+      hashtags: hashtags,
+      whatsapp_message: whatsappMessage,
+      email_subject: emailSubject,
+      email_body: emailBody,
+      credits_used: CREDITS_COST,
+      generation_time_ms: generationTime,
+    };
+
+    const { data: savedKit } = await supabase
       .from("product_launch_kits")
-      .update({
-        status: "completed",
-        progress: 100,
-        caption_instagram: marketingKit.caption_instagram,
-        caption_facebook: marketingKit.caption_facebook,
-        hashtags: marketingKit.hashtags,
-        whatsapp_message: marketingKit.whatsapp_message,
-        email_subject: marketingKit.email_subject,
-        email_body: marketingKit.email_body,
-        generation_time_ms: generationTime,
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", kit.id)
+      .insert(kit)
       .select()
       .single();
 
-    if (updateError) throw new Error(`Error actualizando kit: ${updateError.message}`);
+    console.log(`✅ Kit guardado en ${generationTime}ms`);
 
-    // 12. Obtener créditos actualizados
-    const { data: updatedSub } = await supabaseAdmin
-      .from("ai_subscriptions")
-      .select("credits_remaining, plan")
-      .eq("vendor_id", vendorId)
-      .single();
+    const finalCredits = isUnlimited
+      ? -1
+      : subscription.credits_remaining - CREDITS_COST;
 
-    console.log(`🎉 Kit generado en ${generationTime}ms`);
-
-    // ✅ Respuesta exitosa
     return new Response(
       JSON.stringify({
         success: true,
-        kit: finalKit,
+        kit: savedKit || kit,
         credits_used: CREDITS_COST,
-        credits_remaining: updatedSub?.credits_remaining || 0,
+        credits_remaining: finalCredits,
         generation_time_ms: generationTime,
       }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error("💥 Error general:", error);
+    console.error("❌ Error general:", error);
     return new Response(
       JSON.stringify({
-        error: error instanceof Error ? error.message : "Error desconocido",
+        error: "Error interno",
+        details: error instanceof Error ? error.message : String(error),
       }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
