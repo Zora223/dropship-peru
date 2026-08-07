@@ -53,8 +53,6 @@ import VendorSettingsPage from "./pages/vendor/VendorSettingsPage";
 import VendorReviewsPage from "./pages/vendor/VendorReviewsPage";
 import VendorAnalyticsPage from "./pages/vendor/VendorAnalyticsPage";
 import VendorPickupLocationsPage from "./pages/vendor/VendorPickupLocationsPage";
-// ✅ Import Dropship AI Page
-import DropshipAIPage from "./pages/vendor/DropshipAIPage";
 
 import CustomerLayout from "./layouts/CustomerLayout";
 import CustomerDashboard from "./pages/customer/CustomerDashboard";
@@ -152,8 +150,6 @@ export default function AppRoutes() {
         <Route path="payments" element={<VendorPaymentsPage />} />
         <Route path="theme" element={<VendorThemePage />} />
         <Route path="settings" element={<VendorSettingsPage />} />
-        {/* ✅ Ruta Dropship AI */}
-        <Route path="ai" element={<DropshipAIPage />} />
       </Route>
 
       {/* Customer */}

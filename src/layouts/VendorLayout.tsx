@@ -4,7 +4,7 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 
 const navItems = [
   { to: "/vendor", label: "Resumen", icon: "📊", exact: true },
-  { to: "/vendor/catalog", label: "Catálogo maestro", icon: "🏭" },
+  { to: "/vendor/catalog", label: "Catálogo maestro", icon: "🏷️" },
   { to: "/vendor/products", label: "Mis productos", icon: "📦" },
   { to: "/vendor/orders", label: "Pedidos", icon: "🧾" },
   { to: "/vendor/reviews", label: "Reseñas", icon: "⭐" },
@@ -15,13 +15,6 @@ const navItems = [
   { to: "/vendor/theme", label: "Personalizar tienda", icon: "🎨" },
   { to: "/vendor/settings", label: "Configuración", icon: "⚙️" },
 ];
-
-// ✅ Item especial AI (separado para darle estilo propio)
-const aiNavItem = {
-  to: "/vendor/ai",
-  label: "Dropship AI",
-  icon: "🤖",
-};
 
 function isActivePath(pathname: string, to: string, exact?: boolean) {
   if (exact) return pathname === to;
@@ -48,8 +41,6 @@ export default function VendorLayout() {
   }, [isDrawerOpen]);
 
   const SidebarContent = () => {
-    const isAiActive = isActivePath(location.pathname, aiNavItem.to);
-
     return (
       <>
         <div className="text-xs font-bold uppercase tracking-wider text-gray-400">
@@ -57,29 +48,6 @@ export default function VendorLayout() {
         </div>
 
         <nav className="mt-4 space-y-1">
-          {/* ✅ Link AI con estilo especial PRIMERO (destacado) */}
-          <Link
-            to={aiNavItem.to}
-            className={`flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
-              isAiActive
-                ? "bg-linear-to-r from-purple-600 to-pink-600 text-white shadow-sm"
-                : "bg-linear-to-r from-purple-50 to-pink-50 text-purple-700 hover:from-purple-100 hover:to-pink-100"
-            }`}
-          >
-            <span className="text-base">{aiNavItem.icon}</span>
-            <span className="flex-1">{aiNavItem.label}</span>
-            {/* Badge NUEVO */}
-            {!isAiActive && (
-              <span className="rounded-full bg-linear-to-r from-purple-500 to-pink-500 px-2 py-0.5 text-[10px] font-bold text-white shadow">
-                NUEVO
-              </span>
-            )}
-          </Link>
-
-          {/* Separador visual */}
-          <div className="my-2 border-t border-gray-100" />
-
-          {/* Items normales */}
           {navItems.map((item) => {
             const active = isActivePath(
               location.pathname,
@@ -112,6 +80,25 @@ export default function VendorLayout() {
             Tus clientes ingresan por tu enlace directo y ven solo tu tienda,
             marca y productos.
           </p>
+        </div>
+
+        {/* 🍌 Card promocional Launch AI */}
+        <div className="mt-4 rounded-2xl bg-linear-to-br from-purple-500 via-pink-500 to-orange-500 p-4 text-white shadow-lg">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">🍌</span>
+            <div className="text-xs font-black uppercase tracking-wider">
+              Product Launch AI
+            </div>
+          </div>
+          <p className="mt-2 text-xs leading-relaxed opacity-95">
+            Al crear un producto, la AI genera automáticamente imagen pro + captions + hashtags.
+          </p>
+          <Link
+            to="/vendor/products"
+            className="mt-3 block rounded-lg bg-white/20 backdrop-blur px-3 py-1.5 text-center text-xs font-bold text-white hover:bg-white/30 transition"
+          >
+            🚀 Probar ahora
+          </Link>
         </div>
       </>
     );
