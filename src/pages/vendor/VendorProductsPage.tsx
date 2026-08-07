@@ -64,7 +64,7 @@ export default function VendorProductsPage() {
   const [editingPrice, setEditingPrice] =
     useState<VendorProductWithRealStock | null>(null);
 
-  // 🍌 Modal Launch AI (imagen + marketing completo)
+  // 🍌 Modal Launch AI
   const [launchAIProduct, setLaunchAIProduct] =
     useState<VendorProductWithRealStock | null>(null);
   const [aiSubscription, setAiSubscription] =
@@ -87,7 +87,6 @@ export default function VendorProductsPage() {
     }
   };
 
-  // Cargar suscripción AI (para saber créditos)
   const loadAISubscription = async () => {
     try {
       const sub = await getAISubscription();
@@ -219,7 +218,7 @@ export default function VendorProductsPage() {
     }
   };
 
-  // 🍌 Abrir modal Launch AI para producto viejo
+  // 🍌 Abrir modal Launch AI
   const openLaunchAI = (product: VendorProductWithRealStock) => {
     if (!aiSubscription) {
       toast.warning(
@@ -237,6 +236,13 @@ export default function VendorProductsPage() {
       return;
     }
     setLaunchAIProduct(product);
+  };
+
+  // 🔥 FIX v22.2.4: Cerrar modal + recargar créditos
+  const closeLaunchAI = () => {
+    setLaunchAIProduct(null);
+    // Recarga créditos DESPUÉS de cerrar (no durante el proceso)
+    loadAISubscription();
   };
 
   if (loadingStore || loading) {
@@ -297,7 +303,7 @@ export default function VendorProductsPage() {
         </div>
       </div>
 
-      {/* 🍌 Card informativa Launch AI (solo si tiene suscripción) */}
+      {/* 🍌 Card informativa Launch AI */}
       {aiSubscription && (
         <div className="rounded-2xl bg-linear-to-br from-purple-500 via-pink-500 to-orange-500 p-5 text-white shadow-lg">
           <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -407,11 +413,11 @@ export default function VendorProductsPage() {
         onSave={handleSavePrice}
       />
 
-      {/* 🍌 Modal Launch AI (para producto existente) */}
+      {/* 🍌 Modal Launch AI - SIN onCreditsUpdate (evita remount) */}
       {launchAIProduct && aiSubscription && (
         <ProductLaunchAIModal
           isOpen={!!launchAIProduct}
-          onClose={() => setLaunchAIProduct(null)}
+          onClose={closeLaunchAI}
           params={{
             product_id: launchAIProduct.id,
             product_name: launchAIProduct.name,
@@ -422,11 +428,6 @@ export default function VendorProductsPage() {
           }}
           creditsRemaining={aiSubscription.credits_remaining}
           plan={aiSubscription.plan}
-          onCreditsUpdate={(newCredits) => {
-            setAiSubscription((prev) =>
-              prev ? { ...prev, credits_remaining: newCredits } : prev
-            );
-          }}
         />
       )}
 
@@ -613,7 +614,6 @@ export default function VendorProductsPage() {
 
                         <td className="px-6 py-4">
                           <div className="flex flex-wrap items-center gap-1.5">
-                            {/* 🍌 Botón Launch AI */}
                             {product.is_active && images.length > 0 && (
                               <button
                                 onClick={() => openLaunchAI(product)}
@@ -624,7 +624,6 @@ export default function VendorProductsPage() {
                               </button>
                             )}
 
-                            {/* Editar precio */}
                             <button
                               onClick={() => setEditingPrice(product)}
                               className="rounded-lg bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-800 hover:bg-amber-200 transition"
@@ -633,7 +632,6 @@ export default function VendorProductsPage() {
                               💰
                             </button>
 
-                            {/* Editar producto (solo propios) */}
                             {product.source === "own" && (
                               <button
                                 onClick={() => openEdit(product)}
@@ -644,7 +642,6 @@ export default function VendorProductsPage() {
                               </button>
                             )}
 
-                            {/* Eliminar */}
                             <button
                               onClick={() => handleDelete(product)}
                               className="rounded-lg bg-red-100 px-2.5 py-1 text-[11px] font-bold text-red-800 hover:bg-red-200 transition"
@@ -679,7 +676,6 @@ export default function VendorProductsPage() {
                   key={product.id}
                   className="overflow-hidden rounded-2xl bg-white shadow-sm border border-gray-100"
                 >
-                  {/* Imagen */}
                   <div className="relative aspect-square bg-gray-50">
                     {images[0] ? (
                       <img
@@ -693,7 +689,6 @@ export default function VendorProductsPage() {
                       </div>
                     )}
 
-                    {/* Badge origen */}
                     <div className="absolute top-2 left-2">
                       {isCatalog ? (
                         <span className="rounded-full bg-purple-500 px-2.5 py-1 text-[10px] font-bold text-white shadow">
@@ -706,7 +701,6 @@ export default function VendorProductsPage() {
                       )}
                     </div>
 
-                    {/* Estado toggle */}
                     <div className="absolute top-2 right-2">
                       <button
                         onClick={() =>
@@ -722,7 +716,6 @@ export default function VendorProductsPage() {
                       </button>
                     </div>
 
-                    {/* Stock */}
                     <div className="absolute bottom-2 right-2">
                       <span
                         className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold shadow ${stockConfig.bg} ${stockConfig.text}`}
@@ -732,7 +725,6 @@ export default function VendorProductsPage() {
                     </div>
                   </div>
 
-                  {/* Info */}
                   <div className="p-4">
                     <h3 className="line-clamp-2 text-sm font-bold text-gray-900">
                       {product.name}
@@ -750,7 +742,6 @@ export default function VendorProductsPage() {
                       </div>
                     )}
 
-                    {/* Precios */}
                     <div className="mt-3 flex items-baseline gap-2">
                       <span className="text-lg font-black text-gray-900">
                         S/ {currentPrice.toFixed(2)}
@@ -785,9 +776,7 @@ export default function VendorProductsPage() {
                       </div>
                     )}
 
-                    {/* Botones acción */}
                     <div className="mt-4 grid grid-cols-2 gap-2">
-                      {/* 🍌 Launch AI (solo si activo y con imagen) */}
                       {product.is_active && images.length > 0 && (
                         <button
                           onClick={() => openLaunchAI(product)}
@@ -797,7 +786,6 @@ export default function VendorProductsPage() {
                         </button>
                       )}
 
-                      {/* Editar precio */}
                       <button
                         onClick={() => setEditingPrice(product)}
                         className="rounded-xl bg-amber-50 py-2 text-xs font-bold text-amber-700 hover:bg-amber-100 transition"
@@ -805,7 +793,6 @@ export default function VendorProductsPage() {
                         💰 Precio
                       </button>
 
-                      {/* Editar (solo propios) o Quitar (catálogo) */}
                       {product.source === "own" ? (
                         <button
                           onClick={() => openEdit(product)}
@@ -822,7 +809,6 @@ export default function VendorProductsPage() {
                         </button>
                       )}
 
-                      {/* Eliminar (solo propios) */}
                       {product.source === "own" && (
                         <button
                           onClick={() => handleDelete(product)}

@@ -1,6 +1,6 @@
 // src/components/vendor/ProductLaunchAIModal.tsx
 // 🍌 Product Launch AI - Wizard con progreso animado
-// v22.2.3 - Debug transición completed → KitViewer
+// v22.2.4 - Fix remount bug (resultKit se preserva)
 
 import { useState, useEffect } from "react";
 import {
@@ -52,7 +52,7 @@ export default function ProductLaunchAIModal({
   const isUnlimited = plan === "business";
   const canAfford = isUnlimited || credits >= CREDITS_COST;
 
-  // 🔥 DEBUG: log de props cada vez que se abre
+  // 🔥 DEBUG
   useEffect(() => {
     if (isOpen) {
       console.log("🍌 [Launch AI Modal] Abierto con:", {
@@ -72,6 +72,8 @@ export default function ProductLaunchAIModal({
     }
   }, [isOpen, initialCredits, plan]);
 
+  // 🔥 FIX v22.2.4: SOLO resetea cuando isOpen pasa de false a true
+  // NO agregar initialCredits como dependencia (causa remount)
   useEffect(() => {
     if (isOpen) {
       setStep("confirm");
@@ -81,7 +83,8 @@ export default function ProductLaunchAIModal({
       setError(null);
       setCredits(initialCredits);
     }
-  }, [isOpen, initialCredits]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   useEffect(() => {
     if (step !== "generating") return;
@@ -202,7 +205,7 @@ export default function ProductLaunchAIModal({
           </div>
         </div>
 
-        {/* Body - CON FLEX-1 PARA OCUPAR EL ESPACIO */}
+        {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 min-h-0">
           {/* STEP 1: CONFIRMAR */}
           {step === "confirm" && (
@@ -216,7 +219,6 @@ export default function ProductLaunchAIModal({
                 </p>
               </div>
 
-              {/* Preview del producto */}
               <div className="rounded-2xl bg-gray-50 p-4 flex items-center gap-4">
                 {params.input_image_url ? (
                   <img
@@ -242,7 +244,6 @@ export default function ProductLaunchAIModal({
                 </div>
               </div>
 
-              {/* Lo que se generará */}
               <div className="rounded-2xl border-2 border-purple-100 bg-linear-to-br from-purple-50 to-pink-50 p-5">
                 <h4 className="mb-3 text-sm font-black uppercase tracking-wider text-purple-900">
                   🎁 Recibirás:
@@ -266,7 +267,6 @@ export default function ProductLaunchAIModal({
                 </ul>
               </div>
 
-              {/* Costo */}
               <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-4 text-center">
                 <div className="text-xs font-bold uppercase tracking-wider text-emerald-700">
                   Costo del Kit Completo
