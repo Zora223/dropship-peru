@@ -173,7 +173,7 @@ export default function ProductLaunchAIModal({
         </div>
 
         {/* Body */}
-        <div className="p-6 max-h-[calc(90vh-140px)] overflow-y-auto">
+        <div className="p-6 overflow-y-auto" style={{ minHeight: '400px' }}>
           {/* STEP 1: CONFIRMAR */}
           {step === "confirm" && (
             <div className="space-y-6">
