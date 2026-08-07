@@ -1,6 +1,6 @@
 // src/components/vendor/ProductLaunchAIModal.tsx
 // 🍌 Product Launch AI - Wizard con progreso animado
-// v22.2.1 - Con debug + flex layout + safety
+// v22.2.3 - Debug transición completed → KitViewer
 
 import { useState, useEffect } from "react";
 import {
@@ -118,7 +118,9 @@ export default function ProductLaunchAIModal({
       setProgress(100);
       setCurrentStage(GENERATION_STAGES.length - 1);
 
+      console.log("⏰ [Launch AI] Programando cambio a 'completed' en 800ms...");
       setTimeout(() => {
+        console.log("✅ [Launch AI] Cambiando step a 'completed', kit:", response.kit);
         setStep("completed");
         onSuccess?.(response.kit);
       }, 800);
@@ -142,7 +144,11 @@ export default function ProductLaunchAIModal({
 
   if (!isOpen) return null;
 
+  // 🔥 DEBUG RENDER
+  console.log("🎬 [Launch AI Render] step:", step, "hasKit:", !!resultKit);
+
   if (step === "completed" && resultKit) {
+    console.log("🚀 [Launch AI] Mostrando KitViewer con:", resultKit);
     return (
       <ProductLaunchKitViewer
         isOpen={true}
