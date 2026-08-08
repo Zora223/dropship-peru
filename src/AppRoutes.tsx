@@ -33,6 +33,7 @@ import AdminLayout from "./layouts/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminThemePage from "./pages/admin/AdminThemePage";
 import AdminCatalogPage from "./pages/admin/AdminCatalogPage";
+import AdminSuppliersPage from "./pages/admin/AdminSuppliersPage";
 import AdminUsersPage from "./pages/admin/AdminUsersPage";
 import AdminStoresPage from "./pages/admin/AdminStoresPage";
 import AdminOrdersPage from "./pages/admin/AdminOrdersPage";
@@ -116,6 +117,7 @@ export default function AppRoutes() {
         <Route path="discounts" element={<AdminDiscountsPage />} />
         <Route path="theme" element={<AdminThemePage />} />
         <Route path="catalog" element={<AdminCatalogPage />} />
+        <Route path="suppliers" element={<AdminSuppliersPage />} />
         <Route path="users" element={<AdminUsersPage />} />
         <Route path="deliveries" element={<AdminDeliveriesPage />} />
         <Route path="delivery-payments" element={<AdminDeliveryPaymentsPage />} />
