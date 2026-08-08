@@ -1,8 +1,9 @@
 // ============================================================
 // SUPPLIER PRODUCTS — Funciones CRUD para proveedores
+// v22.6 — Soft delete implementado
 // ============================================================
 // Maneja el catálogo mayorista de cada proveedor:
-// - Crear, editar, eliminar productos
+// - Crear, editar, eliminar (soft delete), productos
 // - Subir imágenes a Supabase Storage
 // - Contar cuántos vendors usan cada producto
 // ============================================================
@@ -24,6 +25,7 @@ export interface SupplierProduct {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  deleted_at?: string | null;
   vendors_count?: number; // Calculado, no viene de la BD
 }
 
@@ -48,15 +50,17 @@ export interface SupplierProductStats {
 
 // ============================================================
 // LISTAR PRODUCTOS DEL PROVEEDOR (con conteo de vendors)
+// Filtra los productos con soft-delete
 // ============================================================
 export async function listSupplierProducts(
   supplierId: string
 ): Promise<SupplierProduct[]> {
-  // Traemos productos del proveedor
+  // Traemos productos del proveedor (excluyendo eliminados)
   const { data: products, error } = await supabase
     .from("catalog_products")
     .select("*")
     .eq("supplier_id", supplierId)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (error) throw error;
@@ -149,12 +153,18 @@ export async function updateProduct(
 }
 
 // ============================================================
-// ELIMINAR PRODUCTO
+// ELIMINAR PRODUCTO (SOFT DELETE)
+// No borra físicamente, solo marca como eliminado.
+// Los pedidos históricos se mantienen intactos.
 // ============================================================
 export async function deleteProduct(productId: string): Promise<void> {
   const { error } = await supabase
     .from("catalog_products")
-    .delete()
+    .update({
+      deleted_at: new Date().toISOString(),
+      is_active: false,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", productId);
 
   if (error) throw error;
@@ -247,7 +257,8 @@ export async function listSupplierCategories(
   const { data, error } = await supabase
     .from("catalog_products")
     .select("category")
-    .eq("supplier_id", supplierId);
+    .eq("supplier_id", supplierId)
+    .is("deleted_at", null);
 
   if (error) throw error;
 

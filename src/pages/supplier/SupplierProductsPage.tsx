@@ -1,5 +1,6 @@
 // ============================================================
 // SUPPLIER PRODUCTS PAGE — Panel de productos del proveedor
+// v22.6 — Soft delete implementado
 // ============================================================
 
 import { useEffect, useMemo, useState } from "react";
@@ -35,7 +36,6 @@ export default function SupplierProductsPage() {
     try {
       setLoading(true);
 
-      // Verificar perfil de proveedor (auth interno)
       const profile = await getMySupplierProfile();
       if (!profile) {
         toast.error("Sin perfil", "No tienes perfil de proveedor activo.");
@@ -103,19 +103,21 @@ export default function SupplierProductsPage() {
   }
 
   async function handleDelete(product: SupplierProduct) {
-    if (product.vendors_count && product.vendors_count > 0) {
-      toast.warning(
-        "No se puede eliminar",
-        `${product.vendors_count} vendor(s) están usando este producto.`
-      );
-      return;
-    }
+    const vendorsCount = product.vendors_count ?? 0;
 
-    if (!confirm(`¿Eliminar "${product.name}"?\n\nEsta acción no se puede deshacer.`)) return;
+    const msg =
+      vendorsCount > 0
+        ? `⚠️ ATENCIÓN\n\n"${product.name}" está siendo usado por ${vendorsCount} vendor(s).\n\nAl eliminarlo:\n• Ya no aparecerá en tu catálogo\n• Los vendors verán "producto no disponible"\n• Los pedidos históricos se mantienen intactos\n\n¿Continuar?`
+        : `¿Eliminar "${product.name}"?\n\nEsta acción se puede revertir contactando a soporte.`;
+
+    if (!confirm(msg)) return;
 
     try {
       await deleteProduct(product.id);
-      toast.success("Producto eliminado", `${product.name} fue eliminado.`);
+      toast.success(
+        "Producto eliminado",
+        `${product.name} fue removido de tu catálogo.`
+      );
       loadData();
     } catch (err) {
       console.error(err);
@@ -367,13 +369,8 @@ export default function SupplierProductsPage() {
 
                     <button
                       onClick={() => handleDelete(product)}
-                      disabled={(product.vendors_count ?? 0) > 0}
-                      className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40"
-                      title={
-                        (product.vendors_count ?? 0) > 0
-                          ? "No se puede eliminar (en uso por vendors)"
-                          : "Eliminar producto"
-                      }
+                      className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+                      title="Eliminar producto"
                     >
                       🗑️ Eliminar
                     </button>
