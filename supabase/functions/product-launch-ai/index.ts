@@ -1,5 +1,5 @@
 // supabase/functions/product-launch-ai/index.ts
-// 🍌 v22.4 - Prompts ESPECIALIZADOS por red social
+// 🍌 v22.7 - WhatsApp message PURO sin footer (frontend maneja el link)
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -106,7 +106,7 @@ async function callGroq(prompt: string, temperature = 0.85): Promise<string> {
 // 🎨 PROMPTS ESPECIALIZADOS POR RED SOCIAL
 // ============================================
 
-// 📷 INSTAGRAM: Aspiracional, visual, con hashtags integrados en caption
+// 📷 INSTAGRAM: Aspiracional, visual, SIN hashtags (se agregan en frontend)
 async function generateInstagramCaption(
   productName: string,
   price: number,
@@ -157,7 +157,6 @@ Responde SOLO el caption, sin comillas, sin hashtags, sin explicaciones.`;
 
   const caption = await callGroq(prompt, 0.9);
 
-  // Agregar handle de Instagram si existe
   let footer = "";
   if (igHandle) {
     footer = `\n\n📷 Síguenos: ${igHandle}`;
@@ -202,7 +201,7 @@ REGLAS ESTRICTAS:
 5. Precio destacado con 💰
 6. CTA DOBLE: "Escríbenos" + "Visítanos" 
 7. Menciona GARANTÍA/CONFIANZA (envío, calidad)
-8. NO uses hashtags dentro del texto (máximo 2 al final si son necesarios)
+8. NO uses hashtags dentro del texto
 9. Habla en PLURAL (nosotros, nuestra tienda)
 
 ESTRUCTURA GANADORA:
@@ -225,7 +224,6 @@ Responde SOLO el post, sin comillas, sin explicaciones.`;
 
   const caption = await callGroq(prompt, 0.85);
 
-  // Facebook SÍ soporta links directos
   let footer = `\n\n🔗 Ver más: ${productUrl}`;
   if (fbPage) {
     footer += `\n📘 Síguenos: facebook.com/${fbPage}`;
@@ -234,7 +232,7 @@ Responde SOLO el post, sin comillas, sin explicaciones.`;
   return caption + footer;
 }
 
-// 🏷️ HASHTAGS: Solo para Instagram/TikTok (NO WhatsApp/Facebook)
+// 🏷️ HASHTAGS
 async function generateHashtags(
   productName: string,
   category: ProductCategory
@@ -274,17 +272,13 @@ Ejemplo formato:
     : ["#peru", "#compraslocalperu", "#emprendimientoperu", "#lima", "#modaperu"];
 }
 
-// 💬 WHATSAPP: Personal, íntimo, SIN hashtags, corto
+// 💬 WHATSAPP: Personal, íntimo, PURO (sin link/tel - se agrega en frontend)
 async function generateWhatsAppMessage(
   productName: string,
   price: number,
   category: ProductCategory,
-  store: StoreData,
-  productUrl: string
+  store: StoreData
 ): Promise<string> {
-  const contactPhone = store.whatsapp || store.contact_phone || "";
-  const cleanPhone = contactPhone.replace(/[^\d]/g, "");
-
   const prompt = `Eres experto en WHATSAPP MARKETING para tiendas peruanas.
 
 CONTEXTO:
@@ -312,12 +306,12 @@ REGLAS ESTRICTAS:
 7. CTA suave: "¿Te interesa?" "Cuéntame" "Escríbeme"
 8. Tono como si fuera amiga/o cercano
 9. NO uses "compra ahora" ni presión
-10. NO menciones "stock limitado" (para IG sí, para WA no)
+10. NO agregues link ni teléfono (se agrega automático después)
 
 ESTRUCTURA GANADORA:
 [Saludo cálido con emoji]
 
-[Hook personal: "Tengo algo que te va a encantar" o "Mira lo que llegó"]
+[Hook personal: "Tengo algo que te va a encantar"]
 
 [Producto en 1 línea]
 
@@ -336,20 +330,12 @@ Vestido casual vino que abraza tu figura de forma única.
 
 ¿Quieres que te mande más fotos?"
 
-Responde SOLO el mensaje, sin comillas, sin hashtags, sin explicaciones.`;
+Responde SOLO el mensaje puro, sin comillas, sin hashtags, sin link, sin teléfono, sin explicaciones.`;
 
-  const message = await callGroq(prompt, 0.85);
-
-  // Agregar link + teléfono al final (WhatsApp SÍ acepta links)
-  let footer = `\n\n🔗 Ver detalles:\n${productUrl}`;
-  if (cleanPhone) {
-    footer += `\n\n📱 O escríbeme: +51 ${cleanPhone}`;
-  }
-
-  return message + footer;
+  return await callGroq(prompt, 0.85);
 }
 
-// 🎵 TIKTOK: Muy corto, trendy, con hashtags
+// 🎵 TIKTOK: Muy corto, trendy
 async function generateTikTokCaption(
   productName: string,
   category: ProductCategory,
@@ -366,9 +352,8 @@ CARACTERÍSTICAS DE TIKTOK:
 - Audiencia MUY joven (Gen Z / millennials jóvenes)
 - Tono TRENDY, casual, divertido
 - MUY CORTO (máx 100 caracteres)
-- Los hashtags 3-5 MÁXIMO (integrados)
+- Los hashtags 3-5 MÁXIMO (se agregan después)
 - Usa slang joven pero peruano
-- Los captions viral usan FÓRMULAS conocidas
 
 REGLAS:
 1. MÁXIMO 100 caracteres
@@ -383,17 +368,16 @@ FÓRMULAS VIRALES:
 - "Cuando por fin encuentras [beneficio]"
 - "Este [producto] hits diferente"
 - "Necesitas esto en tu vida"
-- "Nadie:\n[Producto]: [transformación]"
 
 EJEMPLO PERFECTO:
 "POV: encontraste el vestido perfecto para todo 💅✨"
 
-Responde SOLO el caption, sin comillas, sin explicaciones.`;
+Responde SOLO el caption, sin comillas, sin hashtags, sin explicaciones.`;
 
   return await callGroq(prompt, 0.95);
 }
 
-// 📧 EMAIL: Formal-cercano, con estructura completa, sin hashtags
+// 📧 EMAIL
 async function generateEmailSubject(
   productName: string,
   storeName: string
@@ -403,18 +387,16 @@ async function generateEmailSubject(
 Producto: ${productName}
 
 REGLAS ESTRICTAS EMAIL:
-1. Máximo 45 caracteres (importante para no cortarse en móvil)
+1. Máximo 45 caracteres
 2. NO uses spam words: "GRATIS" "OFERTA" "50% OFF" "COMPRA YA"
 3. SÍ usa: "descubre" "conoce" "para ti" "nuevo"
 4. Máximo 1 emoji
 5. Tono personal, no corporativo
-6. Genera curiosidad sin ser clickbait
 
 BUENOS EJEMPLOS:
 "Pensé en ti al verlo 💭"
 "Algo nuevo para ti en ${storeName}"
 "Descubre lo último en ${storeName}"
-"El detalle que estabas buscando"
 
 Responde SOLO el asunto, sin comillas.`;
 
@@ -433,24 +415,19 @@ Producto: ${productName}
 Precio: S/ ${price.toFixed(2)}
 
 CARACTERÍSTICAS EMAIL:
-- Se lee CON CALMA (no como IG)
+- Se lee CON CALMA
 - Estructura formal-cercana
-- CERO hashtags (parece spam)
+- CERO hashtags
 - Máximo 2 emojis
 - Habla de TÚ al cliente
 - Firma con nombre de tienda
 
 ESTRUCTURA:
 [Saludo personal cálido]
-
 [Hook: por qué le puede interesar]
-
 [Descripción emocional del producto - 2 líneas]
-
-[3 beneficios en párrafo o bullets con ✓]
-
+[3 beneficios en bullets con ✓]
 [Precio con contexto de valor]
-
 [CTA claro con link]
 
 REGLAS:
@@ -458,14 +435,13 @@ REGLAS:
 2. NO uses hashtags (#)
 3. NO uses "compra ahora"
 4. SÍ usa "descúbrelo" "conócelo" "échale un vistazo"
-5. Menciona confianza (envío, calidad)
 
 EJEMPLO PERFECTO:
 "Hola,
 
 Hoy queremos compartirte algo especial que llegó a ${store.name}.
 
-Un vestido casual vino diseñado para resaltar tu esencia. Cómodo, elegante y perfecto para cualquier ocasión.
+Un vestido casual vino diseñado para resaltar tu esencia.
 
 ✓ Tela premium y cómoda
 ✓ Diseño exclusivo
@@ -475,7 +451,7 @@ Por solo S/ 89.90, es una inversión que vale la pena.
 
 Descúbrelo aquí 👉 [LINK]"
 
-Responde SOLO el cuerpo, sin asunto, sin firma final (yo la agrego).`;
+Responde SOLO el cuerpo, sin asunto, sin firma final.`;
 
   const body = await callGroq(prompt, 0.85);
 
@@ -532,9 +508,8 @@ serve(async (req: Request) => {
       );
     }
 
-    console.log(`🍌 Launch AI v4: ${product_name} (user: ${user.email})`);
+    console.log(`🍌 Launch AI v22.7: ${product_name} (user: ${user.email})`);
 
-    // OBTENER DATOS TIENDA
     const { data: storeData } = await supabase
       .from("stores")
       .select("id, name, slug, contact_phone, whatsapp, instagram, facebook, description")
@@ -554,7 +529,6 @@ serve(async (req: Request) => {
 
     console.log(`🏪 Tienda: ${store.name} (/${store.slug})`);
 
-    // VERIFICAR CRÉDITOS
     const { data: subscription, error: subError } = await supabase
       .from("ai_subscriptions")
       .select("*")
@@ -586,7 +560,6 @@ serve(async (req: Request) => {
     );
     console.log(`🎯 Categoría: ${detectedCategory}`);
 
-    // GENERAR CONTENIDO ESPECIALIZADO POR RED
     console.log("🧠 Generando contenido especializado por red...");
     const [
       captionInstagram,
@@ -600,7 +573,7 @@ serve(async (req: Request) => {
       generateInstagramCaption(product_name, product_price, detectedCategory, store),
       generateFacebookCaption(product_name, product_price, detectedCategory, store, productUrl),
       generateHashtags(product_name, detectedCategory),
-      generateWhatsAppMessage(product_name, product_price, detectedCategory, store, productUrl),
+      generateWhatsAppMessage(product_name, product_price, detectedCategory, store),
       generateTikTokCaption(product_name, detectedCategory, store),
       generateEmailSubject(product_name, store.name),
       generateEmailBody(product_name, product_price, store, productUrl),
@@ -608,7 +581,6 @@ serve(async (req: Request) => {
 
     console.log("✅ Contenido especializado generado");
 
-    // DESCONTAR CRÉDITOS
     if (!isUnlimited) {
       const newCredits = subscription.credits_remaining - CREDITS_COST;
       const newUsed = (subscription.total_used || 0) + CREDITS_COST;
@@ -623,7 +595,6 @@ serve(async (req: Request) => {
       console.log(`💳 Créditos: ${subscription.credits_remaining} → ${newCredits}`);
     }
 
-    // GUARDAR KIT
     const generationTime = Date.now() - startTime;
 
     const kit = {

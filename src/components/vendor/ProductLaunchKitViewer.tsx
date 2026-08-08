@@ -1,7 +1,8 @@
 // src/components/vendor/ProductLaunchKitViewer.tsx
-// 🎨 v22.4.1 - Cada red social usa SU contenido específico
+// 🎨 v22.7 - Fix hashtags en WhatsApp + Tab Mi Tienda con QR
 
 import { useState, useEffect } from "react";
+import { QRCodeCanvas } from "qrcode.react";
 import { supabase } from "../../lib/supabase";
 import {
   downloadEnhancedImage,
@@ -20,6 +21,7 @@ interface ProductLaunchKitViewerProps {
 
 type TabId =
   | "publish"
+  | "store"
   | "image"
   | "instagram"
   | "facebook"
@@ -27,7 +29,13 @@ type TabId =
   | "whatsapp"
   | "email";
 
-type NetworkType = "instagram" | "facebook" | "whatsapp" | "tiktok" | "email" | "generic";
+type NetworkType =
+  | "instagram"
+  | "facebook"
+  | "whatsapp"
+  | "tiktok"
+  | "email"
+  | "generic";
 
 interface StoreData {
   name: string;
@@ -38,10 +46,82 @@ interface StoreData {
   facebook?: string;
 }
 
-// 🔥 Tipo extendido para incluir tiktok_caption
 interface ExtendedKit extends LaunchKit {
   tiktok_caption?: string;
 }
+
+// 🎁 Mensajes promocionales pre-hechos para la tienda
+const PROMO_MESSAGES = [
+  {
+    id: "new_collection",
+    icon: "🆕",
+    title: "Nueva colección",
+    getMessage: (storeName: string, url: string) =>
+      `🎉 ¡NOVEDAD en ${storeName}! 🎉\n\n` +
+      `Acabo de subir nuevos productos increíbles a mi tienda 🛍️\n\n` +
+      `Ven a verlos, tengo cosas que te van a encantar 💖\n\n` +
+      `👉 ${url}`,
+  },
+  {
+    id: "flash_sale",
+    icon: "💥",
+    title: "Oferta flash",
+    getMessage: (storeName: string, url: string) =>
+      `🔥 OFERTA FLASH 🔥\n\n` +
+      `Solo por HOY en ${storeName}:\n` +
+      `✨ Precios especiales\n` +
+      `✨ Envío rápido\n` +
+      `✨ Stock limitado\n\n` +
+      `No te lo pierdas 👇\n${url}`,
+  },
+  {
+    id: "free_shipping",
+    icon: "🚚",
+    title: "Envío gratis",
+    getMessage: (storeName: string, url: string) =>
+      `🚚 ¡ENVÍO GRATIS! 🚚\n\n` +
+      `Solo por hoy en ${storeName}, envío GRATIS en TODOS tus pedidos 🎁\n\n` +
+      `✅ Sin monto mínimo\n` +
+      `✅ Entrega en 24-48 horas\n` +
+      `✅ 100% seguro\n\n` +
+      `Compra aquí 👉 ${url}`,
+  },
+  {
+    id: "anniversary",
+    icon: "🎂",
+    title: "Aniversario",
+    getMessage: (storeName: string, url: string) =>
+      `🎂 ¡ANIVERSARIO ${storeName}! 🎉\n\n` +
+      `Celebramos con descuentos increíbles en toda la tienda ✨\n\n` +
+      `🎁 Descuentos especiales\n` +
+      `🎁 Sorpresas para clientes\n` +
+      `🎁 Regalo con tu compra\n\n` +
+      `Ven a celebrar 👉 ${url}`,
+  },
+  {
+    id: "invitation",
+    icon: "💌",
+    title: "Invitación personal",
+    getMessage: (storeName: string, url: string) =>
+      `Hola! 👋\n\n` +
+      `Quiero invitarte a conocer mi tienda ${storeName} 🛍️\n\n` +
+      `Tengo productos de excelente calidad a precios justos ✨\n\n` +
+      `Échale un vistazo cuando puedas 💖\n\n` +
+      `👉 ${url}`,
+  },
+  {
+    id: "weekend_special",
+    icon: "🎉",
+    title: "Fin de semana",
+    getMessage: (storeName: string, url: string) =>
+      `🎉 ¡ESPECIAL FIN DE SEMANA! 🎉\n\n` +
+      `En ${storeName} este weekend tenemos:\n\n` +
+      `🛍️ Productos exclusivos\n` +
+      `💯 Ofertas increíbles\n` +
+      `🚚 Envío rápido\n\n` +
+      `Aprovecha 👉 ${url}`,
+  },
+];
 
 export default function ProductLaunchKitViewer({
   isOpen,
@@ -55,6 +135,7 @@ export default function ProductLaunchKitViewer({
   const [store, setStore] = useState<StoreData | null>(null);
   const [sharing, setSharing] = useState(false);
   const [shareCount, setShareCount] = useState(0);
+  const [selectedPromo, setSelectedPromo] = useState<string>("new_collection");
 
   const categoryInfo = getCategoryInfo(kit.detected_category);
   const extendedKit = kit as ExtendedKit;
@@ -75,12 +156,17 @@ export default function ProductLaunchKitViewer({
   const productUrl = store?.slug
     ? `${baseUrl}/tienda/${store.slug}?producto=${kit.product_id}`
     : baseUrl;
+  const storeUrl = store?.slug ? `${baseUrl}/tienda/${store.slug}` : baseUrl;
 
   const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
   const canShareFiles =
     typeof navigator !== "undefined" &&
     typeof navigator.share === "function" &&
     typeof navigator.canShare === "function";
+
+  // ═══════════════════════════════════════════════════════════
+  // HELPERS
+  // ═══════════════════════════════════════════════════════════
 
   const handleCopy = async (text: string, field: string) => {
     const ok = await copyToClipboard(text);
@@ -102,68 +188,64 @@ export default function ProductLaunchKitViewer({
     }
   };
 
-  // 🔥 v22.4.1: Cada red usa SU contenido específico
+  const downloadQR = () => {
+    const canvas = document.getElementById("store-qr") as HTMLCanvasElement;
+    if (!canvas) return;
+    const link = document.createElement("a");
+    link.download = `qr-${store?.slug || "tienda"}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  };
+
+  // 🔥 v22.7 FIXED: Contenido correcto por red
   const buildTextForNetwork = (network: NetworkType): string => {
-    let text = "";
-    let includeHashtags = false;
-    let includeLink = true;
+    const storePhone = store?.whatsapp || store?.contact_phone || "";
+    const cleanPhone = storePhone.replace(/[^\d]/g, "");
 
     switch (network) {
       case "instagram":
-        // Instagram: caption IG + hashtags integrados (SÍ usa hashtags)
-        text = kit.caption_instagram || "";
-        includeHashtags = true;
-        includeLink = false; // IG usa "link en bio"
-        break;
+        // Instagram: caption IG + 20 hashtags (SIN link, usa "link en bio")
+        return (
+          (kit.caption_instagram || "") +
+          (kit.hashtags?.length
+            ? `\n\n${kit.hashtags.slice(0, 20).join(" ")}`
+            : "")
+        );
 
       case "facebook":
-        // Facebook: caption FB + link directo (NO usa hashtags como IG)
-        text = kit.caption_facebook || "";
-        includeHashtags = false;
-        includeLink = false; // El link ya viene en el caption_facebook
-        break;
+        // Facebook: caption FB (ya viene con link del backend)
+        return kit.caption_facebook || "";
 
       case "whatsapp":
-        // WhatsApp: mensaje personal (JAMÁS hashtags)
-        text = kit.whatsapp_message || kit.caption_instagram || "";
-        includeHashtags = false;
-        includeLink = false; // Ya viene incluido en whatsapp_message
-        break;
+        // WhatsApp Chat: mensaje personal + link + tel
+        return (
+          (kit.whatsapp_message || "") +
+          `\n\n🛒 Míralo aquí:\n${productUrl}` +
+          (cleanPhone ? `\n\n📱 Escríbeme: +51 ${cleanPhone}` : "")
+        );
 
       case "tiktok":
-        // TikTok: caption corto + hashtags (poquitos)
-        text = extendedKit.tiktok_caption || kit.caption_instagram || "";
-        includeHashtags = true;
-        includeLink = false; // TikTok usa "link en bio"
-        break;
+        // TikTok: caption corto + 5 hashtags (SIN link, "link en bio")
+        return (
+          (extendedKit.tiktok_caption || kit.caption_instagram || "") +
+          (kit.hashtags?.length
+            ? `\n\n${kit.hashtags.slice(0, 5).join(" ")}`
+            : "")
+        );
 
       case "email":
-        // Email: body completo (SIN hashtags)
-        text = kit.email_body || "";
-        includeHashtags = false;
-        includeLink = false; // El link ya viene en el email_body
-        break;
+        // Email: body ya viene completo con link
+        return kit.email_body || "";
 
       default:
-        // Compartir genérico: usa Instagram con todo incluido
-        text = kit.caption_instagram || "";
-        includeHashtags = true;
-        includeLink = true;
+        // 🎯 GENÉRICO (para "COMPARTIR AHORA"):
+        // Usa mensaje WhatsApp PURO (sin hashtags) + link
+        // Es universal: sirve para WhatsApp, Estados, Facebook, Instagram DM, etc.
+        return (
+          (kit.whatsapp_message || "") +
+          `\n\n🛒 ${productUrl}`
+        );
     }
-
-    // Agregar hashtags si aplica
-    if (includeHashtags && kit.hashtags?.length) {
-      const tagsToUse =
-        network === "tiktok" ? kit.hashtags.slice(0, 5) : kit.hashtags.slice(0, 20);
-      text += `\n\n${tagsToUse.join(" ")}`;
-    }
-
-    // Agregar link si aplica
-    if (includeLink) {
-      text += `\n\n🛒 ${productUrl}`;
-    }
-
-    return text;
   };
 
   const shareWithFile = async (
@@ -195,7 +277,10 @@ export default function ProductLaunchKitViewer({
     return false;
   };
 
-  // 🚀 COMPARTIR TODO (usa Instagram como base con todo)
+  // ═══════════════════════════════════════════════════════════
+  // ACCIONES DE COMPARTIR PRODUCTO
+  // ═══════════════════════════════════════════════════════════
+
   const shareEverything = async () => {
     setSharing(true);
     try {
@@ -223,7 +308,6 @@ export default function ProductLaunchKitViewer({
     }
   };
 
-  // 📷 INSTAGRAM: Caption IG + hashtags
   const shareToInstagram = async () => {
     const shareText = buildTextForNetwork("instagram");
     const shared = await shareWithFile(shareText, "Instagram Post");
@@ -239,7 +323,6 @@ export default function ProductLaunchKitViewer({
     }
   };
 
-  // 📘 FACEBOOK: Caption FB con link (SIN hashtags como IG)
   const shareToFacebook = async () => {
     const shareText = buildTextForNetwork("facebook");
     const shared = await shareWithFile(shareText, "Facebook Post");
@@ -254,7 +337,6 @@ export default function ProductLaunchKitViewer({
     }
   };
 
-  // 💬 WHATSAPP: Mensaje personal (SIN hashtags)
   const shareToWhatsApp = async () => {
     const shareText = buildTextForNetwork("whatsapp");
     const shared = await shareWithFile(shareText, "WhatsApp");
@@ -267,20 +349,28 @@ export default function ProductLaunchKitViewer({
     }
   };
 
-  // 📱 WHATSAPP ESTADO
+  // 🔥 v22.7 FIX: WhatsApp Estado usa mensaje LIMPIO sin hashtags
   const shareToWhatsAppStatus = async () => {
-    const shareText = buildTextForNetwork("whatsapp");
-    await copyToClipboard(shareText);
-    await handleDownload();
-    setCopiedField("wa-status");
-    setTimeout(() => setCopiedField(null), 3000);
+    // Texto especial para Estado: personal + link corto, SIN hashtags
+    const shareText =
+      (kit.whatsapp_message || "") + `\n\n🛒 ${productUrl}`;
 
-    alert(
-      "✅ Todo listo!\n\n📥 Imagen descargada\n📋 Texto copiado\n\n📱 Abre WhatsApp → Estados → Sube imagen y pega texto"
-    );
+    const shared = await shareWithFile(shareText, "WhatsApp Estado");
+
+    if (!shared) {
+      await copyToClipboard(shareText);
+      await handleDownload();
+      setCopiedField("wa-status");
+      setTimeout(() => setCopiedField(null), 3000);
+
+      alert(
+        "✅ Todo listo!\n\n📥 Imagen descargada\n📋 Texto copiado\n\n📱 Abre WhatsApp → Estados → Sube imagen y pega texto"
+      );
+    } else {
+      setShareCount((c) => c + 1);
+    }
   };
 
-  // 🎵 TIKTOK: Caption corto + 5 hashtags
   const shareToTikTok = async () => {
     const shareText = buildTextForNetwork("tiktok");
     const shared = await shareWithFile(shareText, "TikTok");
@@ -296,10 +386,77 @@ export default function ProductLaunchKitViewer({
     }
   };
 
+  // ═══════════════════════════════════════════════════════════
+  // ACCIONES DE COMPARTIR TIENDA
+  // ═══════════════════════════════════════════════════════════
+
+  const getSelectedPromoMessage = (): string => {
+    const promo = PROMO_MESSAGES.find((p) => p.id === selectedPromo);
+    if (!promo || !store) return "";
+    return promo.getMessage(store.name, storeUrl);
+  };
+
+  const shareStoreOnWhatsApp = () => {
+    const msg = getSelectedPromoMessage();
+    const url = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+    window.open(url, "_blank");
+    setShareCount((c) => c + 1);
+  };
+
+  const shareStoreOnFacebook = () => {
+    const msg = getSelectedPromoMessage();
+    const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
+      storeUrl
+    )}&quote=${encodeURIComponent(msg)}`;
+    window.open(fbUrl, "_blank", "width=600,height=700");
+    setShareCount((c) => c + 1);
+  };
+
+  const copyStoreMessage = async () => {
+    const msg = getSelectedPromoMessage();
+    await copyToClipboard(msg);
+    setCopiedField("promo-msg");
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const copyStoreLink = async () => {
+    await copyToClipboard(storeUrl);
+    setCopiedField("store-link");
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const shareStoreGeneric = async () => {
+    if (!canShareFiles) {
+      await copyStoreMessage();
+      alert(`📋 Mensaje copiado!\n\nPégalo donde quieras compartir tu tienda.`);
+      return;
+    }
+
+    try {
+      await navigator.share({
+        title: store?.name || "Mi tienda",
+        text: getSelectedPromoMessage(),
+        url: storeUrl,
+      });
+      setShareCount((c) => c + 1);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "";
+      if (!errorMsg.includes("cancel") && !errorMsg.includes("AbortError")) {
+        await copyStoreMessage();
+      }
+    }
+  };
+
   if (!isOpen) return null;
 
-  const TABS: { id: TabId; label: string; icon: string; hasContent: boolean }[] = [
+  const TABS: {
+    id: TabId;
+    label: string;
+    icon: string;
+    hasContent: boolean;
+  }[] = [
     { id: "publish", label: "🚀 PUBLICAR", icon: "🚀", hasContent: true },
+    { id: "store", label: "🏪 MI TIENDA", icon: "🏪", hasContent: !!store },
     { id: "image", label: "Imagen", icon: "📸", hasContent: !!kit.enhanced_image_url },
     { id: "instagram", label: "Instagram", icon: "📷", hasContent: !!kit.caption_instagram },
     { id: "facebook", label: "Facebook", icon: "📘", hasContent: !!kit.caption_facebook },
@@ -329,7 +486,6 @@ export default function ProductLaunchKitViewer({
         </div>
       )}
 
-      {/* 🔥 Modal BLINDADO: NO se cierra al hacer click fuera */}
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-2 sm:p-4">
         <div
           className="relative w-full max-w-5xl h-[95vh] sm:h-[90vh] overflow-hidden rounded-2xl sm:rounded-3xl bg-white shadow-2xl flex flex-col"
@@ -400,6 +556,8 @@ export default function ProductLaunchKitViewer({
                     activeTab === tab.id
                       ? tab.id === "publish"
                         ? "border-b-2 border-orange-500 text-orange-600 bg-white"
+                        : tab.id === "store"
+                        ? "border-b-2 border-blue-500 text-blue-600 bg-white"
                         : "border-b-2 border-emerald-500 text-emerald-600 bg-white"
                       : tab.hasContent
                       ? "text-gray-600 hover:text-gray-900 hover:bg-white"
@@ -423,7 +581,7 @@ export default function ProductLaunchKitViewer({
                     🚀 Comparte con 1 tap
                   </h3>
                   <p className="mt-1 text-xs text-gray-600">
-                    Cada red usa su contenido personalizado · Puedes compartir varias veces
+                    Cada red usa su contenido personalizado
                   </p>
                 </div>
 
@@ -453,7 +611,7 @@ export default function ProductLaunchKitViewer({
                 <p className="text-center text-[11px] text-gray-500 -mt-1">
                   {isMobile
                     ? "Se abrirá el menú nativo de tu celular"
-                    : "Copia el texto y descarga la imagen automáticamente"}
+                    : "Se abrirá el menú de Windows con imagen adjunta"}
                 </p>
 
                 <div className="flex items-center gap-2 my-3">
@@ -513,7 +671,7 @@ export default function ProductLaunchKitViewer({
                       <div className="flex-1 text-left min-w-0">
                         <div className="text-sm sm:text-base font-black truncate">Estado WA</div>
                         <div className="text-[10px] opacity-90 truncate">
-                          {copiedField === "wa-status" ? "✅ Copiado" : "Para Estados"}
+                          {copiedField === "wa-status" ? "✅ Copiado" : "Sin hashtags"}
                         </div>
                       </div>
                     </div>
@@ -539,11 +697,30 @@ export default function ProductLaunchKitViewer({
                   </button>
                 </div>
 
-                {/* Info del link */}
+                {/* CTA nuevo tab tienda */}
+                {store && (
+                  <button
+                    onClick={() => setActiveTab("store")}
+                    className="w-full rounded-xl border-2 border-blue-300 bg-linear-to-br from-blue-50 to-cyan-50 p-4 text-blue-900 hover:shadow-md transition"
+                  >
+                    <div className="flex items-center gap-3 justify-center">
+                      <div className="text-3xl">🏪</div>
+                      <div className="text-left">
+                        <div className="text-sm font-black">
+                          ¿Quieres promocionar tu tienda?
+                        </div>
+                        <div className="text-[11px] opacity-80">
+                          Mensajes listos + QR + link → Click aquí
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                )}
+
                 {store?.slug && (
                   <div className="rounded-xl bg-blue-50 border-2 border-blue-200 p-3">
                     <div className="text-[11px] font-bold text-blue-900 mb-1">
-                      🔗 Link de tu tienda que se compartirá:
+                      🔗 Link que se compartirá:
                     </div>
                     <div className="text-[10px] text-blue-700 break-all font-mono bg-white/50 rounded px-2 py-1">
                       {productUrl}
@@ -551,28 +728,6 @@ export default function ProductLaunchKitViewer({
                   </div>
                 )}
 
-                {/* Guía visual de personalización */}
-                <div className="rounded-xl bg-purple-50 border-2 border-purple-200 p-3">
-                  <div className="text-[11px] font-bold text-purple-900 mb-2">
-                    📊 Cada red recibe contenido diferente:
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5 text-[10px]">
-                    <div className="bg-white/60 rounded px-2 py-1">
-                      <strong>📷 IG:</strong> Aspiracional + 20 #
-                    </div>
-                    <div className="bg-white/60 rounded px-2 py-1">
-                      <strong>📘 FB:</strong> Informativo + link
-                    </div>
-                    <div className="bg-white/60 rounded px-2 py-1">
-                      <strong>💬 WA:</strong> Personal, sin #
-                    </div>
-                    <div className="bg-white/60 rounded px-2 py-1">
-                      <strong>🎵 TT:</strong> Corto + 5 #
-                    </div>
-                  </div>
-                </div>
-
-                {/* Botón regenerar */}
                 {onRegenerate && (
                   <button
                     onClick={onRegenerate}
@@ -581,6 +736,160 @@ export default function ProductLaunchKitViewer({
                     🔄 Generar variante nueva (15 créditos)
                   </button>
                 )}
+              </div>
+            )}
+
+            {/* 🏪 MI TIENDA */}
+            {activeTab === "store" && store && (
+              <div className="space-y-4">
+                <div className="text-center">
+                  <h3 className="text-xl sm:text-2xl font-black text-gray-900">
+                    🏪 Promociona tu tienda
+                  </h3>
+                  <p className="mt-1 text-xs text-gray-600">
+                    Comparte tu tienda completa con mensajes listos
+                  </p>
+                </div>
+
+                {/* QR + Link */}
+                <div className="rounded-2xl border-2 border-blue-200 bg-linear-to-br from-blue-50 to-cyan-50 p-4">
+                  <div className="flex flex-col sm:flex-row items-center gap-4">
+                    <div className="bg-white rounded-2xl p-3 shadow-md shrink-0">
+                      <QRCodeCanvas
+                        id="store-qr"
+                        value={storeUrl}
+                        size={140}
+                        level="M"
+                        includeMargin={false}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0 text-center sm:text-left">
+                      <div className="text-xs font-bold uppercase text-blue-700 mb-1">
+                        🌐 Tu tienda online
+                      </div>
+                      <div className="text-sm font-bold text-gray-900 mb-2">
+                        {store.name}
+                      </div>
+                      <div className="text-[10px] text-gray-600 break-all bg-white/60 rounded px-2 py-1 font-mono mb-3">
+                        {storeUrl}
+                      </div>
+                      <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+                        <button
+                          onClick={copyStoreLink}
+                          className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                            copiedField === "store-link"
+                              ? "bg-emerald-500 text-white"
+                              : "bg-blue-600 text-white hover:bg-blue-700"
+                          }`}
+                        >
+                          {copiedField === "store-link" ? "✅ Copiado" : "📋 Copiar link"}
+                        </button>
+                        <button
+                          onClick={downloadQR}
+                          className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-gray-800"
+                        >
+                          📥 Descargar QR
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Mensajes promocionales */}
+                <div>
+                  <h4 className="mb-2 text-sm font-black text-gray-900">
+                    💬 Elige un mensaje promocional:
+                  </h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {PROMO_MESSAGES.map((promo) => (
+                      <button
+                        key={promo.id}
+                        onClick={() => setSelectedPromo(promo.id)}
+                        className={`rounded-xl p-3 text-left transition ${
+                          selectedPromo === promo.id
+                            ? "bg-linear-to-br from-blue-500 to-cyan-500 text-white shadow-lg scale-105"
+                            : "bg-white border-2 border-gray-200 text-gray-700 hover:border-blue-300"
+                        }`}
+                      >
+                        <div className="text-2xl mb-1">{promo.icon}</div>
+                        <div className="text-xs font-bold">{promo.title}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Vista previa del mensaje */}
+                <div className="rounded-2xl border-2 border-emerald-200 bg-linear-to-br from-emerald-50 to-teal-50 p-4">
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="text-xl">👀</span>
+                    <span className="text-sm font-bold text-emerald-900">
+                      Vista previa del mensaje
+                    </span>
+                  </div>
+                  <div className="rounded-xl bg-[#dcf8c6] p-3 shadow-sm">
+                    <p className="whitespace-pre-wrap text-sm text-gray-800">
+                      {getSelectedPromoMessage()}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Botones compartir tienda */}
+                <div className="space-y-2">
+                  <button
+                    onClick={shareStoreGeneric}
+                    className="w-full rounded-2xl bg-linear-to-r from-blue-500 via-cyan-500 to-teal-500 py-4 text-base font-black text-white shadow-xl hover:shadow-2xl transition hover:scale-[1.02] active:scale-95"
+                  >
+                    🚀 COMPARTIR TIENDA AHORA
+                  </button>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      onClick={shareStoreOnWhatsApp}
+                      className="rounded-xl bg-linear-to-br from-emerald-500 to-green-600 p-3 text-white shadow-lg hover:shadow-xl transition hover:scale-105"
+                    >
+                      <div className="text-2xl mb-1">💬</div>
+                      <div className="text-[10px] font-black">WhatsApp</div>
+                    </button>
+
+                    <button
+                      onClick={shareStoreOnFacebook}
+                      className="rounded-xl bg-linear-to-br from-blue-600 to-blue-800 p-3 text-white shadow-lg hover:shadow-xl transition hover:scale-105"
+                    >
+                      <div className="text-2xl mb-1">📘</div>
+                      <div className="text-[10px] font-black">Facebook</div>
+                    </button>
+
+                    <button
+                      onClick={copyStoreMessage}
+                      className={`rounded-xl p-3 shadow-lg hover:shadow-xl transition hover:scale-105 ${
+                        copiedField === "promo-msg"
+                          ? "bg-emerald-500 text-white"
+                          : "bg-gray-900 text-white"
+                      }`}
+                    >
+                      <div className="text-2xl mb-1">
+                        {copiedField === "promo-msg" ? "✅" : "📋"}
+                      </div>
+                      <div className="text-[10px] font-black">
+                        {copiedField === "promo-msg" ? "Copiado" : "Copiar"}
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Tips */}
+                <div className="rounded-xl bg-amber-50 border-2 border-amber-200 p-3">
+                  <div className="text-[11px] font-bold text-amber-900 mb-2">
+                    💡 Tips para promocionar tu tienda:
+                  </div>
+                  <ul className="space-y-1 text-[11px] text-amber-800">
+                    <li>📱 Comparte el QR en tarjetas de presentación</li>
+                    <li>🖨️ Imprime el QR y pégalo en tu local</li>
+                    <li>📸 Sube el QR a tu historia de Instagram</li>
+                    <li>🕐 Publica mensajes en horas pico (12pm-2pm, 7pm-9pm)</li>
+                    <li>🎁 Usa "Envío gratis" los viernes para más ventas</li>
+                  </ul>
+                </div>
               </div>
             )}
 
@@ -620,9 +929,7 @@ export default function ProductLaunchKitViewer({
 
                 <div className="flex gap-2">
                   <button
-                    onClick={() =>
-                      handleCopy(buildTextForNetwork("instagram"), "instagram")
-                    }
+                    onClick={() => handleCopy(buildTextForNetwork("instagram"), "instagram")}
                     className={`flex-1 rounded-xl py-3 text-sm font-bold ${
                       copiedField === "instagram" ? "bg-emerald-500 text-white" : "bg-gray-900 text-white"
                     }`}
@@ -655,9 +962,7 @@ export default function ProductLaunchKitViewer({
 
                 <div className="flex gap-2">
                   <button
-                    onClick={() =>
-                      handleCopy(buildTextForNetwork("facebook"), "facebook")
-                    }
+                    onClick={() => handleCopy(buildTextForNetwork("facebook"), "facebook")}
                     className={`flex-1 rounded-xl py-3 text-sm font-bold ${
                       copiedField === "facebook" ? "bg-emerald-500 text-white" : "bg-gray-900 text-white"
                     }`}
@@ -744,9 +1049,7 @@ export default function ProductLaunchKitViewer({
 
                 <div className="grid grid-cols-3 gap-2">
                   <button
-                    onClick={() =>
-                      handleCopy(buildTextForNetwork("whatsapp"), "whatsapp")
-                    }
+                    onClick={() => handleCopy(buildTextForNetwork("whatsapp"), "whatsapp")}
                     className={`rounded-xl py-3 text-xs font-bold ${
                       copiedField === "whatsapp" ? "bg-emerald-500 text-white" : "bg-gray-900 text-white"
                     }`}
