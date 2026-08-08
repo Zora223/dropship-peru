@@ -1,6 +1,6 @@
 // supabase/functions/product-launch-ai/index.ts
-// 🍌 Product Launch AI v2 - Solo textos con Groq (SIN Gemini)
-// Marketing kit completo: captions + hashtags + WhatsApp + email
+// 🍌 Product Launch AI v3 - Personalización profunda + Prompts revolucionarios
+// v22.3.0
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -12,7 +12,6 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Groq
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "llama-3.3-70b-versatile";
 const CREDITS_COST = 15;
@@ -24,9 +23,17 @@ interface RequestBody {
   product_category?: string;
   product_price: number;
   input_image_url: string;
-  store_name?: string;
-  store_city?: string;
-  store_phone?: string;
+}
+
+interface StoreData {
+  id: string;
+  name: string;
+  slug: string;
+  contact_phone?: string;
+  whatsapp?: string;
+  instagram?: string;
+  facebook?: string;
+  description?: string;
 }
 
 // ============================================
@@ -67,9 +74,9 @@ function detectProductCategory(
 }
 
 // ============================================
-// GROQ - TEXTO
+// GROQ
 // ============================================
-async function callGroq(prompt: string, temperature = 0.8): Promise<string> {
+async function callGroq(prompt: string, temperature = 0.85): Promise<string> {
   const groqApiKey = Deno.env.get("GROQ_API_KEY");
   if (!groqApiKey) throw new Error("GROQ_API_KEY no configurada");
 
@@ -97,79 +104,127 @@ async function callGroq(prompt: string, temperature = 0.8): Promise<string> {
 }
 
 // ============================================
-// GENERADORES DE CONTENIDO
+// 🎨 PROMPTS REVOLUCIONARIOS
 // ============================================
+
 async function generateInstagramCaption(
   productName: string,
   price: number,
-  category: ProductCategory
+  category: ProductCategory,
+  store: StoreData,
+  productUrl: string
 ): Promise<string> {
-  const prompt = `Eres un copywriter viral de Instagram para e-commerce peruano.
+  const socialHandle = store.instagram
+    ? `@${store.instagram.replace(/[@\/]/g, "").replace("instagram.com/", "").trim()}`
+    : "";
 
-Genera un caption ATRACTIVO y VIRAL para Instagram para este producto:
-- Nombre: ${productName}
+  const prompt = `Eres el mejor copywriter viral de Instagram Perú. Trabajas para "${store.name}", una tienda peruana.
+
+TU MISIÓN: Crear un caption VIRAL que genere DESEO y URGENCIA para vender:
+- Producto: ${productName}
 - Precio: S/ ${price.toFixed(2)}
 - Categoría: ${category}
 
-REGLAS:
-- Máximo 220 caracteres
-- Empieza con 1 emoji fuerte
-- 1 pregunta que genere engagement
-- 1 CTA claro (llamada a la acción)
-- 2-3 emojis en total
-- Habla al cliente de "tú"
-- Crea urgencia sutil
-- NO uses "compra ahora" (usa "descubre", "consíguelo")
-- NO menciones descuentos si no los sabes
+REGLAS DE ORO:
+1. GANCHO PODEROSO en la primera línea (pregunta, dato impactante, promesa)
+2. HABLA DE BENEFICIOS EMOCIONALES (no características técnicas)
+3. Crea FOMO sutil ("stock limitado" pero SIN ser desesperado)
+4. USA EMOJIS ESTRATÉGICAMENTE (3-5 total, no más)
+5. HABLA DE TÚ AL CLIENTE (peruano, cercano)
+6. CTA CLARO al final (pero NO uses "compra ahora")
+7. Máximo 200 caracteres para el cuerpo principal
+8. Incluye el precio de forma llamativa
 
-Responde SOLO el caption, sin explicaciones, sin comillas.`;
+TÉCNICAS PROBADAS QUE FUNCIONAN:
+- "¿Sabías que...?" (curiosidad)
+- "Imagínate..." (visualización)
+- "El secreto de las mujeres/hombres que..." (aspiracional)
+- "3 razones por las que necesitas..." (listas)
+- "Esto va a cambiar tu forma de..." (transformación)
 
-  return await callGroq(prompt, 0.9);
+EJEMPLO PERFECTO:
+"✨ Ese detalle que dice 'sé lo que hago' sin decir nada.
+Este vestido no solo abraza tu figura, cuenta tu historia.
+💰 Solo S/ 89.90 · Stock limitado
+🔗 Link en bio"
+
+Responde SOLO el caption (SIN incluir link ni hashtags), sin comillas, sin explicaciones.`;
+
+  const caption = await callGroq(prompt, 0.9);
+
+  // Agregar CTA con social
+  let footer = "";
+  if (socialHandle) {
+    footer = `\n\n📷 Síguenos ${socialHandle}`;
+  }
+
+  return caption + footer;
 }
 
 async function generateFacebookCaption(
   productName: string,
   price: number,
-  category: ProductCategory
+  category: ProductCategory,
+  store: StoreData
 ): Promise<string> {
-  const prompt = `Eres un copywriter de Facebook para e-commerce peruano.
+  const fbPage = store.facebook
+    ? store.facebook.replace(/[\/]/g, "").replace("facebook.com/", "").trim()
+    : "";
 
-Genera un post ATRACTIVO para Facebook para:
-- Nombre: ${productName}
+  const prompt = `Eres copywriter experto de Facebook para "${store.name}", tienda peruana.
+
+CREA UN POST que VENDA para Facebook:
+- Producto: ${productName}
 - Precio: S/ ${price.toFixed(2)}
 - Categoría: ${category}
+${store.description ? `- Nuestra tienda: ${store.description}` : ""}
 
-REGLAS:
-- Máximo 350 caracteres
-- Empieza con emoji y hook fuerte
-- 2-3 beneficios emocionales (no técnicos)
-- 1 CTA claro
-- 3-4 emojis estratégicos
-- Habla al cliente de "tú"
-- Estilo más informativo que Instagram
-- NO uses "compra ahora"
+REGLAS ESPECÍFICAS FACEBOOK:
+1. Más INFORMATIVO que Instagram (audiencia lee más)
+2. Empieza con HOOK visual (emoji + frase impactante)
+3. LISTA 3 BENEFICIOS con emojis (bullets visuales)
+4. Menciona PRECIO con emoji 💰
+5. CTA doble: comentar + escribir por WhatsApp
+6. Máximo 320 caracteres
+7. Tono peruano cercano pero profesional
+${fbPage ? `8. Menciona nuestra página: /${fbPage}` : ""}
 
-Responde SOLO el post, sin explicaciones, sin comillas.`;
+ESTRUCTURA GANADORA:
+[Emoji + Hook]
+[Descripción emocional 1 línea]
+✨ Beneficio 1
+✨ Beneficio 2  
+✨ Beneficio 3
+💰 [Precio]
+👇 [CTA]
 
-  return await callGroq(prompt, 0.8);
+Responde SOLO el post, sin comillas, sin explicaciones.`;
+
+  return await callGroq(prompt, 0.85);
 }
 
 async function generateHashtags(
   productName: string,
-  category: ProductCategory
+  category: ProductCategory,
+  storeCity?: string
 ): Promise<string[]> {
-  const prompt = `Genera 15 hashtags optimizados para Instagram/TikTok Perú para este producto:
-- Nombre: ${productName}
+  const prompt = `Genera EXACTAMENTE 15 hashtags virales para Instagram/TikTok Perú:
+- Producto: ${productName}
 - Categoría: ${category}
+${storeCity ? `- Ciudad: ${storeCity}` : ""}
+
+ESTRATEGIA:
+- 5 hashtags de ALTA competencia (millones de posts): #moda #peru #compras
+- 5 hashtags de MEDIA competencia (miles-cientos de miles): #modaperu #compraslocalperu
+- 5 hashtags de NICHO específico del producto (miles): dependen del producto
 
 REGLAS:
-- Mezcla de trending + nichos + geolocalización
-- Incluye hashtags Perú (#peru, #lima, #compraslocalperu)
-- Incluye hashtags de categoría específica
-- Formato: cada hashtag empieza con #
-- Sin espacios, sin mayúsculas
+- Todos en minúsculas, sin espacios
+- Empieza con #
 - Un hashtag por línea
-- SOLO los hashtags, sin numeración, sin explicaciones
+- SIN números al final
+- SIN emojis
+- Combina: tendencia + geolocalización Perú + nicho producto
 
 Ejemplo formato:
 #hashtag1
@@ -180,52 +235,82 @@ Ejemplo formato:
   const hashtags = raw
     .split(/\n|\s+/)
     .map((t) => t.trim())
-    .filter((t) => t.startsWith("#") && t.length > 2)
+    .filter((t) => t.startsWith("#") && t.length > 2 && !/\d/.test(t))
     .slice(0, 15);
 
   return hashtags.length > 0
     ? hashtags
-    : ["#peru", "#compraslocalperu", "#emprendimientoperu", "#lima", "#dropshipperu"];
+    : ["#peru", "#compraslocalperu", "#emprendimientoperu", "#lima", "#modaperu"];
 }
 
 async function generateWhatsAppMessage(
   productName: string,
   price: number,
-  storeName: string,
-  storePhone: string
+  store: StoreData,
+  productUrl: string
 ): Promise<string> {
-  const prompt = `Eres un experto en marketing WhatsApp para tiendas peruanas.
+  const contactPhone = store.whatsapp || store.contact_phone || "";
+  const cleanPhone = contactPhone.replace(/[^\d]/g, "");
 
-Genera un mensaje persuasivo para enviar por WhatsApp Broadcast/Estado:
+  const prompt = `Eres experto en WhatsApp Marketing para tiendas peruanas.
+
+CREA MENSAJE PERSONALIZADO para ${store.name}:
 - Producto: ${productName}
 - Precio: S/ ${price.toFixed(2)}
-- Tienda: ${storeName}
+- Tienda: ${store.name}
 
 REGLAS:
-- Máximo 300 caracteres
-- Empieza con emoji fuerte + saludo cálido
-- 1 línea vendedora
-- Precio destacado con emoji 💰
-- CTA claro: "Escríbeme al ${storePhone}" o "Responde este mensaje"
-- 3-4 emojis estratégicos
-- Tono cercano peruano
-- Máximo 4 líneas separadas por saltos
+1. Empieza con emoji cálido + saludo peruano ("¡Hola!" "¿Qué tal!")
+2. Frase vendedora que despierte curiosidad
+3. Menciona el producto con detalle
+4. Precio con emoji 💰 destacado
+5. Cierre con invitación (no presión)
+6. Máximo 250 caracteres
+7. Tono conversacional, como amigo cercano
+8. Usa saltos de línea para respirar
 
-Responde SOLO el mensaje, sin explicaciones, sin comillas.`;
+ESTRUCTURA:
+[Emoji + Saludo cálido]
+[Hook: por qué este producto es especial]
+🎯 [Producto]
+💰 S/ [Precio]
+[CTA suave: "¿Te interesa?" o "Cuéntame si quieres detalles"]
 
-  return await callGroq(prompt, 0.8);
+Responde SOLO el mensaje, sin comillas.`;
+
+  const message = await callGroq(prompt, 0.85);
+
+  // Agregar CTA con contacto real
+  let footer = "";
+  if (cleanPhone) {
+    footer = `\n\n📱 ${cleanPhone}`;
+  }
+
+  return message + footer;
 }
 
-async function generateEmailSubject(productName: string): Promise<string> {
-  const prompt = `Genera un asunto ATRACTIVO para email marketing sobre: ${productName}
+async function generateEmailSubject(
+  productName: string,
+  storeName: string
+): Promise<string> {
+  const prompt = `Genera un ASUNTO de email IRRESISTIBLE (que NO parezca spam) para:
+- Tienda: ${storeName}
+- Producto: ${productName}
 
 REGLAS:
-- Máximo 50 caracteres
-- Genera curiosidad o urgencia
-- Puede usar 1-2 emojis
-- NO uses "compra ahora" o "descuento"
+- Máximo 45 caracteres
+- Genera CURIOSIDAD sin ser clickbait
+- Puedes usar máximo 1 emoji
+- NO uses: "OFERTA" "DESCUENTO" "COMPRA YA" (van a spam)
+- Sí usa: "descubre" "conoce" "para ti"
+- Tono personal, como si fuera de un amigo
 
-Responde SOLO el asunto, sin comillas, sin explicaciones.`;
+Ejemplos buenos:
+"Pensé en ti al ver esto 💭"
+"El detalle que te va a encantar"
+"Nuevo en ${storeName}: échale un vistazo"
+
+Responde SOLO el asunto, sin comillas.`;
 
   return await callGroq(prompt, 0.9);
 }
@@ -233,25 +318,34 @@ Responde SOLO el asunto, sin comillas, sin explicaciones.`;
 async function generateEmailBody(
   productName: string,
   price: number,
-  storeName: string
+  store: StoreData
 ): Promise<string> {
-  const prompt = `Genera el cuerpo de un email marketing profesional para:
+  const prompt = `Genera un EMAIL MARKETING profesional para ${store.name}:
 - Producto: ${productName}
 - Precio: S/ ${price.toFixed(2)}
-- Tienda: ${storeName}
+
+ESTRUCTURA GANADORA:
+1. Saludo cálido personal
+2. Hook: por qué le puede interesar
+3. Descripción emocional (2-3 líneas)
+4. Beneficios en bullets (2-3)
+5. Precio con contexto de valor
+6. CTA claro (link al producto)
+7. Firma con nombre de tienda
 
 REGLAS:
-- Estructura: Saludo + Hook + Beneficios + CTA + Cierre
-- Máximo 500 caracteres
-- Tono cercano y profesional
-- 2-3 emojis estratégicos
-- Habla al cliente de "tú"
-- CTA: "Descúbrelo aquí" o "Conócelo"
-- Cierre con nombre de tienda
+- Máximo 400 caracteres
+- Tono cercano pero profesional
+- 2 emojis máximo
+- Habla de TÚ al cliente
+- NO uses "compra ahora"
+- Sí usa "descúbrelo" "conócelo" "échale un vistazo"
 
-Responde SOLO el cuerpo del email, sin asunto, sin comillas.`;
+Responde SOLO el cuerpo del email, sin asunto, sin firma final (yo la agrego).`;
 
-  return await callGroq(prompt, 0.8);
+  const body = await callGroq(prompt, 0.85);
+
+  return `${body}\n\n💜 El equipo de ${store.name}`;
 }
 
 // ============================================
@@ -295,8 +389,6 @@ serve(async (req: Request) => {
       product_category = "",
       product_price,
       input_image_url,
-      store_name = "Mi tienda",
-      store_phone = "",
     } = body;
 
     if (!product_id || !product_name || !input_image_url) {
@@ -306,7 +398,29 @@ serve(async (req: Request) => {
       );
     }
 
-    console.log(`🍌 Launch AI: ${product_name} (user: ${user.email})`);
+    console.log(`🍌 Launch AI v3: ${product_name} (user: ${user.email})`);
+
+    // ========================================
+    // OBTENER DATOS DE LA TIENDA
+    // ========================================
+    const { data: storeData } = await supabase
+      .from("stores")
+      .select("id, name, slug, contact_phone, whatsapp, instagram, facebook, description")
+      .eq("owner_id", user.id)
+      .maybeSingle();
+
+    if (!storeData) {
+      return new Response(
+        JSON.stringify({ error: "No tienes tienda registrada" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const store: StoreData = storeData;
+    const baseUrl = "https://dropship-peru-mym.netlify.app";
+    const productUrl = `${baseUrl}/tienda/${store.slug}?producto=${product_id}`;
+
+    console.log(`🏪 Tienda: ${store.name} (/${store.slug})`);
 
     // ========================================
     // VERIFICAR CRÉDITOS
@@ -336,16 +450,16 @@ serve(async (req: Request) => {
     }
 
     // ========================================
-    // GENERAR CONTENIDO EN PARALELO
+    // GENERAR CONTENIDO PERSONALIZADO
     // ========================================
     const detectedCategory = detectProductCategory(
       product_name,
       product_description,
       product_category
     );
-    console.log(`🎯 Categoría detectada: ${detectedCategory}`);
+    console.log(`🎯 Categoría: ${detectedCategory}`);
 
-    console.log("🧠 Generando contenido con Groq...");
+    console.log("🧠 Generando contenido personalizado con Groq...");
     const [
       captionInstagram,
       captionFacebook,
@@ -354,15 +468,15 @@ serve(async (req: Request) => {
       emailSubject,
       emailBody,
     ] = await Promise.all([
-      generateInstagramCaption(product_name, product_price, detectedCategory),
-      generateFacebookCaption(product_name, product_price, detectedCategory),
+      generateInstagramCaption(product_name, product_price, detectedCategory, store, productUrl),
+      generateFacebookCaption(product_name, product_price, detectedCategory, store),
       generateHashtags(product_name, detectedCategory),
-      generateWhatsAppMessage(product_name, product_price, store_name, store_phone),
-      generateEmailSubject(product_name),
-      generateEmailBody(product_name, product_price, store_name),
+      generateWhatsAppMessage(product_name, product_price, store, productUrl),
+      generateEmailSubject(product_name, store.name),
+      generateEmailBody(product_name, product_price, store),
     ]);
 
-    console.log("✅ Contenido generado");
+    console.log("✅ Contenido generado y personalizado");
 
     // ========================================
     // DESCONTAR CRÉDITOS
@@ -391,7 +505,7 @@ serve(async (req: Request) => {
       vendor_id: user.id,
       detected_category: detectedCategory,
       original_image_url: input_image_url,
-      enhanced_image_url: input_image_url, // 🔥 IGUAL a la original (por ahora)
+      enhanced_image_url: input_image_url,
       caption_instagram: captionInstagram,
       caption_facebook: captionFacebook,
       hashtags: hashtags,
@@ -418,6 +532,14 @@ serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         kit: savedKit || kit,
+        store: {
+          name: store.name,
+          slug: store.slug,
+          whatsapp: store.whatsapp || store.contact_phone,
+          instagram: store.instagram,
+          facebook: store.facebook,
+        },
+        product_url: productUrl,
         credits_used: CREDITS_COST,
         credits_remaining: finalCredits,
         generation_time_ms: generationTime,

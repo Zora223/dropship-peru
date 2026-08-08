@@ -1,52 +1,32 @@
 // src/lib/product-launch-ai.ts
-// 🍌 Product Launch AI - Cliente frontend
+// 🍌 Cliente Launch AI v3 - Con historial y personalización
 
 import { supabase } from "./supabase";
 
-// ============================================
-// TYPES
-// ============================================
-
-export type ProductCategory =
-  | "clothing_female"
-  | "clothing_male"
-  | "toys"
-  | "accessories"
-  | "electronics"
-  | "beauty"
-  | "pets"
-  | "kitchen"
-  | "home"
-  | "sports"
-  | "generic";
-
 export interface LaunchKit {
   id: string;
-  vendor_id: string;
   product_id: string;
-  detected_category: ProductCategory;
-  confidence_score: number | null;
-
+  vendor_id: string;
+  detected_category: string;
   original_image_url: string;
-  enhanced_image_url: string | null;
-
-  caption_instagram: string | null;
-  caption_facebook: string | null;
-  hashtags: string[] | null;
-  whatsapp_message: string | null;
-  email_subject: string | null;
-  email_body: string | null;
-
-  status: "pending" | "generating" | "completed" | "failed";
-  progress: number;
-  error_message: string | null;
-
+  enhanced_image_url: string;
+  caption_instagram: string;
+  caption_facebook: string;
+  hashtags: string[];
+  whatsapp_message: string;
+  email_subject: string;
+  email_body: string;
   credits_used: number;
-  generation_time_ms: number | null;
-  model_used: string;
+  generation_time_ms: number;
+  created_at?: string;
+}
 
-  created_at: string;
-  completed_at: string | null;
+export interface StoreInfo {
+  name: string;
+  slug: string;
+  whatsapp?: string;
+  instagram?: string;
+  facebook?: string;
 }
 
 export interface LaunchAIParams {
@@ -56,43 +36,33 @@ export interface LaunchAIParams {
   product_category?: string;
   product_price: number;
   input_image_url: string;
-  store_name?: string;
-  store_city?: string;
-  store_phone?: string;
 }
 
 export interface LaunchAIResponse {
   success: boolean;
   kit: LaunchKit;
+  store: StoreInfo;
+  product_url: string;
   credits_used: number;
   credits_remaining: number;
   generation_time_ms: number;
 }
 
 // ============================================
-// FUNCIONES PRINCIPALES
+// GENERAR NUEVO KIT (15 créditos)
 // ============================================
-
-/**
- * Genera un kit completo de marketing con Nano Banana + Groq
- * Cuesta 15 créditos
- */
 export async function generateLaunchKit(
   params: LaunchAIParams
 ): Promise<LaunchAIResponse> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const accessToken = sessionData.session?.access_token;
-
-  if (!accessToken) {
-    throw new Error("No estás autenticado");
-  }
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error("No hay sesión activa");
 
   const response = await fetch(
     `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/product-launch-ai`,
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${session.access_token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(params),
@@ -102,216 +72,158 @@ export async function generateLaunchKit(
   const data = await response.json();
 
   if (!response.ok) {
-    if (response.status === 402) {
-      throw new Error(
-        `Créditos insuficientes. Necesitas ${data.credits_needed || 15} créditos. Tienes ${data.credits_available || 0}.`
-      );
-    }
-    throw new Error(data.error || "Error al generar kit de marketing");
+    throw new Error(data.error || "Error al generar kit");
   }
 
-  return data as LaunchAIResponse;
+  return data;
 }
 
-/**
- * Obtiene los kits de un vendor
- */
-export async function getMyLaunchKits(limit = 20): Promise<LaunchKit[]> {
+// ============================================
+// 🆕 OBTENER TODOS LOS KITS DEL VENDOR
+// ============================================
+export async function getMyKits(limit = 20): Promise<LaunchKit[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
   const { data, error } = await supabase
     .from("product_launch_kits")
     .select("*")
+    .eq("vendor_id", user.id)
     .order("created_at", { ascending: false })
     .limit(limit);
 
   if (error) {
-    console.error("❌ Error cargando kits:", error);
-    throw error;
+    console.error("Error cargando kits:", error);
+    return [];
   }
 
   return (data as LaunchKit[]) || [];
 }
 
-/**
- * Obtiene un kit específico por ID
- */
-export async function getLaunchKitById(kitId: string): Promise<LaunchKit | null> {
-  const { data, error } = await supabase
-    .from("product_launch_kits")
-    .select("*")
-    .eq("id", kitId)
-    .single();
-
-  if (error) {
-    console.error("❌ Error cargando kit:", error);
-    return null;
-  }
-
-  return data as LaunchKit;
-}
-
-/**
- * Obtiene el último kit de un producto (si existe)
- */
-export async function getLatestKitForProduct(
+// ============================================
+// 🆕 OBTENER ÚLTIMO KIT DE UN PRODUCTO
+// ============================================
+export async function getKitByProductId(
   productId: string
 ): Promise<LaunchKit | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
   const { data, error } = await supabase
     .from("product_launch_kits")
     .select("*")
+    .eq("vendor_id", user.id)
     .eq("product_id", productId)
-    .eq("status", "completed")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
   if (error) {
-    console.error("❌ Error cargando kit del producto:", error);
+    console.error("Error buscando kit:", error);
     return null;
   }
 
   return data as LaunchKit | null;
 }
 
-/**
- * Elimina un kit
- */
-export async function deleteLaunchKit(
-  kitId: string,
-  imageUrl?: string
-): Promise<void> {
-  // Eliminar imagen del bucket si existe
-  if (imageUrl) {
-    const urlParts = imageUrl.split("/product-launch-images/");
-    if (urlParts.length === 2) {
-      const filePath = urlParts[1];
-      await supabase.storage.from("product-launch-images").remove([filePath]);
-    }
-  }
+// ============================================
+// 🆕 OBTENER INFO DE LA TIENDA
+// ============================================
+export async function getMyStoreInfo(): Promise<StoreInfo | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
 
-  // Eliminar registro
-  const { error } = await supabase
+  const { data } = await supabase
+    .from("stores")
+    .select("name, slug, whatsapp, contact_phone, instagram, facebook")
+    .eq("owner_id", user.id)
+    .maybeSingle();
+
+  if (!data) return null;
+
+  return {
+    name: data.name,
+    slug: data.slug,
+    whatsapp: data.whatsapp || data.contact_phone,
+    instagram: data.instagram,
+    facebook: data.facebook,
+  };
+}
+
+// ============================================
+// 🆕 CONTAR KITS POR PRODUCTO
+// ============================================
+export async function countKitsPerProduct(): Promise<Record<string, number>> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return {};
+
+  const { data } = await supabase
     .from("product_launch_kits")
-    .delete()
-    .eq("id", kitId);
+    .select("product_id")
+    .eq("vendor_id", user.id);
 
-  if (error) throw error;
+  if (!data) return {};
+
+  const counts: Record<string, number> = {};
+  data.forEach((row: { product_id: string }) => {
+    counts[row.product_id] = (counts[row.product_id] || 0) + 1;
+  });
+
+  return counts;
 }
 
-/**
- * Descarga la imagen mejorada
- */
+// ============================================
+// UTILIDADES
+// ============================================
 export async function downloadEnhancedImage(
-  imageUrl: string,
-  fileName: string = "product-launch-ai.png"
+  url: string,
+  filename: string
 ): Promise<void> {
-  try {
-    const response = await fetch(imageUrl);
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-  } catch (error) {
-    console.error("❌ Error descargando imagen:", error);
-    throw error;
-  }
+  const response = await fetch(url);
+  const blob = await response.blob();
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
 }
 
-// ============================================
-// HELPERS DE UI
-// ============================================
-
-export const CATEGORY_INFO: Record<
-  ProductCategory,
-  { label: string; emoji: string; color: string }
-> = {
-  clothing_female: {
-    label: "Ropa Femenina",
-    emoji: "👗",
-    color: "from-pink-500 to-rose-500",
-  },
-  clothing_male: {
-    label: "Ropa Masculina",
-    emoji: "👔",
-    color: "from-blue-500 to-indigo-500",
-  },
-  toys: {
-    label: "Juguetes",
-    emoji: "🧸",
-    color: "from-yellow-500 to-orange-500",
-  },
-  accessories: {
-    label: "Bisutería/Accesorios",
-    emoji: "💎",
-    color: "from-purple-500 to-pink-500",
-  },
-  electronics: {
-    label: "Electrónica",
-    emoji: "📱",
-    color: "from-gray-700 to-gray-900",
-  },
-  beauty: {
-    label: "Belleza",
-    emoji: "💄",
-    color: "from-rose-500 to-pink-500",
-  },
-  pets: {
-    label: "Mascotas",
-    emoji: "🐕",
-    color: "from-amber-500 to-orange-500",
-  },
-  kitchen: {
-    label: "Cocina",
-    emoji: "🍳",
-    color: "from-orange-500 to-red-500",
-  },
-  home: {
-    label: "Hogar/Decoración",
-    emoji: "🏠",
-    color: "from-emerald-500 to-teal-500",
-  },
-  sports: {
-    label: "Deportes",
-    emoji: "⚽",
-    color: "from-green-500 to-emerald-500",
-  },
-  generic: {
-    label: "Producto",
-    emoji: "📦",
-    color: "from-gray-500 to-gray-700",
-  },
-};
-
-/**
- * Retorna info de la categoría
- */
-export function getCategoryInfo(category: ProductCategory) {
-  return CATEGORY_INFO[category] || CATEGORY_INFO.generic;
-}
-
-/**
- * Formatea milisegundos a segundos legibles
- */
-export function formatGenerationTime(ms: number | null): string {
-  if (!ms) return "—";
-  const seconds = Math.round(ms / 1000);
-  return `${seconds}s`;
-}
-
-/**
- * Copia texto al portapapeles
- */
 export async function copyToClipboard(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);
     return true;
-  } catch (err) {
-    console.error("Error copying:", err);
-    return false;
+  } catch {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    document.body.appendChild(textarea);
+    textarea.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(textarea);
+    return ok;
   }
+}
+
+const CATEGORY_INFO: Record<string, { emoji: string; label: string }> = {
+  clothing_female: { emoji: "👗", label: "Ropa Femenina" },
+  clothing_male: { emoji: "👔", label: "Ropa Masculina" },
+  toys: { emoji: "🧸", label: "Juguetes" },
+  accessories: { emoji: "💍", label: "Accesorios" },
+  electronics: { emoji: "📱", label: "Electrónica" },
+  beauty: { emoji: "💄", label: "Belleza" },
+  pets: { emoji: "🐾", label: "Mascotas" },
+  kitchen: { emoji: "🍳", label: "Cocina" },
+  home: { emoji: "🏠", label: "Hogar" },
+  sports: { emoji: "⚽", label: "Deportes" },
+  generic: { emoji: "📦", label: "Producto" },
+};
+
+export function getCategoryInfo(category: string) {
+  return CATEGORY_INFO[category] || CATEGORY_INFO.generic;
+}
+
+export function formatGenerationTime(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
 }
