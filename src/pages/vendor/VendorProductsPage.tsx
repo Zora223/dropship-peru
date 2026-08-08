@@ -1,4 +1,6 @@
 // src/pages/vendor/VendorProductsPage.tsx
+// v22.3 - Con historial de kits + badge visual + reutilización
+
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMyStore } from "../../hooks/useMyStore";
@@ -14,6 +16,7 @@ import ProductForm from "../../components/vendor/ProductForm";
 import EditPriceModal from "../../components/vendor/EditPriceModal";
 import ProductLaunchAIModal from "../../components/vendor/ProductLaunchAIModal";
 import { getAISubscription, type AISubscription } from "../../lib/ai-subscription";
+import { countKitsPerProduct } from "../../lib/product-launch-ai";
 import type { DbProduct } from "../../types/database";
 
 type Tab = "all" | "imported" | "own";
@@ -60,7 +63,6 @@ export default function VendorProductsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Modal edición de precio
   const [editingPrice, setEditingPrice] =
     useState<VendorProductWithRealStock | null>(null);
 
@@ -69,6 +71,9 @@ export default function VendorProductsPage() {
     useState<VendorProductWithRealStock | null>(null);
   const [aiSubscription, setAiSubscription] =
     useState<AISubscription | null>(null);
+
+  // 🆕 Contador de kits por producto (para badge visual)
+  const [kitsCount, setKitsCount] = useState<Record<string, number>>({});
 
   const loadProducts = async () => {
     if (!store) return;
@@ -96,6 +101,16 @@ export default function VendorProductsPage() {
     }
   };
 
+  // 🆕 Cargar contador de kits por producto
+  const loadKitsCount = async () => {
+    try {
+      const counts = await countKitsPerProduct();
+      setKitsCount(counts);
+    } catch (err) {
+      console.error("Error cargando kits:", err);
+    }
+  };
+
   useEffect(() => {
     if (store) loadProducts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -103,6 +118,7 @@ export default function VendorProductsPage() {
 
   useEffect(() => {
     loadAISubscription();
+    loadKitsCount();
   }, []);
 
   const counts = useMemo(() => {
@@ -218,7 +234,6 @@ export default function VendorProductsPage() {
     }
   };
 
-  // 🍌 Abrir modal Launch AI
   const openLaunchAI = (product: VendorProductWithRealStock) => {
     if (!aiSubscription) {
       toast.warning(
@@ -238,11 +253,10 @@ export default function VendorProductsPage() {
     setLaunchAIProduct(product);
   };
 
-  // 🔥 FIX v22.2.4: Cerrar modal + recargar créditos
   const closeLaunchAI = () => {
     setLaunchAIProduct(null);
-    // Recarga créditos DESPUÉS de cerrar (no durante el proceso)
     loadAISubscription();
+    loadKitsCount(); // 🆕 Recargar contador de kits
   };
 
   if (loadingStore || loading) {
@@ -273,6 +287,8 @@ export default function VendorProductsPage() {
     );
   }
 
+  const totalKitsGenerated = Object.values(kitsCount).reduce((a, b) => a + b, 0);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -286,7 +302,7 @@ export default function VendorProductsPage() {
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Link
             to="/vendor/catalog"
             className="rounded-full bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50"
@@ -303,7 +319,7 @@ export default function VendorProductsPage() {
         </div>
       </div>
 
-      {/* 🍌 Card informativa Launch AI */}
+      {/* 🍌 Card Launch AI - Ahora con estadísticas */}
       {aiSubscription && (
         <div className="rounded-2xl bg-linear-to-br from-purple-500 via-pink-500 to-orange-500 p-5 text-white shadow-lg">
           <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -311,10 +327,12 @@ export default function VendorProductsPage() {
               <div className="text-4xl">🍌</div>
               <div>
                 <h3 className="text-base font-black">
-                  Product Launch AI activo
+                  Product Launch AI
                 </h3>
                 <p className="text-xs opacity-90">
-                  Genera imagen PRO + marketing completo por 15 créditos
+                  {totalKitsGenerated > 0
+                    ? `${totalKitsGenerated} kit${totalKitsGenerated !== 1 ? "s" : ""} generado${totalKitsGenerated !== 1 ? "s" : ""} · Reutiliza sin gastar créditos`
+                    : "Genera marketing personalizado en 30 segundos"}
                 </p>
               </div>
             </div>
@@ -390,7 +408,7 @@ export default function VendorProductsPage() {
         />
       </div>
 
-      {/* Modal de formulario */}
+      {/* Modales */}
       {showForm && (
         <ProductForm
           storeId={store.id}
@@ -400,7 +418,6 @@ export default function VendorProductsPage() {
         />
       )}
 
-      {/* Modal edición de precio */}
       <EditPriceModal
         isOpen={!!editingPrice}
         productName={editingPrice?.name ?? ""}
@@ -413,7 +430,6 @@ export default function VendorProductsPage() {
         onSave={handleSavePrice}
       />
 
-      {/* 🍌 Modal Launch AI - SIN onCreditsUpdate (evita remount) */}
       {launchAIProduct && aiSubscription && (
         <ProductLaunchAIModal
           isOpen={!!launchAIProduct}
@@ -476,7 +492,7 @@ export default function VendorProductsPage() {
         </div>
       ) : (
         <>
-          {/* 🖥️ VISTA DESKTOP: Tabla */}
+          {/* 🖥️ DESKTOP: Tabla */}
           <div className="hidden overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm lg:block">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
@@ -504,6 +520,10 @@ export default function VendorProductsPage() {
                         ? ((margin / basePrice) * 100).toFixed(0)
                         : null;
 
+                    // 🆕 Cuántos kits tiene este producto
+                    const productKits = kitsCount[product.id] || 0;
+                    const hasKit = productKits > 0;
+
                     return (
                       <tr
                         key={product.id}
@@ -523,8 +543,16 @@ export default function VendorProductsPage() {
                               )}
                             </div>
                             <div className="min-w-0">
-                              <div className="font-semibold text-gray-900">
+                              <div className="font-semibold text-gray-900 flex items-center gap-2">
                                 {product.name}
+                                {hasKit && (
+                                  <span
+                                    className="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700"
+                                    title={`${productKits} kit${productKits !== 1 ? "s" : ""} generado${productKits !== 1 ? "s" : ""}`}
+                                  >
+                                    ✅ Kit
+                                  </span>
+                                )}
                               </div>
                               <div className="text-xs text-gray-500">
                                 {product.sku ?? "—"} ·{" "}
@@ -617,10 +645,18 @@ export default function VendorProductsPage() {
                             {product.is_active && images.length > 0 && (
                               <button
                                 onClick={() => openLaunchAI(product)}
-                                className="rounded-lg bg-linear-to-r from-purple-500 to-pink-500 px-2.5 py-1 text-[11px] font-bold text-white shadow hover:shadow-md transition"
-                                title="Generar kit de marketing con AI"
+                                className={`rounded-lg px-2.5 py-1 text-[11px] font-bold text-white shadow hover:shadow-md transition ${
+                                  hasKit
+                                    ? "bg-linear-to-r from-emerald-500 to-teal-500"
+                                    : "bg-linear-to-r from-purple-500 to-pink-500"
+                                }`}
+                                title={
+                                  hasKit
+                                    ? "Ver kit generado (0 créditos)"
+                                    : "Generar kit AI (15 créditos)"
+                                }
                               >
-                                🍌 Launch
+                                {hasKit ? "♻️ Ver Kit" : "🍌 Launch"}
                               </button>
                             )}
 
@@ -659,7 +695,7 @@ export default function VendorProductsPage() {
             </div>
           </div>
 
-          {/* 📱 VISTA MÓVIL: Cards */}
+          {/* 📱 MÓVIL: Cards */}
           <div className="grid gap-4 sm:grid-cols-2 lg:hidden">
             {filtered.map((product) => {
               const images = normalizeImages(product.images);
@@ -670,6 +706,10 @@ export default function VendorProductsPage() {
               const margin = basePrice > 0 ? currentPrice - basePrice : 0;
               const marginPct =
                 basePrice > 0 ? ((margin / basePrice) * 100).toFixed(0) : null;
+
+              // 🆕
+              const productKits = kitsCount[product.id] || 0;
+              const hasKit = productKits > 0;
 
               return (
                 <div
@@ -689,7 +729,7 @@ export default function VendorProductsPage() {
                       </div>
                     )}
 
-                    <div className="absolute top-2 left-2">
+                    <div className="absolute top-2 left-2 flex flex-col gap-1">
                       {isCatalog ? (
                         <span className="rounded-full bg-purple-500 px-2.5 py-1 text-[10px] font-bold text-white shadow">
                           🔗 Catálogo
@@ -697,6 +737,11 @@ export default function VendorProductsPage() {
                       ) : (
                         <span className="rounded-full bg-rose-500 px-2.5 py-1 text-[10px] font-bold text-white shadow">
                           ✨ Propio
+                        </span>
+                      )}
+                      {hasKit && (
+                        <span className="rounded-full bg-emerald-500 px-2.5 py-1 text-[10px] font-bold text-white shadow">
+                          ✅ Kit
                         </span>
                       )}
                     </div>
@@ -780,9 +825,13 @@ export default function VendorProductsPage() {
                       {product.is_active && images.length > 0 && (
                         <button
                           onClick={() => openLaunchAI(product)}
-                          className="col-span-2 rounded-xl bg-linear-to-r from-purple-500 to-pink-500 py-2 text-xs font-bold text-white shadow hover:shadow-md transition"
+                          className={`col-span-2 rounded-xl py-2 text-xs font-bold text-white shadow hover:shadow-md transition ${
+                            hasKit
+                              ? "bg-linear-to-r from-emerald-500 to-teal-500"
+                              : "bg-linear-to-r from-purple-500 to-pink-500"
+                          }`}
                         >
-                          🍌 Generar Launch Kit
+                          {hasKit ? "♻️ Ver Launch Kit" : "🍌 Generar Launch Kit"}
                         </button>
                       )}
 
