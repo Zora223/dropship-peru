@@ -1,11 +1,6 @@
 // ============================================================
 // SUPPLIER PRODUCTS — Funciones CRUD para proveedores
-// v22.6 — Soft delete implementado
-// ============================================================
-// Maneja el catálogo mayorista de cada proveedor:
-// - Crear, editar, eliminar (soft delete), productos
-// - Subir imágenes a Supabase Storage
-// - Contar cuántos vendors usan cada producto
+// v22.13 — Soft delete + Colores disponibles
 // ============================================================
 
 import { supabase } from "./supabase";
@@ -22,11 +17,12 @@ export interface SupplierProduct {
   sku: string;
   category: string;
   images: string[];
+  colors: string[]; // 🆕 v22.13
   is_active: boolean;
   created_at: string;
   updated_at: string;
   deleted_at?: string | null;
-  vendors_count?: number; // Calculado, no viene de la BD
+  vendors_count?: number;
 }
 
 export interface ProductFormData {
@@ -38,6 +34,7 @@ export interface ProductFormData {
   sku: string;
   category: string;
   images: string[];
+  colors: string[]; // 🆕 v22.13
   is_active: boolean;
 }
 
@@ -49,13 +46,11 @@ export interface SupplierProductStats {
 }
 
 // ============================================================
-// LISTAR PRODUCTOS DEL PROVEEDOR (con conteo de vendors)
-// Filtra los productos con soft-delete
+// LISTAR PRODUCTOS DEL PROVEEDOR
 // ============================================================
 export async function listSupplierProducts(
   supplierId: string
 ): Promise<SupplierProduct[]> {
-  // Traemos productos del proveedor (excluyendo eliminados)
   const { data: products, error } = await supabase
     .from("catalog_products")
     .select("*")
@@ -66,7 +61,6 @@ export async function listSupplierProducts(
   if (error) throw error;
   if (!products || products.length === 0) return [];
 
-  // Traemos el conteo de vendors por producto
   const productIds = products.map((p) => p.id);
 
   const { data: vendorProducts, error: vpError } = await supabase
@@ -76,7 +70,6 @@ export async function listSupplierProducts(
 
   if (vpError) console.warn("Error contando vendors:", vpError);
 
-  // Contamos vendors por producto
   const countMap: Record<string, number> = {};
   (vendorProducts ?? []).forEach((vp) => {
     if (vp.catalog_product_id) {
@@ -84,9 +77,9 @@ export async function listSupplierProducts(
     }
   });
 
-  // Combinamos productos + conteo
   return products.map((p) => ({
     ...p,
+    colors: p.colors ?? [], // 🆕 default vacío por seguridad
     vendors_count: countMap[p.id] ?? 0,
   })) as SupplierProduct[];
 }
@@ -104,7 +97,7 @@ export function calculateStats(products: SupplierProduct[]): SupplierProductStat
 }
 
 // ============================================================
-// CREAR PRODUCTO
+// CREAR PRODUCTO 🆕 con colors
 // ============================================================
 export async function createProduct(
   supplierId: string,
@@ -122,6 +115,7 @@ export async function createProduct(
       sku: data.sku.trim(),
       category: data.category.trim(),
       images: data.images,
+      colors: data.colors ?? [], // 🆕
       is_active: data.is_active,
     })
     .select("*")
@@ -132,7 +126,7 @@ export async function createProduct(
 }
 
 // ============================================================
-// ACTUALIZAR PRODUCTO
+// ACTUALIZAR PRODUCTO 🆕 con colors
 // ============================================================
 export async function updateProduct(
   productId: string,
@@ -154,8 +148,6 @@ export async function updateProduct(
 
 // ============================================================
 // ELIMINAR PRODUCTO (SOFT DELETE)
-// No borra físicamente, solo marca como eliminado.
-// Los pedidos históricos se mantienen intactos.
 // ============================================================
 export async function deleteProduct(productId: string): Promise<void> {
   const { error } = await supabase
@@ -189,26 +181,22 @@ export async function toggleActive(
 }
 
 // ============================================================
-// SUBIR IMAGEN AL BUCKET
+// SUBIR IMAGEN AL BUCKET (10MB v22.6)
 // ============================================================
 export async function uploadProductImage(file: File): Promise<string> {
-  // Validar tipo
   if (!file.type.startsWith("image/")) {
     throw new Error("El archivo debe ser una imagen");
   }
 
-  // Validar tamaño (max 5MB)
-  if (file.size > 5 * 1024 * 1024) {
-    throw new Error("La imagen no puede pesar más de 5MB");
+  if (file.size > 10 * 1024 * 1024) {
+    throw new Error("La imagen no puede pesar más de 10MB");
   }
 
-  // Generar nombre único
   const timestamp = Date.now();
   const randomStr = Math.random().toString(36).substring(2, 9);
   const extension = file.name.split(".").pop() || "jpg";
   const fileName = `catalog/${timestamp}-${randomStr}.${extension}`;
 
-  // Subir al bucket
   const { error: uploadError } = await supabase.storage
     .from("product-images")
     .upload(fileName, file, {
@@ -218,7 +206,6 @@ export async function uploadProductImage(file: File): Promise<string> {
 
   if (uploadError) throw uploadError;
 
-  // Obtener URL pública
   const { data: publicUrlData } = supabase.storage
     .from("product-images")
     .getPublicUrl(fileName);
@@ -231,8 +218,6 @@ export async function uploadProductImage(file: File): Promise<string> {
 // ============================================================
 export async function deleteProductImage(imageUrl: string): Promise<void> {
   try {
-    // Extraer path del URL público
-    // URL formato: https://xxx.supabase.co/storage/v1/object/public/product-images/catalog/xxx.jpg
     const parts = imageUrl.split("/product-images/");
     if (parts.length < 2) return;
 

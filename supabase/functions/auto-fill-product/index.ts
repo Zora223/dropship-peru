@@ -1,5 +1,5 @@
 // supabase/functions/auto-fill-product/index.ts
-// 🪄 Auto-Fill AI - v7 con Qwen + Prompts VENDEDORES
+// 🪄 Auto-Fill AI - v8 con Qwen + Suppliers ilimitado
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -11,9 +11,6 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// ========================================
-// 💰 CRÉDITOS POR TIPO DE OPERACIÓN
-// ========================================
 const CREDITS_COST: Record<string, number> = {
   all: 5,
   name: 1,
@@ -22,9 +19,6 @@ const CREDITS_COST: Record<string, number> = {
   price: 2,
 };
 
-// ========================================
-// 📋 CATEGORÍAS PREDEFINIDAS
-// ========================================
 const CATEGORIES = [
   "Ropa",
   "Calzado",
@@ -46,9 +40,6 @@ const CATEGORIES = [
   "Otros",
 ];
 
-// ========================================
-// 🧠 PROMPT ENGINEERING - VENDEDOR + EMOCIONAL
-// ========================================
 function buildPrompt(field: string): string {
   const basePrompt = `Eres un COPYWRITER EXPERTO en e-commerce peruano especializado en VENDER a través de las emociones.
 
@@ -209,9 +200,6 @@ Considera:
   return basePrompt;
 }
 
-// ========================================
-// 🧹 LIMPIAR RESPUESTA JSON
-// ========================================
 function cleanJsonResponse(text: string): string {
   let cleaned = text
     .replace(/```json\s*/gi, "")
@@ -228,9 +216,6 @@ function cleanJsonResponse(text: string): string {
   return cleaned;
 }
 
-// ========================================
-// 🎯 HANDLER PRINCIPAL
-// ========================================
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -310,49 +295,75 @@ serve(async (req: Request) => {
     console.log(`🪄 Auto-Fill: field=${field}, cost=${creditsCost}, user=${user.email}`);
 
     // ========================================
-    // 💳 VERIFICAR CRÉDITOS
+    // 🆕 v22.13 - DETECTAR SI ES SUPPLIER
+    // Los suppliers tienen Auto-Fill AI ilimitado (sin créditos)
     // ========================================
-    const { data: subscription, error: subError } = await supabase
-      .from("ai_subscriptions")
-      .select("*")
-      .eq("vendor_id", user.id)
-      .maybeSingle();
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
 
-    if (subError) {
-      console.error("Error subscription:", subError);
-      return new Response(
-        JSON.stringify({ error: "Error al verificar suscripción" }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+    if (profileError) {
+      console.warn("⚠️ Error al obtener rol:", profileError);
     }
 
-    if (!subscription) {
-      return new Response(
-        JSON.stringify({
-          error: "No tienes suscripción AI activa.",
-        }),
-        {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
+    const isSupplier = profile?.role === "supplier";
+    console.log(`👤 Role: ${profile?.role} | isSupplier: ${isSupplier}`);
 
-    const isUnlimited = subscription.plan === "business";
-    if (!isUnlimited && subscription.credits_remaining < creditsCost) {
-      return new Response(
-        JSON.stringify({
-          error: `Créditos insuficientes. Necesitas ${creditsCost} y tienes ${subscription.credits_remaining}`,
-          credits_remaining: subscription.credits_remaining,
-        }),
-        {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+    let subscription: any = null;
+    let isUnlimited = false;
+
+    // ========================================
+    // 💳 VERIFICAR CRÉDITOS (SOLO SI NO ES SUPPLIER)
+    // ========================================
+    if (!isSupplier) {
+      const { data: sub, error: subError } = await supabase
+        .from("ai_subscriptions")
+        .select("*")
+        .eq("vendor_id", user.id)
+        .maybeSingle();
+
+      if (subError) {
+        console.error("Error subscription:", subError);
+        return new Response(
+          JSON.stringify({ error: "Error al verificar suscripción" }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      if (!sub) {
+        return new Response(
+          JSON.stringify({
+            error: "No tienes suscripción AI activa.",
+          }),
+          {
+            status: 402,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      subscription = sub;
+      isUnlimited = subscription.plan === "business";
+
+      if (!isUnlimited && subscription.credits_remaining < creditsCost) {
+        return new Response(
+          JSON.stringify({
+            error: `Créditos insuficientes. Necesitas ${creditsCost} y tienes ${subscription.credits_remaining}`,
+            credits_remaining: subscription.credits_remaining,
+          }),
+          {
+            status: 402,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+    } else {
+      console.log(`🏭 Supplier detectado - AI ilimitado, no descontar créditos`);
     }
 
     console.log(`📸 Imagen URL: ${image_url}`);
@@ -372,7 +383,6 @@ serve(async (req: Request) => {
           Authorization: `Bearer ${groqApiKey}`,
         },
         body: JSON.stringify({
-          // 🔥 MODELO ACTUAL: Qwen 3.6 27B (con Vision)
           model: "qwen/qwen3.6-27b",
           messages: [
             {
@@ -391,7 +401,7 @@ serve(async (req: Request) => {
               ],
             },
           ],
-          temperature: 0.7, // 🔥 Más creativo para copywriting
+          temperature: 0.7,
           max_tokens: 2048,
           response_format: { type: "json_object" },
         }),
@@ -418,7 +428,6 @@ serve(async (req: Request) => {
     const rawText = groqData?.choices?.[0]?.message?.content || "{}";
     console.log(`📝 Respuesta Groq (${rawText.length} chars): ${rawText.substring(0, 200)}...`);
 
-    // Parsear JSON limpio
     let parsedData: any;
     try {
       const cleaned = cleanJsonResponse(rawText);
@@ -442,19 +451,15 @@ serve(async (req: Request) => {
     // ========================================
     // ✅ VALIDAR Y NORMALIZAR RESPUESTA
     // ========================================
-
-    // 1. Categoría válida
     if (parsedData.category && !CATEGORIES.includes(parsedData.category)) {
       console.warn(`⚠️ Categoría inválida: ${parsedData.category}, usando 'Otros'`);
       parsedData.category = "Otros";
     }
 
-    // 2. FORZAR "Sin marca" (no importa lo que diga la AI)
     if (parsedData.brand_suggested !== undefined) {
       parsedData.brand_suggested = "Sin marca";
     }
 
-    // 3. Precios como números
     if (parsedData.price_min !== undefined) {
       parsedData.price_min = Number(parsedData.price_min);
     }
@@ -465,20 +470,20 @@ serve(async (req: Request) => {
       parsedData.price_suggested = Number(parsedData.price_suggested);
     }
 
-    // 4. Colors_detected como array
     if (parsedData.colors_detected && !Array.isArray(parsedData.colors_detected)) {
       parsedData.colors_detected = [];
     }
 
-    // 5. LIMPIAR el nombre de tallas/materiales que se hayan colado
     if (parsedData.name) {
       parsedData.name = cleanNameFromTechnicalTerms(parsedData.name);
     }
 
     // ========================================
-    // 💳 DESCONTAR CRÉDITOS
+    // 💳 DESCONTAR CRÉDITOS (SOLO SI NO ES SUPPLIER)
     // ========================================
-    if (!isUnlimited) {
+    let finalCredits: number = -1;
+
+    if (!isSupplier && subscription && !isUnlimited) {
       const newCredits = subscription.credits_remaining - creditsCost;
       const newUsed = (subscription.total_used || 0) + creditsCost;
 
@@ -496,14 +501,13 @@ serve(async (req: Request) => {
       } else {
         console.log(`💳 Créditos: ${subscription.credits_remaining} → ${newCredits}`);
       }
-    }
 
-    // ========================================
-    // ✨ RESPUESTA EXITOSA
-    // ========================================
-    const finalCredits = isUnlimited
-      ? -1
-      : subscription.credits_remaining - creditsCost;
+      finalCredits = newCredits;
+    } else if (!isSupplier && subscription && isUnlimited) {
+      finalCredits = -1;
+    } else if (isSupplier) {
+      finalCredits = 9999; // Suppliers muestran "ilimitado"
+    }
 
     console.log(`✅ Auto-Fill completado para ${user.email}`);
 
@@ -511,9 +515,10 @@ serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         data: parsedData,
-        credits_used: creditsCost,
+        credits_used: isSupplier ? 0 : creditsCost,
         credits_remaining: finalCredits,
         field: field,
+        is_supplier: isSupplier, // 🆕 Info para el frontend
       }),
       {
         status: 200,
@@ -535,24 +540,16 @@ serve(async (req: Request) => {
   }
 });
 
-// ========================================
-// 🧹 LIMPIAR TÉRMINOS TÉCNICOS DEL NOMBRE
-// ========================================
 function cleanNameFromTechnicalTerms(name: string): string {
   const patternsToRemove = [
-    // Tallas
     /\s+talla\s+[SMLXL0-9]+/gi,
     /\s+talle\s+[SMLXL0-9]+/gi,
     /\s+size\s+[SMLXL0-9]+/gi,
     /\s+[SMLXL]{1,3}\s*$/gi,
     /\s+\d{2}(cm|mm|in|"|kg|g|ml|l)\b/gi,
-    
-    // Materiales técnicos
     /\s+100%\s+\w+/gi,
     /\s+algodón\s+peinado/gi,
     /\s+acero\s+inoxidable/gi,
-    
-    // Marcas comunes (por si se cuelan)
     /\s+(Nike|Adidas|Puma|Reebok|Under Armour|Casio|Rolex|Apple|Samsung|Sony|LG|Xiaomi)\s*/gi,
   ];
 
@@ -561,7 +558,6 @@ function cleanNameFromTechnicalTerms(name: string): string {
     cleaned = cleaned.replace(pattern, " ");
   });
 
-  // Limpiar espacios múltiples
   cleaned = cleaned.replace(/\s+/g, " ").trim();
 
   return cleaned;

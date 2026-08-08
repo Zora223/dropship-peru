@@ -1,7 +1,8 @@
 // ============================================================
-// PRODUCT FORM MODAL (Supplier) - v22.6
-// 🆕 Límites ampliados: 15 fotos / 10MB
-// 🆕 Fix bug: input file resetea correctamente al eliminar
+// PRODUCT FORM MODAL (Supplier) - v22.13
+// 🆕 Auto-Fill AI (gratis para suppliers)
+// 🆕 Selector de colores disponibles
+// 🆕 Límites: 15 fotos / 10MB
 // ============================================================
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -20,6 +21,8 @@ import {
   suggestSupplierSku,
   type SupplierQualityIssue,
 } from "../../lib/supplier-product-quality";
+import { autoFillProduct, type AutoFillData } from "../../lib/auto-fill-ai";
+import ColorPicker from "../shared/ColorPicker";
 
 interface ProductFormModalProps {
   supplierId: string;
@@ -29,7 +32,6 @@ interface ProductFormModalProps {
   onSaved: () => void;
 }
 
-// 🆕 v22.6 — Límites ampliados
 const MAX_IMAGES = 15;
 const MAX_IMAGE_MB = 10;
 const MIN_IMAGE_DIMENSION = 400;
@@ -43,8 +45,19 @@ const EMPTY_FORM: ProductFormData = {
   sku: "",
   category: "",
   images: [],
+  colors: [], // 🆕 v22.13
   is_active: true,
 };
+
+// 🆕 Etapas del Auto-Fill
+const AI_STAGES = [
+  { pct: 15, icon: "📸", label: "Analizando tu foto..." },
+  { pct: 35, icon: "🧠", label: "Detectando qué es el producto..." },
+  { pct: 55, icon: "✍️", label: "Generando nombre profesional..." },
+  { pct: 75, icon: "📝", label: "Escribiendo descripción..." },
+  { pct: 90, icon: "💰", label: "Calculando precio sugerido..." },
+  { pct: 100, icon: "✨", label: "¡Listo!" },
+];
 
 export default function ProductFormModal({
   supplierId,
@@ -62,6 +75,12 @@ export default function ProductFormModal({
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 🆕 Estados Auto-Fill AI
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiProgress, setAiProgress] = useState(0);
+  const [aiStage, setAiStage] = useState(0);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   useEffect(() => {
     if (product) {
       setForm({
@@ -73,6 +92,7 @@ export default function ProductFormModal({
         sku: product.sku,
         category: product.category,
         images: product.images ?? [],
+        colors: product.colors ?? [], // 🆕
         is_active: product.is_active,
       });
       const isPreset = SUPPLIER_CATEGORIES.some(
@@ -86,6 +106,7 @@ export default function ProductFormModal({
       setCustomCategory(false);
     }
     setAttemptedSubmit(false);
+    setAiError(null);
   }, [product, isOpen]);
 
   // ========== SCORE ==========
@@ -128,6 +149,83 @@ export default function ProductFormModal({
     }
     setForm((prev) => ({ ...prev, sku: suggestSupplierSku(prev.name) }));
     toast.success("SKU generado", "Puedes editarlo si quieres");
+  };
+
+  // 🆕 AUTO-FILL AI HANDLER
+  const handleAutoFillAI = async () => {
+    if (form.images.length === 0) {
+      toast.warning(
+        "Sin fotos",
+        "Sube al menos una foto para usar Auto-Fill AI"
+      );
+      return;
+    }
+
+    setAiLoading(true);
+    setAiProgress(0);
+    setAiStage(0);
+    setAiError(null);
+
+    // Simular progreso
+    const interval = setInterval(() => {
+      setAiStage((prev) => {
+        if (prev >= AI_STAGES.length - 2) return prev;
+        const next = prev + 1;
+        setAiProgress(AI_STAGES[next].pct);
+        return next;
+      });
+    }, 2500);
+
+    try {
+      const response = await autoFillProduct(form.images[0], "all");
+      const data: AutoFillData = response.data;
+
+      clearInterval(interval);
+      setAiProgress(100);
+      setAiStage(AI_STAGES.length - 1);
+
+      // Aplicar datos al form
+      setForm((prev) => ({
+        ...prev,
+        name: data.name || prev.name,
+        description: data.description || prev.description,
+        category: data.category || prev.category,
+        // Precios (base y sugerido)
+        base_price: data.price_min ?? prev.base_price,
+        suggested_price: data.price_suggested ?? prev.suggested_price,
+        // 🎨 Colores detectados por AI → agregar a los ya seleccionados
+        colors: data.colors_detected && data.colors_detected.length > 0
+          ? Array.from(new Set([...prev.colors, ...data.colors_detected]))
+          : prev.colors,
+      }));
+
+      // Si la categoría no es preset, activar custom
+      if (data.category) {
+        const isPreset = SUPPLIER_CATEGORIES.some(
+          (c) => c.value === data.category || c.label === data.category
+        );
+        setCustomCategory(!isPreset);
+      }
+
+      toast.success(
+        "🪄 ¡AI completó el formulario!",
+        "Revisa los campos y ajusta si es necesario"
+      );
+
+      setTimeout(() => {
+        setAiLoading(false);
+        setAiProgress(0);
+        setAiStage(0);
+      }, 800);
+    } catch (err) {
+      clearInterval(interval);
+      const msg = err instanceof Error ? err.message : "Error inesperado";
+      setAiError(msg);
+      setAiLoading(false);
+      setAiProgress(0);
+      setAiStage(0);
+      toast.error("Error Auto-Fill AI", msg);
+    }
   };
 
   const validateImage = (
@@ -177,7 +275,6 @@ export default function ProductFormModal({
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const files = e.target.files;
-    // 🆕 FIX: Resetear input INMEDIATAMENTE para permitir re-selección del mismo archivo
     const inputEl = e.target;
 
     if (!files || files.length === 0) {
@@ -262,12 +359,10 @@ export default function ProductFormModal({
       images: prev.images.filter((img) => img !== url),
     }));
 
-    // 🆕 FIX: Resetear input file al eliminar
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
 
-    // Borrar del storage en background
     try {
       await deleteProductImage(url);
     } catch (err) {
@@ -416,6 +511,124 @@ export default function ProductFormModal({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5 p-6">
+          {/* 🆕 AUTO-FILL AI HERO */}
+          {form.images.length === 0 ? (
+            <div className="rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 p-5 text-center">
+              <div className="text-3xl opacity-40">🪄</div>
+              <p className="mt-2 text-sm font-semibold text-gray-500">
+                Sube una foto para activar Auto-Fill AI
+              </p>
+              <p className="mt-1 text-xs text-gray-400">
+                La AI analizará tu imagen y rellenará todo automáticamente (GRATIS para ti)
+              </p>
+            </div>
+          ) : aiLoading ? (
+            <div className="rounded-2xl bg-linear-to-br from-purple-600 via-pink-600 to-orange-500 p-5 text-white shadow-lg">
+              <div className="flex items-center gap-3">
+                <div className="text-4xl animate-bounce">
+                  {AI_STAGES[aiStage].icon}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-bold uppercase tracking-wider opacity-90">
+                    🪄 Auto-Fill AI trabajando...
+                  </div>
+                  <div className="text-sm font-bold truncate">
+                    {AI_STAGES[aiStage].label}
+                  </div>
+                </div>
+                <div className="text-2xl font-black">{aiProgress}%</div>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/20">
+                <div
+                  className="h-full bg-white transition-all duration-500 ease-out"
+                  style={{ width: `${aiProgress}%` }}
+                />
+              </div>
+              <p className="mt-2 text-xs opacity-90 text-center">
+                ⏱️ Esto toma entre 10 y 20 segundos
+              </p>
+            </div>
+          ) : aiError ? (
+            <div className="rounded-2xl border-2 border-red-200 bg-red-50 p-5">
+              <div className="flex items-start gap-3">
+                <div className="text-3xl">😔</div>
+                <div className="flex-1">
+                  <div className="text-sm font-bold text-red-900">
+                    Error al procesar imagen
+                  </div>
+                  <p className="mt-1 text-xs text-red-700">{aiError}</p>
+                  <button
+                    type="button"
+                    onClick={handleAutoFillAI}
+                    className="mt-3 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700"
+                  >
+                    🔄 Intentar de nuevo
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl bg-linear-to-br from-purple-600 via-pink-600 to-orange-500 p-5 text-white shadow-lg relative overflow-hidden">
+              <div className="absolute -top-8 -right-8 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
+              <div className="absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
+
+              <div className="relative">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <div className="text-3xl">🪄</div>
+                    <div>
+                      <div className="text-xs font-black uppercase tracking-wider opacity-90">
+                        Auto-Fill AI
+                      </div>
+                      <div className="text-base font-black">
+                        ¿Quieres que la AI llene todo?
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-full bg-white/20 px-3 py-1 backdrop-blur">
+                    <div className="text-[10px] font-bold uppercase opacity-90">
+                      Costo
+                    </div>
+                    <div className="text-sm font-black">♾️ GRATIS</div>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-1.5 text-xs">
+                  <div className="flex items-center gap-1">
+                    <span>✍️</span>
+                    <span>Nombre pro</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span>📝</span>
+                    <span>Descripción</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span>🏷️</span>
+                    <span>Categoría</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span>💰</span>
+                    <span>Precio + colores</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAutoFillAI}
+                  disabled={saving || uploading}
+                  className="mt-4 w-full rounded-xl bg-white py-3 text-sm font-black text-purple-700 shadow-lg hover:shadow-xl active:scale-95 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  🪄 RELLENAR TODO CON AI
+                </button>
+
+                <div className="mt-2 text-center text-[10px] opacity-90">
+                  ♾️ Ilimitado para proveedores
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* PANEL DE CALIDAD */}
           <div
             id="supplier-quality-panel"
@@ -689,7 +902,7 @@ export default function ProductFormModal({
               }
               rows={5}
               maxLength={2000}
-              placeholder="Ej: Zapatos de seguridad Caterpillar con puntera de acero certificada ASTM F2413-18. Suela antideslizante de goma vulcanizada resistente a hidrocarburos. Interior acolchado transpirable. Ideal para construcción, minería, industria. Tallas 38-46 disponibles."
+              placeholder="Ej: Zapatos de seguridad Caterpillar con puntera de acero certificada ASTM F2413-18..."
               className={`mt-1.5 w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:bg-white ${
                 getFieldError("description")
                   ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
@@ -781,6 +994,26 @@ export default function ProductFormModal({
                 </div>
               )}
             </div>
+          </div>
+
+          {/* 🆕 COLORES DISPONIBLES */}
+          <div className="rounded-2xl border border-gray-200 bg-white p-4">
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-semibold text-gray-700">
+                🎨 Colores disponibles
+              </label>
+              <span className="text-xs text-gray-400">
+                (opcional · {form.colors.length} seleccionados)
+              </span>
+            </div>
+            <p className="mb-3 text-xs text-gray-500">
+              💡 Indica qué colores tienes en stock. Los vendors verán estas opciones al importar.
+            </p>
+            <ColorPicker
+              selected={form.colors}
+              onChange={(colors) => setForm({ ...form, colors })}
+              disabled={saving || uploading}
+            />
           </div>
 
           {/* PRECIOS */}

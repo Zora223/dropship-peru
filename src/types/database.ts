@@ -37,6 +37,7 @@ export interface DbCatalogProduct {
   sku: string;
   category: string;
   images: string[];
+   colors: string[]; // 🆕 v22.13
   is_active: boolean;
   deleted_at?: string | null;
   created_at: string;
