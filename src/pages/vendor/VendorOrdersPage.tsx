@@ -1,5 +1,5 @@
 // src/pages/vendor/VendorOrdersPage.tsx
-// 🆕 v20 - Soporte pickup + pickup_confirmation_code (nombre BD real)
+// 🆕 v22.13 - Foto del producto + nombre visible en modal
 
 import { useEffect, useMemo, useState } from "react";
 import { useMyStore } from "../../hooks/useMyStore";
@@ -7,6 +7,7 @@ import {
   fetchVendorOrders,
   updateVendorOrderStatus,
 } from "../../lib/vendor-orders";
+import { supabase } from "../../lib/supabase";
 import type {
   DbOrder,
   DbOrderItem,
@@ -93,7 +94,6 @@ function formatShortDate(value: string) {
   }).format(new Date(value));
 }
 
-// 🆕 v20 - Acepta null
 function formatAddress(address: DbShippingAddress | null): string {
   if (!address) return "🏪 Recojo en tienda";
   const parts = [address.street, address.district, address.city].filter(Boolean);
@@ -136,6 +136,55 @@ function getCustomerWhatsappUrl(order: DbOrder): string {
   ].join("\n");
 
   return `https://wa.me/${normalized}?text=${encodeURIComponent(message)}`;
+}
+
+// 🆕 v22.13 - Hidrata imágenes desde products/catalog_products
+async function hydrateOrderImages(order: DbOrder): Promise<DbOrder> {
+  if (!order.items || order.items.length === 0) return order;
+
+  const productIds = order.items.map((it) => it.product_id).filter(Boolean);
+  if (productIds.length === 0) return order;
+
+  try {
+    // 1) Buscar imágenes en products (propios del vendor)
+    const { data: products } = await supabase
+      .from("products")
+      .select("id, images")
+      .in("id", productIds);
+
+    const imageMap = new Map<string, string>();
+    (products ?? []).forEach((p: any) => {
+      if (p.images && Array.isArray(p.images) && p.images.length > 0) {
+        imageMap.set(p.id, p.images[0]);
+      }
+    });
+
+    // 2) Si algún producto es de catálogo y no tiene img, buscar en catalog_products
+    const missingIds = productIds.filter((id) => !imageMap.has(id));
+    if (missingIds.length > 0) {
+      const { data: catalogProds } = await supabase
+        .from("catalog_products")
+        .select("id, images")
+        .in("id", missingIds);
+
+      (catalogProds ?? []).forEach((cp: any) => {
+        if (cp.images && Array.isArray(cp.images) && cp.images.length > 0) {
+          imageMap.set(cp.id, cp.images[0]);
+        }
+      });
+    }
+
+    // 3) Mezclar imágenes en items
+    const hydratedItems = order.items.map((it) => ({
+      ...it,
+      product_image: imageMap.get(it.product_id) ?? null,
+    }));
+
+    return { ...order, items: hydratedItems };
+  } catch (err) {
+    console.warn("No se pudieron hidratar imágenes:", err);
+    return order;
+  }
 }
 
 function DeliveryStatusBadge({ order }: { order: DbOrder }) {
@@ -217,9 +266,13 @@ export default function VendorOrdersPage() {
     };
   }, [orders]);
 
-  function openOrder(order: DbOrder) {
+  // 🆕 v22.13 - Al abrir orden, hidrata imágenes
+  async function openOrder(order: DbOrder) {
     setSelectedOrder(order);
     setTrackingInput(order.tracking_number ?? "");
+
+    const hydrated = await hydrateOrderImages(order);
+    setSelectedOrder(hydrated);
   }
 
   function openAssignModal(order: DbOrder, event: React.MouseEvent) {
@@ -252,7 +305,9 @@ export default function VendorOrdersPage() {
       setOrders((prev) =>
         prev.map((item) => (item.id === updatedOrder.id ? updatedOrder : item))
       );
-      setSelectedOrder(updatedOrder);
+      // 🆕 Mantener imágenes hidratadas
+      const hydrated = await hydrateOrderImages(updatedOrder);
+      setSelectedOrder(hydrated);
       setTrackingInput(updatedOrder.tracking_number ?? "");
     } catch (err) {
       console.error(err);
@@ -400,7 +455,8 @@ export default function VendorOrdersPage() {
           ))}
         </div>
       </div>
-            {/* VISTA DESKTOP */}
+
+      {/* VISTA DESKTOP */}
       <div className="hidden overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm lg:block">
         <div className="overflow-x-auto">
           <table className="w-full min-w-212.5 text-left text-sm">
@@ -760,18 +816,39 @@ export default function VendorOrdersPage() {
                 )}
               </div>
 
-              {/* Productos */}
+              {/* Productos 🆕 v22.13 - con foto + nombre visible */}
               <div className="rounded-2xl bg-gray-50 p-4">
                 <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">Productos</div>
                 <div className="mt-3 space-y-2">
                   {selectedOrder.items?.map((item: DbOrderItem, index) => (
                     <div
                       key={`${item.product_id}-${index}`}
-                      className="flex items-center justify-between gap-3 rounded-xl bg-white p-3"
+                      className="flex items-center gap-3 rounded-xl bg-white p-3"
                     >
+                      {/* 🆕 Foto del producto */}
+                      <div className="shrink-0">
+                        {item.product_image ? (
+                          <img
+                            src={item.product_image}
+                            alt={item.product_name}
+                            className="h-16 w-16 rounded-lg object-cover border border-gray-200"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.display = "none";
+                            }}
+                          />
+                        ) : (
+                          <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-gray-100 text-2xl">
+                            📦
+                          </div>
+                        )}
+                      </div>
+
                       <div className="min-w-0 flex-1">
-                        <div className="truncate font-medium text-gray-900">{item.product_name}</div>
-                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                        {/* 🆕 Nombre más visible */}
+                        <div className="font-bold text-gray-900 text-sm leading-snug line-clamp-2">
+                          {item.product_name}
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-2">
                           <span
                             className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                               item.source === "catalog"

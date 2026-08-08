@@ -106,6 +106,8 @@ export interface DbOrderItem {
   unit_price: number;
   quantity: number;
   subtotal: number;
+  // 🆕 v22.13 - Imagen opcional (se hidrata desde products/catalog_products)
+  product_image?: string | null;
 }
 
 export interface DbShippingAddress {
