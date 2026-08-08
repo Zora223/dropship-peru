@@ -1,5 +1,9 @@
+// src/components/vendor/CatalogProductPreviewModal.tsx
+// 🆕 v22.13 - Muestra colores disponibles del catálogo
+
 import { useState } from "react";
 import type { CatalogProductWithSupplier } from "../../lib/catalog";
+import { normalizeColorsArray } from "../../lib/color-utils";
 
 interface Props {
   product: CatalogProductWithSupplier | null;
@@ -31,6 +35,7 @@ export default function CatalogProductPreviewModal({
   if (!product) return null;
 
   const images = normalizeImages(product.images);
+  const colors = normalizeColorsArray((product as any).colors); // 🆕
   const base = Number(product.base_price);
   const suggested = Number(product.suggested_price);
   const margin = base > 0 ? (((suggested - base) / base) * 100).toFixed(0) : "0";
@@ -71,25 +76,18 @@ export default function CatalogProductPreviewModal({
           </div>
 
           <div className="grid gap-6 p-6 md:grid-cols-2">
-            {/* Columna IZQUIERDA - Galería */}
+            {/* Galería */}
             <div className="space-y-3">
               <div
                 onClick={() => currentImage && setShowFullscreenImage(true)}
                 className="group relative aspect-square cursor-zoom-in overflow-hidden rounded-2xl bg-linear-to-br from-gray-100 to-gray-200"
               >
                 {currentImage ? (
-                  <>
-                    <img
-                      src={currentImage}
-                      alt={product.name}
-                      className="h-full w-full object-cover transition group-hover:scale-105"
-                    />
-                    <div className="absolute right-3 top-3 rounded-full bg-black/60 p-2 opacity-0 backdrop-blur transition group-hover:opacity-100">
-                      <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
-                      </svg>
-                    </div>
-                  </>
+                  <img
+                    src={currentImage}
+                    alt={product.name}
+                    className="h-full w-full object-cover transition group-hover:scale-105"
+                  />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-6xl text-gray-300">
                     📦
@@ -120,15 +118,9 @@ export default function CatalogProductPreviewModal({
                   ))}
                 </div>
               )}
-
-              {images.length > 0 && (
-                <p className="text-center text-xs text-gray-400">
-                  {images.length} {images.length === 1 ? "imagen" : "imágenes"} · Click para ampliar
-                </p>
-              )}
             </div>
 
-            {/* Columna DERECHA - Info */}
+            {/* Info */}
             <div className="space-y-4">
               {product.category && (
                 <span className="inline-block rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
@@ -150,6 +142,32 @@ export default function CatalogProductPreviewModal({
                   </p>
                 )}
               </div>
+
+              {/* 🎨 COLORES DISPONIBLES */}
+              {colors.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                    🎨 Colores disponibles ({colors.length})
+                  </h3>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {colors.map((color) => (
+                      <span
+                        key={color.name}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-white border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-800 shadow-sm"
+                      >
+                        <span
+                          className="h-3.5 w-3.5 rounded-full border border-gray-300"
+                          style={{ backgroundColor: color.hex }}
+                        />
+                        {color.name}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="mt-1.5 text-[11px] text-gray-500">
+                    💡 Estos colores se mostrarán a tus clientes al comprar
+                  </p>
+                </div>
+              )}
 
               <div className="flex items-center gap-2 text-xs text-gray-500">
                 <span className="rounded bg-gray-100 px-2 py-0.5 font-mono">
@@ -236,10 +254,6 @@ export default function CatalogProductPreviewModal({
                     </div>
                   </div>
                 </div>
-
-                <p className="text-[11px] text-gray-500">
-                  💡 Puedes cambiar el precio de venta al importar y también después.
-                </p>
               </div>
 
               <div className="flex items-center justify-between rounded-2xl bg-blue-50 p-3">
@@ -299,7 +313,6 @@ export default function CatalogProductPreviewModal({
           <button
             onClick={() => setShowFullscreenImage(false)}
             className="absolute right-4 top-4 rounded-full bg-white/10 p-3 text-white backdrop-blur transition hover:bg-white/20"
-            aria-label="Cerrar"
           >
             <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -312,25 +325,6 @@ export default function CatalogProductPreviewModal({
             className="max-h-[90vh] max-w-full object-contain"
             onClick={(e) => e.stopPropagation()}
           />
-
-          {images.length > 1 && (
-            <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 gap-2 rounded-full bg-black/60 px-4 py-2 backdrop-blur">
-              {images.map((_, idx) => (
-                <button
-                  key={idx}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedImageIndex(idx);
-                  }}
-                  className={`h-2 rounded-full transition-all ${
-                    selectedImageIndex === idx
-                      ? "w-6 bg-white"
-                      : "w-2 bg-white/50 hover:bg-white/80"
-                  }`}
-                />
-              ))}
-            </div>
-          )}
         </div>
       )}
     </>

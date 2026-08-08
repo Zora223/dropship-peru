@@ -1,3 +1,6 @@
+// src/pages/vendor/VendorCatalogPage.tsx
+// 🆕 v22.13 - Muestra colores en cards + pasa colores al importar
+
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMyStore } from "../../hooks/useMyStore";
@@ -18,6 +21,40 @@ function normalizeImages(images: unknown): string[] {
 
 function formatCurrency(value: number) {
   return `S/ ${Number(value || 0).toFixed(2)}`;
+}
+
+// 🎨 v22.13 - Mapa de colores para mini-badges
+const COLOR_HEX_MAP: Record<string, string> = {
+  negro: "#000000",
+  blanco: "#FFFFFF",
+  gris: "#9CA3AF",
+  plomo: "#6B7280",
+  rojo: "#EF4444",
+  azul: "#3B82F6",
+  celeste: "#7DD3FC",
+  verde: "#22C55E",
+  amarillo: "#EAB308",
+  naranja: "#F97316",
+  morado: "#A855F7",
+  violeta: "#8B5CF6",
+  rosa: "#EC4899",
+  fucsia: "#D946EF",
+  marrón: "#78350F",
+  marron: "#78350F",
+  beige: "#F5E6D3",
+  crema: "#FEF3C7",
+  dorado: "#D4AF37",
+  plateado: "#C0C0C0",
+  turquesa: "#14B8A6",
+  vino: "#7F1D1D",
+  mostaza: "#CA8A04",
+  coral: "#FB7185",
+  lila: "#C4B5FD",
+  menta: "#86EFAC",
+};
+
+function getColorHex(name: string): string {
+  return COLOR_HEX_MAP[name.toLowerCase().trim()] ?? "#6B7280";
 }
 
 export default function VendorCatalogPage() {
@@ -126,6 +163,7 @@ export default function VendorCatalogPage() {
         sku: importModal.sku,
         category: importModal.category,
         images: importModal.images,
+        colors: (importModal as any).colors ?? [], // 🆕 v22.13
       });
 
       setImportedIds((prev) => new Set(prev).add(importModal.id));
@@ -302,6 +340,11 @@ export default function VendorCatalogPage() {
             const margin = base > 0 ? (((suggested - base) / base) * 100).toFixed(0) : "0";
             const marginAbs = suggested - base;
 
+            // 🆕 v22.13 - Colores del producto
+            const productColors: string[] = Array.isArray((product as any).colors)
+              ? (product as any).colors
+              : [];
+
             const stockConfig =
               product.stock === 0
                 ? { bg: "bg-red-500", text: "text-white", label: "Agotado" }
@@ -364,6 +407,28 @@ export default function VendorCatalogPage() {
                     <p className="mt-1 line-clamp-2 text-[11px] text-gray-500">
                       {product.description}
                     </p>
+                  )}
+
+                  {/* 🎨 v22.13 - Mini-badges de colores disponibles */}
+                  {productColors.length > 0 && (
+                    <div className="mt-2 flex items-center gap-1.5">
+                      <span className="text-[10px] font-semibold text-gray-500">🎨</span>
+                      <div className="flex items-center gap-1">
+                        {productColors.slice(0, 6).map((colorName) => (
+                          <span
+                            key={colorName}
+                            title={colorName}
+                            className="h-3.5 w-3.5 rounded-full border border-gray-300 shadow-sm"
+                            style={{ backgroundColor: getColorHex(colorName) }}
+                          />
+                        ))}
+                        {productColors.length > 6 && (
+                          <span className="text-[10px] font-semibold text-gray-500">
+                            +{productColors.length - 6}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   )}
 
                   {product.supplier && (
@@ -498,6 +563,29 @@ export default function VendorCatalogPage() {
               }
               return null;
             })()}
+
+            {/* 🎨 v22.13 - Colores en el modal de importación */}
+            {Array.isArray((importModal as any).colors) && (importModal as any).colors.length > 0 && (
+              <div className="mt-4 rounded-2xl bg-gray-50 p-3">
+                <div className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
+                  🎨 Colores disponibles ({((importModal as any).colors as string[]).length})
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {((importModal as any).colors as string[]).map((colorName) => (
+                    <span
+                      key={colorName}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-white border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-800 shadow-sm"
+                    >
+                      <span
+                        className="h-3 w-3 rounded-full border border-gray-300"
+                        style={{ backgroundColor: getColorHex(colorName) }}
+                      />
+                      {colorName}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {importModal.supplier && (
               <div className="mt-4 flex items-center gap-3 rounded-2xl bg-amber-50 p-3">

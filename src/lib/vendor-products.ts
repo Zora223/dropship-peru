@@ -1,4 +1,6 @@
 // src/lib/vendor-products.ts
+// 🆕 v22.13 - Soporte colores unificado (text[])
+
 import { supabase } from "./supabase";
 import { uploadMultipleFiles, deleteFileByUrl } from "./storage";
 import type { DbProduct, ProductSource } from "../types/database";
@@ -6,20 +8,21 @@ import type { DbProduct, ProductSource } from "../types/database";
 export interface VendorProductWithRealStock extends DbProduct {
   real_stock: number;
   catalog_inactive: boolean;
-  base_price?: number; // 🆕 v20.8 - Precio base del catálogo (para calcular margen)
-  suggested_price?: number; // 🆕 v20.8 - Precio sugerido del catálogo
+  base_price?: number;
+  suggested_price?: number;
+  colors?: string[]; // 🆕 v22.13
 }
 
 /**
  * Lista TODOS los productos de la tienda del vendor.
- * 🆕 v20.8 - Ahora trae base_price y suggested_price del catálogo
+ * 🆕 v22.13 - Trae colores del catálogo también
  */
 export async function fetchMyProducts(storeId: string): Promise<VendorProductWithRealStock[]> {
   const { data, error } = await supabase
     .from("products")
     .select(`
       *,
-      catalog:catalog_products!products_catalog_product_id_fkey(stock, is_active, base_price, suggested_price)
+      catalog:catalog_products!products_catalog_product_id_fkey(stock, is_active, base_price, suggested_price, colors)
     `)
     .eq("store_id", storeId)
     .order("created_at", { ascending: false });
@@ -34,11 +37,17 @@ export async function fetchMyProducts(storeId: string): Promise<VendorProductWit
         is_active: boolean;
         base_price: number;
         suggested_price: number;
+        colors: string[] | null;
       } | null;
     }).catalog;
 
     const real_stock = p.source === "catalog" && catalog ? catalog.stock : p.stock;
     const catalog_inactive = p.source === "catalog" && catalog ? !catalog.is_active : false;
+
+    // 🆕 Si es catálogo, priorizar colores del catálogo (fuente única)
+    const colors = p.source === "catalog" && catalog?.colors
+      ? catalog.colors
+      : ((p as any).colors ?? []);
 
     return {
       ...(p as DbProduct),
@@ -46,12 +55,14 @@ export async function fetchMyProducts(storeId: string): Promise<VendorProductWit
       catalog_inactive,
       base_price: catalog?.base_price,
       suggested_price: catalog?.suggested_price,
+      colors,
     } as VendorProductWithRealStock;
   });
 }
 
 /**
  * Importa un producto del catálogo a la tienda del vendor.
+ * 🆕 v22.13 - Copia los colores del catálogo
  */
 export interface ImportCatalogProductInput {
   storeId: string;
@@ -63,6 +74,7 @@ export interface ImportCatalogProductInput {
   sku: string | null;
   category: string | null;
   images: string[];
+  colors?: string[]; // 🆕 v22.13
 }
 
 export async function importCatalogProduct(
@@ -82,6 +94,7 @@ export async function importCatalogProduct(
       sku: input.sku,
       category: input.category,
       images: input.images,
+      colors: input.colors ?? [], // 🆕 v22.13
       is_active: true,
     })
     .select()
@@ -94,9 +107,6 @@ export async function importCatalogProduct(
   return data as DbProduct;
 }
 
-/**
- * Verifica si un producto del catálogo ya fue importado por la tienda.
- */
 export async function isProductImported(
   storeId: string,
   catalogProductId: string
@@ -112,9 +122,6 @@ export async function isProductImported(
   return data !== null;
 }
 
-/**
- * Lista los IDs del catálogo que ya están importados (para marcar en UI).
- */
 export async function fetchImportedCatalogIds(storeId: string): Promise<Set<string>> {
   const { data, error } = await supabase
     .from("products")
@@ -128,7 +135,8 @@ export async function fetchImportedCatalogIds(storeId: string): Promise<Set<stri
 }
 
 /**
- * Crea un producto PROPIO del vendor (no del catálogo).
+ * Crea un producto PROPIO del vendor.
+ * 🆕 v22.13 - colors como string[]
  */
 export interface CreateOwnProductInput {
   storeId: string;
@@ -142,7 +150,7 @@ export interface CreateOwnProductInput {
   is_active: boolean;
   featured: boolean;
   images: string[];
-  colors?: Array<{ name: string; hex: string }>;
+  colors?: string[]; // 🆕 v22.13 - string[] en vez de objetos
 }
 
 export async function createOwnProduct(input: CreateOwnProductInput): Promise<DbProduct> {
@@ -172,7 +180,8 @@ export async function createOwnProduct(input: CreateOwnProductInput): Promise<Db
 }
 
 /**
- * Actualiza un producto del vendor (precio, stock, etc).
+ * Actualiza un producto del vendor.
+ * 🆕 v22.13 - colors como string[]
  */
 export async function updateMyProduct(
   productId: string,
@@ -187,7 +196,7 @@ export async function updateMyProduct(
     images: string[];
     is_active: boolean;
     featured: boolean;
-    colors: Array<{ name: string; hex: string }>;
+    colors: string[]; // 🆕 v22.13
   }>
 ): Promise<DbProduct> {
   const { data, error } = await supabase
@@ -201,15 +210,10 @@ export async function updateMyProduct(
   return data as DbProduct;
 }
 
-/**
- * 🆕 v20.8 - Actualiza SOLO el precio de un producto del vendor.
- * Valida que sea mayor al precio base del catálogo (si aplica).
- */
 export async function updateProductPrice(
   productId: string,
   newPrice: number
 ): Promise<DbProduct> {
-  // 1. Obtener el producto con su catálogo
   const { data: product, error: fetchError } = await supabase
     .from("products")
     .select(`
@@ -223,7 +227,6 @@ export async function updateProductPrice(
 
   if (fetchError) throw new Error(fetchError.message);
 
-  // 2. Si es producto del catálogo, validar que precio > base_price
   if (product.source === "catalog") {
     const catalog = (product as any).catalog;
     if (catalog && newPrice <= Number(catalog.base_price)) {
@@ -233,12 +236,10 @@ export async function updateProductPrice(
     }
   }
 
-  // 3. Validar precio positivo
   if (newPrice <= 0) {
     throw new Error("El precio debe ser mayor a 0");
   }
 
-  // 4. Actualizar
   const { data, error } = await supabase
     .from("products")
     .update({
@@ -253,9 +254,6 @@ export async function updateProductPrice(
   return data as DbProduct;
 }
 
-/**
- * Activa/desactiva un producto.
- */
 export async function toggleMyProductActive(productId: string, is_active: boolean): Promise<void> {
   const { error } = await supabase
     .from("products")
@@ -264,9 +262,6 @@ export async function toggleMyProductActive(productId: string, is_active: boolea
   if (error) throw error;
 }
 
-/**
- * Elimina un producto.
- */
 export async function deleteMyProduct(productId: string): Promise<void> {
   const { data: product } = await supabase
     .from("products")
@@ -288,9 +283,6 @@ export async function deleteMyProduct(productId: string): Promise<void> {
   }
 }
 
-/**
- * Sube fotos para un producto propio del vendor.
- */
 export async function uploadProductImages(
   storeId: string,
   files: File[]
@@ -298,9 +290,6 @@ export async function uploadProductImages(
   return uploadMultipleFiles("product-images", files, `vendors/${storeId}`);
 }
 
-/**
- * Marca/desmarca un producto como "Más vendido" (featured).
- */
 export async function toggleProductFeatured(productId: string, featured: boolean): Promise<void> {
   const { error } = await supabase
     .from("products")

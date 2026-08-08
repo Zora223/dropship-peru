@@ -1,15 +1,12 @@
 // src/components/ProductDetailModal.tsx
+// 🆕 v22.13 - Soporte colores string[] unificado (usa color-utils)
+
 import { useState, useEffect } from "react";
 import FreeShippingBadge from "./FreeShippingBadge";
 import { ProductRatingBadge } from "./reviews/ProductRatingBadge";
 import { isPurchasable } from "../lib/product-badges";
+import { normalizeColorsArray } from "../lib/color-utils"; // 🆕 v22.13
 import type { PublicStoreProduct } from "../lib/public-store";
-
-interface Color {
-  name: string;
-  hex: string;
-  stock?: number;
-}
 
 interface ProductDetailModalProps {
   product: PublicStoreProduct;
@@ -30,11 +27,6 @@ function normalizeImages(images: unknown): string[] {
   return [];
 }
 
-function normalizeColors(colors: unknown): Color[] {
-  if (!Array.isArray(colors)) return [];
-  return colors.filter((c: any) => c && typeof c === "object" && c.name);
-}
-
 export default function ProductDetailModal({
   product,
   onClose,
@@ -47,15 +39,14 @@ export default function ProductDetailModal({
   themeSecondaryColor,
 }: ProductDetailModalProps) {
   const images = normalizeImages(product.images);
-  const colors = normalizeColors((product as any).colors);
+  // 🆕 v22.13 - normalizeColorsArray convierte string[] o objetos a ColorObject[]
+  const colors = normalizeColorsArray(product.colors);
   const canBuy = isPurchasable(product.real_stock);
   const avgRating = product.avg_rating || 0;
   const reviewCount = product.review_count || 0;
 
   const [currentImageIdx, setCurrentImageIdx] = useState(0);
-  const [selectedColor, setSelectedColor] = useState<string | null>(
-    colors.length > 0 ? colors[0].name : null
-  );
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
 
@@ -282,42 +273,57 @@ export default function ProductDetailModal({
               </div>
             )}
 
+            {/* 🎨 v22.13 - Selector de colores (OPCIONAL) */}
             {colors.length > 0 && (
               <div className="mt-5">
                 <h3 className="text-sm font-bold text-gray-900 mb-3">
-                  🎨 Color: <span className="font-normal text-gray-600">{selectedColor}</span>
+                  🎨 Colores disponibles
+                  {selectedColor && (
+                    <span className="ml-2 font-normal text-gray-600">
+                      · <span className="text-gray-900 font-semibold">{selectedColor}</span>
+                    </span>
+                  )}
+                  <span className="ml-2 text-[10px] font-normal text-gray-400">
+                    (opcional)
+                  </span>
                 </h3>
                 <div className="flex flex-wrap gap-2">
                   {colors.map((color) => {
                     const isSelected = selectedColor === color.name;
-                    const hasStock = color.stock === undefined || color.stock > 0;
                     return (
                       <button
                         key={color.name}
-                        onClick={() => hasStock && setSelectedColor(color.name)}
-                        disabled={!hasStock}
+                        onClick={() =>
+                          setSelectedColor(isSelected ? null : color.name)
+                        }
                         className={`relative flex items-center gap-2 rounded-full border-2 px-4 py-2 transition ${
                           isSelected
-                            ? "border-gray-900 bg-gray-900 text-white"
-                            : hasStock
-                            ? "border-gray-200 bg-white text-gray-700 hover:border-gray-400"
-                            : "border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed line-through"
+                            ? "border-gray-900 bg-gray-900 text-white shadow-md"
+                            : "border-gray-200 bg-white text-gray-700 hover:border-gray-400"
                         }`}
                       >
                         <span
-                          className="h-5 w-5 rounded-full border border-gray-300"
+                          className="h-5 w-5 rounded-full border border-gray-300 shadow-sm"
                           style={{ backgroundColor: color.hex }}
                         />
-                        <span className="text-sm font-semibold">{color.name}</span>
-                        {color.stock !== undefined && color.stock <= 3 && hasStock && (
-                          <span className="text-[10px] font-bold text-orange-500">
-                            (últimos {color.stock})
-                          </span>
+                        <span className="text-sm font-semibold">
+                          {color.name}
+                        </span>
+                        {isSelected && (
+                          <span className="text-xs">✓</span>
                         )}
                       </button>
                     );
                   })}
                 </div>
+                {selectedColor && (
+                  <button
+                    onClick={() => setSelectedColor(null)}
+                    className="mt-2 text-xs text-gray-500 hover:text-gray-700 underline"
+                  >
+                    ✕ Quitar selección
+                  </button>
+                )}
               </div>
             )}
 
