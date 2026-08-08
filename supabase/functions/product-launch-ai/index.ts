@@ -1,5 +1,5 @@
 // supabase/functions/product-launch-ai/index.ts
-// 🍌 v22.7 - WhatsApp message PURO sin footer (frontend maneja el link)
+// 🍌 v22.9 - MEGA PROMPT + Doble API key + 1 solo request
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -12,7 +12,8 @@ const corsHeaders = {
 };
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODEL = "llama-3.3-70b-versatile";
+const MODEL_LARGE = "llama-3.3-70b-versatile";
+const MODEL_FAST = "llama-3.1-8b-instant";
 const CREDITS_COST = 15;
 
 interface RequestBody {
@@ -33,6 +34,16 @@ interface StoreData {
   instagram?: string;
   facebook?: string;
   description?: string;
+}
+
+interface MegaKit {
+  instagram: string;
+  facebook: string;
+  hashtags: string[];
+  whatsapp: string;
+  tiktok: string;
+  email_subject: string;
+  email_body: string;
 }
 
 // ============================================
@@ -73,389 +84,249 @@ function detectProductCategory(
 }
 
 // ============================================
-// GROQ
+// UTILS
 // ============================================
-async function callGroq(prompt: string, temperature = 0.85): Promise<string> {
-  const groqApiKey = Deno.env.get("GROQ_API_KEY");
-  if (!groqApiKey) throw new Error("GROQ_API_KEY no configurada");
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  const response = await fetch(GROQ_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${groqApiKey}`,
-    },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      messages: [{ role: "user", content: prompt }],
-      temperature,
-      max_tokens: 1024,
-    }),
-  });
-
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Groq error ${response.status}: ${err}`);
-  }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content?.trim() || "";
+// 🆕 v22.9: Sistema de doble API key con failover
+function getApiKeys(): string[] {
+  const key1 = Deno.env.get("GROQ_API_KEY");
+  const key2 = Deno.env.get("GROQ_API_KEY_2");
+  const keys: string[] = [];
+  if (key1) keys.push(key1);
+  if (key2) keys.push(key2);
+  if (keys.length === 0) throw new Error("No hay GROQ API keys configuradas");
+  return keys;
 }
 
-// ============================================
-// 🎨 PROMPTS ESPECIALIZADOS POR RED SOCIAL
-// ============================================
-
-// 📷 INSTAGRAM: Aspiracional, visual, SIN hashtags (se agregan en frontend)
-async function generateInstagramCaption(
-  productName: string,
-  price: number,
-  category: ProductCategory,
-  store: StoreData
+async function callGroq(
+  prompt: string,
+  temperature = 0.85,
+  model = MODEL_LARGE,
+  maxTokens = 2048
 ): Promise<string> {
-  const igHandle = store.instagram
-    ? `@${store.instagram.replace(/[@\/]/g, "").replace("instagram.com/", "").trim()}`
-    : "";
+  const apiKeys = getApiKeys();
+  let lastError: Error | null = null;
 
-  const prompt = `Eres el mejor copywriter de INSTAGRAM Perú, especializado en captions VIRALES.
+  // Intentar con cada key
+  for (let keyIndex = 0; keyIndex < apiKeys.length; keyIndex++) {
+    const apiKey = apiKeys[keyIndex];
+    const keyLabel = keyIndex === 0 ? "principal" : "respaldo";
 
-CONTEXTO:
-- Tienda: ${store.name}
-- Producto: ${productName}
-- Precio: S/ ${price.toFixed(2)}
-- Categoría: ${category}
+    // 2 intentos por key
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        console.log(`🔑 Usando API key ${keyLabel} (intento ${attempt}/2)`);
 
-CARACTERÍSTICAS DE INSTAGRAM:
-- Audiencia visual, joven-adulta
-- Tono ASPIRACIONAL (hacer soñar)
-- Storytelling emocional
-- Los usuarios NO leen mucho, gancho fuerte
+        const response = await fetch(GROQ_API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: "user", content: prompt }],
+            temperature,
+            max_tokens: maxTokens,
+          }),
+        });
 
-REGLAS ESTRICTAS:
-1. GANCHO PODEROSO primera línea (pregunta, dato, transformación)
-2. Máximo 180 caracteres CUERPO PRINCIPAL
-3. 3-5 emojis ESTRATÉGICOS (no decorativos)
-4. HABLA DE BENEFICIOS EMOCIONALES (autoestima, admiración, confianza)
-5. CTA sutil: "Descubre" "Consíguelo" "Hazlo tuyo" (NUNCA "compra ahora")
-6. Menciona precio con emoji ✨💰
-7. Frase de urgencia sutil ("Stock limitado", "Últimas piezas")
-8. NO uses "link en bio" (ya se agrega automático)
-9. NO agregues hashtags aquí (van separados)
+        if (response.status === 429) {
+          console.log(`⏱️ Rate limit en key ${keyLabel}, probando siguiente...`);
+          lastError = new Error(`Rate limit key ${keyLabel}`);
+          break; // Salir del loop de intentos, probar siguiente key
+        }
 
-FÓRMULAS QUE FUNCIONAN:
-- "Ese detalle que dice todo sin decir nada..."
-- "El secreto detrás de [transformación]"
-- "Imagínate [visualización deseada]"
-- "3 razones por las que [beneficio]"
+        if (!response.ok) {
+          const err = await response.text();
+          throw new Error(`Groq error ${response.status}: ${err}`);
+        }
 
-EJEMPLO PERFECTO:
-"✨ Ese vestido que cuenta tu historia sin necesidad de palabras.
-Elegancia que abraza, feminidad que empodera 💫
-💰 S/ 89.90 · Últimas piezas"
-
-Responde SOLO el caption, sin comillas, sin hashtags, sin explicaciones.`;
-
-  const caption = await callGroq(prompt, 0.9);
-
-  let footer = "";
-  if (igHandle) {
-    footer = `\n\n📷 Síguenos: ${igHandle}`;
+        const data = await response.json();
+        console.log(`✅ Respuesta OK con key ${keyLabel}`);
+        return data.choices?.[0]?.message?.content?.trim() || "";
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        console.log(`⚠️ Error con key ${keyLabel}: ${lastError.message}`);
+        if (attempt === 1) await sleep(1000);
+      }
+    }
   }
 
-  return caption + footer;
+  throw lastError || new Error("Todos los intentos fallaron");
 }
 
-// 📘 FACEBOOK: Informativo, con link, más largo, sin hashtags
-async function generateFacebookCaption(
+// ============================================
+// 🎨 MEGA PROMPT - TODO EN UN SOLO REQUEST
+// ============================================
+async function generateMegaKit(
   productName: string,
   price: number,
   category: ProductCategory,
   store: StoreData,
   productUrl: string
-): Promise<string> {
+): Promise<MegaKit> {
+  const igHandle = store.instagram
+    ? `@${store.instagram.replace(/[@\/]/g, "").replace("instagram.com/", "").trim()}`
+    : "";
   const fbPage = store.facebook
     ? store.facebook.replace(/[\/]/g, "").replace("facebook.com/", "").trim()
     : "";
 
-  const prompt = `Eres copywriter EXPERTO de FACEBOOK para tiendas peruanas.
+  const prompt = `Eres el mejor copywriter multi-plataforma para tiendas peruanas. Genera un kit COMPLETO de marketing.
 
-CONTEXTO:
+═══ CONTEXTO ═══
 - Tienda: ${store.name}
 - Producto: ${productName}
 - Precio: S/ ${price.toFixed(2)}
 - Categoría: ${category}
 ${store.description ? `- Descripción tienda: ${store.description}` : ""}
+${igHandle ? `- Instagram: ${igHandle}` : ""}
+${fbPage ? `- Facebook: facebook.com/${fbPage}` : ""}
 
-CARACTERÍSTICAS DE FACEBOOK:
-- Audiencia más adulta (25-55 años)
-- Leen MÁS que en Instagram
-- Buscan INFORMACIÓN + CONFIANZA
-- Los posts con LINK funcionan bien (a diferencia de IG)
-- Los hashtags NO funcionan igual (usa máximo 2)
+═══ TAREA ═══
+Genera un objeto JSON con exactamente esta estructura (SIN texto adicional):
 
-REGLAS ESTRICTAS:
-1. HOOK visual primera línea (emoji + frase impactante)
-2. 2-3 BENEFICIOS CONCRETOS en bullets con ✨ o 🔥
-3. Máximo 320 caracteres TOTAL
-4. Tono INFORMATIVO pero cercano peruano
-5. Precio destacado con 💰
-6. CTA DOBLE: "Escríbenos" + "Visítanos" 
-7. Menciona GARANTÍA/CONFIANZA (envío, calidad)
-8. NO uses hashtags dentro del texto
-9. Habla en PLURAL (nosotros, nuestra tienda)
+{
+  "instagram": "Caption aspiracional Instagram (máx 180 chars, 3-5 emojis, SIN hashtags aquí, SIN link)",
+  "facebook": "Post Facebook informativo (máx 320 chars, 2-3 beneficios con ✨, precio con 💰, CTA doble, SIN hashtags)",
+  "hashtags": ["#hashtag1", "#hashtag2", "... EXACTO 20 hashtags Perú"],
+  "whatsapp": "Mensaje WhatsApp personal (máx 200 chars, saludo cálido, CERO hashtags, CERO link, tono amigo)",
+  "tiktok": "Caption TikTok viral (máx 100 chars, POV/Cuando/Nadie, 2-3 emojis, SIN hashtags aquí)",
+  "email_subject": "Asunto email (máx 45 chars, sin palabras spam)",
+  "email_body": "Cuerpo email profesional (máx 500 chars, 3 beneficios con ✓, tono cercano, SIN hashtags)"
+}
 
-ESTRUCTURA GANADORA:
-[Emoji + Hook]
-[Descripción emocional 1 línea]
-✨ [Beneficio 1]
-✨ [Beneficio 2]
-💰 [Precio]
-📩 [CTA cerrar venta]
+═══ REGLAS POR CAMPO ═══
 
-EJEMPLO PERFECTO:
-"🔥 Nuevo en Infinity Shop
-Diseño único que resalta lo mejor de ti.
-✨ Tela premium que abraza tu figura
-✨ Perfecto para ocasiones especiales
-💰 Solo S/ 89.90
-📩 Escríbenos por WhatsApp y coordinamos tu envío 🚚"
+📷 INSTAGRAM (Aspiracional):
+- Gancho poderoso primera línea
+- Habla de beneficios EMOCIONALES
+- CTA sutil: "Descubre" "Consíguelo"
+- Precio con ✨💰
+- Ejemplo: "✨ Ese vestido que cuenta tu historia. Elegancia que empodera 💫\\n💰 S/ 89.90 · Últimas piezas"
 
-Responde SOLO el post, sin comillas, sin explicaciones.`;
+📘 FACEBOOK (Informativo):
+- Hook visual con emoji
+- Bullets con ✨ o 🔥
+- CTA: "Escríbenos" + "Visítanos"
+- Habla en plural "nosotros"
+- Ejemplo: "🔥 Nuevo en ${store.name}\\nDiseño único.\\n✨ Tela premium\\n✨ Perfecto para ocasiones\\n💰 S/ 89.90\\n📩 Escríbenos"
 
-  const caption = await callGroq(prompt, 0.85);
+🏷️ HASHTAGS (20 exactos):
+- 5 grandes: #moda #fashion #peru #compras #style
+- 8 medianos: #modaperu #compraslocalperu #modafemeninaperu #comprasonlineperu
+- 7 nicho: relacionados al producto exacto
+- Sin espacios, sin mayúsculas, sin números al final
 
-  let footer = `\n\n🔗 Ver más: ${productUrl}`;
-  if (fbPage) {
-    footer += `\n📘 Síguenos: facebook.com/${fbPage}`;
+💬 WHATSAPP (Personal):
+- Saludo peruano: "¡Hola!" "Hola bella/guapo"
+- NUNCA hashtags
+- Tono amigo cercano
+- CTA suave: "¿Te interesa?"
+- Ejemplo: "¡Hola bella! 💜\\n\\nTengo algo que te va a encantar...\\n\\nVestido casual único.\\n\\n💰 S/ 89.90\\n\\n¿Quieres más fotos?"
+
+🎵 TIKTOK (Viral):
+- POV / Cuando / Nadie
+- Slang joven peruano
+- Sin punto final
+- Ejemplo: "POV: encontraste el vestido perfecto 💅✨"
+
+📧 EMAIL SUBJECT:
+- NO spam words (GRATIS, OFERTA, 50% OFF)
+- SÍ: "descubre" "para ti" "nuevo"
+- Máx 1 emoji
+- Ejemplo: "Pensé en ti al verlo 💭"
+
+📧 EMAIL BODY:
+- Saludo cálido
+- Hook + descripción + 3 beneficios ✓
+- Precio con contexto
+- CTA "descúbrelo" (SIN "compra ahora")
+
+═══ IMPORTANTE ═══
+1. Responde SOLO el JSON válido, sin texto antes/después
+2. Sin comillas triples, sin markdown
+3. Escapa correctamente comillas dobles con \\"
+4. Usa \\n para saltos de línea
+5. Los hashtags SIN # dentro del array son inválidos
+6. Ejemplo válido de inicio: {"instagram":"..."
+
+RESPONDE AHORA (solo JSON):`;
+
+  console.log("🧠 Enviando MEGA PROMPT (1 solo request)...");
+  const response = await callGroq(prompt, 0.85, MODEL_LARGE, 3000);
+
+  // Parse JSON robusto
+  let parsed: MegaKit;
+  try {
+    // Limpiar respuesta (quitar posibles ```json...```)
+    let clean = response.trim();
+    if (clean.startsWith("```json")) clean = clean.slice(7);
+    if (clean.startsWith("```")) clean = clean.slice(3);
+    if (clean.endsWith("```")) clean = clean.slice(0, -3);
+    clean = clean.trim();
+
+    // Buscar el JSON en la respuesta
+    const jsonMatch = clean.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("No se encontró JSON en la respuesta");
+
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch (err) {
+    console.error("❌ Error parseando JSON:", err);
+    console.error("Respuesta cruda:", response.slice(0, 500));
+    throw new Error("El AI no devolvió JSON válido. Reintenta.");
   }
 
-  return caption + footer;
-}
+  // Validar estructura
+  const required: (keyof MegaKit)[] = [
+    "instagram",
+    "facebook",
+    "hashtags",
+    "whatsapp",
+    "tiktok",
+    "email_subject",
+    "email_body",
+  ];
+  for (const field of required) {
+    if (!parsed[field]) {
+      console.warn(`⚠️ Campo faltante: ${field}, usando fallback`);
+      // Fallbacks
+      if (field === "hashtags") parsed.hashtags = ["#peru", "#compraslocalperu", "#emprendimientoperu", "#lima", "#modaperu"];
+      else parsed[field] = "" as any;
+    }
+  }
 
-// 🏷️ HASHTAGS
-async function generateHashtags(
-  productName: string,
-  category: ProductCategory
-): Promise<string[]> {
-  const prompt = `Genera EXACTAMENTE 20 hashtags para Instagram Perú.
+  // Asegurar hashtags array válido
+  if (!Array.isArray(parsed.hashtags)) {
+    parsed.hashtags = ["#peru", "#compraslocalperu", "#emprendimientoperu"];
+  }
 
-Producto: ${productName}
-Categoría: ${category}
-
-MEZCLA ESTRATÉGICA:
-- 5 hashtags GRANDES (millones): #moda #fashion #peru #compras #style
-- 8 hashtags MEDIANOS (miles-cientos miles): #modaperu #compraslocalperu #modafemeninaperu
-- 7 hashtags NICHO ESPECÍFICO: relacionados al producto exacto
-
-REGLAS:
-- Todos con #
-- Sin espacios, sin mayúsculas
-- Sin números al final
-- Un hashtag por línea
-- SIN emojis
-- Combinar tendencia + geo Perú + nicho
-
-Ejemplo formato:
-#hashtag1
-#hashtag2
-#hashtag3`;
-
-  const raw = await callGroq(prompt, 0.6);
-  const hashtags = raw
-    .split(/\n|\s+/)
-    .map((t) => t.trim())
-    .filter((t) => t.startsWith("#") && t.length > 2 && !/\d/.test(t))
+  // Limpiar hashtags
+  parsed.hashtags = parsed.hashtags
+    .map((t) => (t.startsWith("#") ? t : `#${t}`))
+    .filter((t) => t.length > 1)
     .slice(0, 20);
 
-  return hashtags.length > 0
-    ? hashtags
-    : ["#peru", "#compraslocalperu", "#emprendimientoperu", "#lima", "#modaperu"];
-}
+  // Agregar footers automáticos
+  if (igHandle && !parsed.instagram.includes(igHandle)) {
+    parsed.instagram += `\n\n📷 Síguenos: ${igHandle}`;
+  }
 
-// 💬 WHATSAPP: Personal, íntimo, PURO (sin link/tel - se agrega en frontend)
-async function generateWhatsAppMessage(
-  productName: string,
-  price: number,
-  category: ProductCategory,
-  store: StoreData
-): Promise<string> {
-  const prompt = `Eres experto en WHATSAPP MARKETING para tiendas peruanas.
+  if (!parsed.facebook.includes(productUrl)) {
+    parsed.facebook += `\n\n🔗 Ver más: ${productUrl}`;
+    if (fbPage) {
+      parsed.facebook += `\n📘 Síguenos: facebook.com/${fbPage}`;
+    }
+  }
 
-CONTEXTO:
-- Tienda: ${store.name}
-- Producto: ${productName}
-- Precio: S/ ${price.toFixed(2)}
-- Categoría: ${category}
+  if (!parsed.email_body.includes(productUrl)) {
+    parsed.email_body += `\n\n🔗 Ver producto:\n${productUrl}\n\nCon cariño,\nEl equipo de ${store.name} 💜`;
+  }
 
-CARACTERÍSTICAS DE WHATSAPP:
-- Conversación 1 a 1 (íntimo)
-- El cliente LEE COMPLETO (a diferencia de IG)
-- Se lee en 5 segundos máximo
-- CERO hashtags (parece spam)
-- Máximo 2-3 emojis
-- Tono de AMIGO/CONFIANZA
-- Usar SALTOS DE LÍNEA para respirar
-
-REGLAS ESTRICTAS:
-1. Saludo cálido peruano: "¡Hola!" "¿Qué tal?" "Hola bella/guapo"
-2. NUNCA uses hashtags (#)
-3. Máximo 200 caracteres TOTAL
-4. Frase corta que despierte curiosidad
-5. Producto con detalle breve
-6. Precio con 💰 destacado
-7. CTA suave: "¿Te interesa?" "Cuéntame" "Escríbeme"
-8. Tono como si fuera amiga/o cercano
-9. NO uses "compra ahora" ni presión
-10. NO agregues link ni teléfono (se agrega automático después)
-
-ESTRUCTURA GANADORA:
-[Saludo cálido con emoji]
-
-[Hook personal: "Tengo algo que te va a encantar"]
-
-[Producto en 1 línea]
-
-💰 Precio: S/ [precio]
-
-[CTA suave: "¿Te interesa?" o "¿Quieres verlo?"]
-
-EJEMPLO PERFECTO:
-"¡Hola bella! 💜
-
-Tengo algo que te va a encantar...
-
-Vestido casual vino que abraza tu figura de forma única.
-
-💰 Solo S/ 89.90
-
-¿Quieres que te mande más fotos?"
-
-Responde SOLO el mensaje puro, sin comillas, sin hashtags, sin link, sin teléfono, sin explicaciones.`;
-
-  return await callGroq(prompt, 0.85);
-}
-
-// 🎵 TIKTOK: Muy corto, trendy
-async function generateTikTokCaption(
-  productName: string,
-  category: ProductCategory,
-  store: StoreData
-): Promise<string> {
-  const prompt = `Eres creador viral de TIKTOK Perú, expert en captions.
-
-CONTEXTO:
-- Tienda: ${store.name}
-- Producto: ${productName}
-- Categoría: ${category}
-
-CARACTERÍSTICAS DE TIKTOK:
-- Audiencia MUY joven (Gen Z / millennials jóvenes)
-- Tono TRENDY, casual, divertido
-- MUY CORTO (máx 100 caracteres)
-- Los hashtags 3-5 MÁXIMO (se agregan después)
-- Usa slang joven pero peruano
-
-REGLAS:
-1. MÁXIMO 100 caracteres
-2. Tono casual, como texting con amigos
-3. Usa frases como: "Cuando..." "POV:" "Nadie:"
-4. 2-3 emojis MÁXIMO
-5. Sin punto final
-6. Puede ser 1 sola línea potente
-
-FÓRMULAS VIRALES:
-- "POV: encontraste [producto perfecto]"
-- "Cuando por fin encuentras [beneficio]"
-- "Este [producto] hits diferente"
-- "Necesitas esto en tu vida"
-
-EJEMPLO PERFECTO:
-"POV: encontraste el vestido perfecto para todo 💅✨"
-
-Responde SOLO el caption, sin comillas, sin hashtags, sin explicaciones.`;
-
-  return await callGroq(prompt, 0.95);
-}
-
-// 📧 EMAIL
-async function generateEmailSubject(
-  productName: string,
-  storeName: string
-): Promise<string> {
-  const prompt = `Genera un ASUNTO DE EMAIL para ${storeName}.
-
-Producto: ${productName}
-
-REGLAS ESTRICTAS EMAIL:
-1. Máximo 45 caracteres
-2. NO uses spam words: "GRATIS" "OFERTA" "50% OFF" "COMPRA YA"
-3. SÍ usa: "descubre" "conoce" "para ti" "nuevo"
-4. Máximo 1 emoji
-5. Tono personal, no corporativo
-
-BUENOS EJEMPLOS:
-"Pensé en ti al verlo 💭"
-"Algo nuevo para ti en ${storeName}"
-"Descubre lo último en ${storeName}"
-
-Responde SOLO el asunto, sin comillas.`;
-
-  return await callGroq(prompt, 0.9);
-}
-
-async function generateEmailBody(
-  productName: string,
-  price: number,
-  store: StoreData,
-  productUrl: string
-): Promise<string> {
-  const prompt = `Genera CUERPO DE EMAIL profesional para ${store.name}.
-
-Producto: ${productName}
-Precio: S/ ${price.toFixed(2)}
-
-CARACTERÍSTICAS EMAIL:
-- Se lee CON CALMA
-- Estructura formal-cercana
-- CERO hashtags
-- Máximo 2 emojis
-- Habla de TÚ al cliente
-- Firma con nombre de tienda
-
-ESTRUCTURA:
-[Saludo personal cálido]
-[Hook: por qué le puede interesar]
-[Descripción emocional del producto - 2 líneas]
-[3 beneficios en bullets con ✓]
-[Precio con contexto de valor]
-[CTA claro con link]
-
-REGLAS:
-1. Máximo 500 caracteres cuerpo
-2. NO uses hashtags (#)
-3. NO uses "compra ahora"
-4. SÍ usa "descúbrelo" "conócelo" "échale un vistazo"
-
-EJEMPLO PERFECTO:
-"Hola,
-
-Hoy queremos compartirte algo especial que llegó a ${store.name}.
-
-Un vestido casual vino diseñado para resaltar tu esencia.
-
-✓ Tela premium y cómoda
-✓ Diseño exclusivo
-✓ Envío seguro a todo Perú
-
-Por solo S/ 89.90, es una inversión que vale la pena.
-
-Descúbrelo aquí 👉 [LINK]"
-
-Responde SOLO el cuerpo, sin asunto, sin firma final.`;
-
-  const body = await callGroq(prompt, 0.85);
-
-  return `${body}\n\n🔗 Ver producto:\n${productUrl}\n\nCon cariño,\nEl equipo de ${store.name} 💜`;
+  console.log("✅ MEGA KIT parseado y enriquecido correctamente");
+  return parsed;
 }
 
 // ============================================
@@ -508,7 +379,7 @@ serve(async (req: Request) => {
       );
     }
 
-    console.log(`🍌 Launch AI v22.7: ${product_name} (user: ${user.email})`);
+    console.log(`🍌 Launch AI v22.9 MEGA: ${product_name} (user: ${user.email})`);
 
     const { data: storeData } = await supabase
       .from("stores")
@@ -560,26 +431,16 @@ serve(async (req: Request) => {
     );
     console.log(`🎯 Categoría: ${detectedCategory}`);
 
-    console.log("🧠 Generando contenido especializado por red...");
-    const [
-      captionInstagram,
-      captionFacebook,
-      hashtags,
-      whatsappMessage,
-      tiktokCaption,
-      emailSubject,
-      emailBody,
-    ] = await Promise.all([
-      generateInstagramCaption(product_name, product_price, detectedCategory, store),
-      generateFacebookCaption(product_name, product_price, detectedCategory, store, productUrl),
-      generateHashtags(product_name, detectedCategory),
-      generateWhatsAppMessage(product_name, product_price, detectedCategory, store),
-      generateTikTokCaption(product_name, detectedCategory, store),
-      generateEmailSubject(product_name, store.name),
-      generateEmailBody(product_name, product_price, store, productUrl),
-    ]);
+    // 🚀 v22.9: UN SOLO REQUEST PARA TODO
+    const megaKit = await generateMegaKit(
+      product_name,
+      product_price,
+      detectedCategory,
+      store,
+      productUrl
+    );
 
-    console.log("✅ Contenido especializado generado");
+    console.log("✅ Kit completo generado en 1 request");
 
     if (!isUnlimited) {
       const newCredits = subscription.credits_remaining - CREDITS_COST;
@@ -603,13 +464,13 @@ serve(async (req: Request) => {
       detected_category: detectedCategory,
       original_image_url: input_image_url,
       enhanced_image_url: input_image_url,
-      caption_instagram: captionInstagram,
-      caption_facebook: captionFacebook,
-      hashtags: hashtags,
-      whatsapp_message: whatsappMessage,
-      tiktok_caption: tiktokCaption,
-      email_subject: emailSubject,
-      email_body: emailBody,
+      caption_instagram: megaKit.instagram,
+      caption_facebook: megaKit.facebook,
+      hashtags: megaKit.hashtags,
+      whatsapp_message: megaKit.whatsapp,
+      tiktok_caption: megaKit.tiktok,
+      email_subject: megaKit.email_subject,
+      email_body: megaKit.email_body,
       credits_used: CREDITS_COST,
       generation_time_ms: generationTime,
     };
