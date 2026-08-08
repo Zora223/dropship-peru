@@ -1,10 +1,10 @@
 // src/pages/StorePage.tsx
-// 🆕 v22.13 - Con tutorial HowToBuy integrado
+// 🆕 v22.13.1 - Tutorial con nombre de tienda dinámico
 
 import WhatsappFloatingButton from "../components/WhatsappFloatingButton";
 import FreeShippingBadge from "../components/FreeShippingBadge";
 import ProductDetailModal from "../components/ProductDetailModal";
-import HowToBuyTutorial from "../components/HowToBuyTutorial"; // 🆕
+import HowToBuyTutorial from "../components/HowToBuyTutorial";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useCart } from "../contexts/CartContext";
@@ -607,8 +607,9 @@ export default function StorePage() {
         />
       )}
 
-      {/* 🎓 TUTORIAL "¿Cómo comprar?" - v22.13 */}
+      {/* 🎓 TUTORIAL "¿Cómo comprar?" - v22.13.1 */}
       <HowToBuyTutorial
+        storeName={store.name}
         primaryColor={theme.primary_color}
         secondaryColor={theme.secondary_color}
         autoStart={true}

@@ -1,11 +1,13 @@
 // src/components/HowToBuyTutorial.tsx
-// 🎓 v22.13 - Tutorial premium interactivo para customers
+// 🎓 v22.13.1 - Tutorial premium interactivo para customers
 // Meliora Dropship
+// FIX: Posición del botón + nombre de tienda dinámico + solo Iquitos
 
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 
 interface TutorialProps {
+  storeName?: string;
   primaryColor?: string;
   secondaryColor?: string;
   onClose: () => void;
@@ -23,165 +25,170 @@ interface Slide {
   mockup?: React.ReactNode;
 }
 
-const SLIDES: Slide[] = [
-  {
-    emoji: "👋",
-    emojiSize: "text-8xl sm:text-9xl",
-    title: "¡Bienvenido!",
-    subtitle: "Tu compra en 6 pasos súper fáciles",
-    description:
-      "Comprar en Meliora es rápido, seguro y sin complicaciones. Te enseñamos cómo hacerlo en menos de 2 minutos.",
-    tip: "Envío GRATIS a Iquitos y Lima 🚚",
-    gradient: "from-purple-600 via-pink-600 to-orange-500",
-    mockup: (
-      <div className="flex items-center justify-center gap-2 text-4xl animate-pulse">
-        🛍️ ✨ 💝
-      </div>
-    ),
-  },
-  {
-    emoji: "🛍️",
-    emojiSize: "text-8xl sm:text-9xl",
-    title: "1. Explora productos",
-    subtitle: "Encuentra lo que amas",
-    description:
-      "Navega por el catálogo, usa los filtros de categoría y toca cualquier producto para ver todos sus detalles, fotos y reseñas.",
-    tip: "💡 Guarda tus favoritos con el corazón ♥",
-    gradient: "from-blue-500 via-cyan-500 to-teal-500",
-    mockup: (
-      <div className="grid grid-cols-3 gap-2">
-        {[1, 2, 3].map((i) => (
-          <div
-            key={i}
-            className="aspect-square rounded-xl bg-linear-to-br from-white/20 to-white/5 backdrop-blur border border-white/30 flex items-center justify-center text-3xl"
-          >
-            📦
+function getSlides(storeName: string): Slide[] {
+  return [
+    {
+      emoji: "👋",
+      emojiSize: "text-8xl sm:text-9xl",
+      title: `¡Bienvenido a ${storeName}!`,
+      subtitle: "Tu compra en 6 pasos súper fáciles",
+      description:
+        "Comprar en nuestra tienda es rápido, seguro y sin complicaciones. Te enseñamos cómo hacerlo en menos de 2 minutos.",
+      tip: "Envío GRATIS en Iquitos 🚚",
+      gradient: "from-purple-600 via-pink-600 to-orange-500",
+      mockup: (
+        <div className="flex items-center justify-center gap-2 text-4xl animate-pulse">
+          🛍️ ✨ 💝
+        </div>
+      ),
+    },
+    {
+      emoji: "🛍️",
+      emojiSize: "text-8xl sm:text-9xl",
+      title: "1. Explora productos",
+      subtitle: "Encuentra lo que amas",
+      description:
+        "Navega por el catálogo, usa los filtros de categoría y toca cualquier producto para ver todos sus detalles, fotos y reseñas.",
+      tip: "💡 Guarda tus favoritos con el corazón ♥",
+      gradient: "from-blue-500 via-cyan-500 to-teal-500",
+      mockup: (
+        <div className="grid grid-cols-3 gap-2">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="aspect-square rounded-xl bg-linear-to-br from-white/20 to-white/5 backdrop-blur border border-white/30 flex items-center justify-center text-3xl"
+            >
+              📦
+            </div>
+          ))}
+        </div>
+      ),
+    },
+    {
+      emoji: "🎨",
+      emojiSize: "text-8xl sm:text-9xl",
+      title: "2. Elige tu color",
+      subtitle: "Personaliza tu compra",
+      description:
+        "Si el producto tiene varios colores disponibles, selecciona el que más te guste tocando el círculo del color.",
+      tip: "💡 El color elegido llegará en tu pedido",
+      gradient: "from-rose-500 via-pink-500 to-fuchsia-500",
+      mockup: (
+        <div className="flex gap-2 justify-center flex-wrap">
+          {[
+            { color: "#000000", name: "Negro" },
+            { color: "#EF4444", name: "Rojo" },
+            { color: "#3B82F6", name: "Azul" },
+            { color: "#22C55E", name: "Verde" },
+          ].map((c, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-1.5 rounded-full bg-white/15 backdrop-blur border border-white/30 px-3 py-1.5"
+            >
+              <span
+                className="h-4 w-4 rounded-full border border-white/50"
+                style={{ backgroundColor: c.color }}
+              />
+              <span className="text-xs font-semibold">{c.name}</span>
+            </div>
+          ))}
+        </div>
+      ),
+    },
+    {
+      emoji: "🛒",
+      emojiSize: "text-8xl sm:text-9xl",
+      title: "3. Al carrito",
+      subtitle: "Suma tus productos",
+      description:
+        "Toca 'Agregar al carrito', elige la cantidad y sigue comprando. Puedes agregar productos de diferentes proveedores.",
+      tip: "💡 Revisa tu carrito en la esquina superior 🛒",
+      gradient: "from-emerald-500 via-green-500 to-lime-500",
+      mockup: (
+        <div className="rounded-2xl bg-white/15 backdrop-blur border border-white/30 p-3 flex items-center gap-3">
+          <div className="h-14 w-14 rounded-xl bg-white/20 flex items-center justify-center text-2xl">
+            👕
           </div>
-        ))}
-      </div>
-    ),
-  },
-  {
-    emoji: "🎨",
-    emojiSize: "text-8xl sm:text-9xl",
-    title: "2. Elige tu color",
-    subtitle: "Personaliza tu compra",
-    description:
-      "Si el producto tiene varios colores disponibles, selecciona el que más te guste tocando el círculo del color.",
-    tip: "💡 El color elegido llegará en tu pedido",
-    gradient: "from-rose-500 via-pink-500 to-fuchsia-500",
-    mockup: (
-      <div className="flex gap-2 justify-center flex-wrap">
-        {[
-          { color: "#000000", name: "Negro" },
-          { color: "#EF4444", name: "Rojo" },
-          { color: "#3B82F6", name: "Azul" },
-          { color: "#22C55E", name: "Verde" },
-        ].map((c, i) => (
-          <div
-            key={i}
-            className="flex items-center gap-1.5 rounded-full bg-white/15 backdrop-blur border border-white/30 px-3 py-1.5"
-          >
-            <span
-              className="h-4 w-4 rounded-full border border-white/50"
-              style={{ backgroundColor: c.color }}
-            />
-            <span className="text-xs font-semibold">{c.name}</span>
+          <div className="flex-1 text-left">
+            <div className="text-sm font-bold">Producto elegido</div>
+            <div className="text-xs opacity-80">S/ 45.00 × 1</div>
           </div>
-        ))}
-      </div>
-    ),
-  },
-  {
-    emoji: "🛒",
-    emojiSize: "text-8xl sm:text-9xl",
-    title: "3. Al carrito",
-    subtitle: "Suma tus productos",
-    description:
-      "Toca 'Agregar al carrito', elige la cantidad y sigue comprando. Puedes agregar productos de diferentes proveedores.",
-    tip: "💡 Revisa tu carrito en la esquina superior 🛒",
-    gradient: "from-emerald-500 via-green-500 to-lime-500",
-    mockup: (
-      <div className="rounded-2xl bg-white/15 backdrop-blur border border-white/30 p-3 flex items-center gap-3">
-        <div className="h-14 w-14 rounded-xl bg-white/20 flex items-center justify-center text-2xl">
-          👕
+          <div className="rounded-full bg-white/30 px-2 py-0.5 text-xs font-bold">
+            ✓
+          </div>
         </div>
-        <div className="flex-1 text-left">
-          <div className="text-sm font-bold">Producto elegido</div>
-          <div className="text-xs opacity-80">S/ 45.00 × 1</div>
+      ),
+    },
+    {
+      emoji: "🚚",
+      emojiSize: "text-8xl sm:text-9xl",
+      title: "4. Entrega o recojo",
+      subtitle: "Tú eliges cómo recibirlo",
+      description:
+        "Escoge entre delivery a tu casa (rápido y seguro) o recojo gratis en la tienda del vendor. Ingresa tus datos de contacto.",
+      tip: "💡 Delivery en menos de 24h en Iquitos ⚡",
+      gradient: "from-amber-500 via-orange-500 to-red-500",
+      mockup: (
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-xl bg-white/15 backdrop-blur border border-white/30 p-3 text-center">
+            <div className="text-2xl">🏠</div>
+            <div className="text-xs font-bold mt-1">Delivery</div>
+            <div className="text-[10px] opacity-80">A tu casa</div>
+          </div>
+          <div className="rounded-xl bg-white/15 backdrop-blur border border-white/30 p-3 text-center">
+            <div className="text-2xl">🏪</div>
+            <div className="text-xs font-bold mt-1">Recojo</div>
+            <div className="text-[10px] opacity-80">Gratis</div>
+          </div>
         </div>
-        <div className="rounded-full bg-white/30 px-2 py-0.5 text-xs font-bold">
-          ✓
+      ),
+    },
+    {
+      emoji: "💜",
+      emojiSize: "text-8xl sm:text-9xl",
+      title: "5. Paga con Yape",
+      subtitle: "Rápido y 100% seguro",
+      description:
+        "Escanea el QR o copia el número, paga con Yape/Plin, y sube tu comprobante. ¡Nuestra AI lo valida en segundos!",
+      tip: "🔒 Compra 100% protegida por Meliora",
+      gradient: "from-violet-600 via-purple-600 to-indigo-600",
+      mockup: (
+        <div className="rounded-2xl bg-white/15 backdrop-blur border border-white/30 p-4 text-center">
+          <div className="text-4xl mb-1">💜</div>
+          <div className="text-sm font-black">Yape / Plin</div>
+          <div className="text-[10px] opacity-80 mt-1">
+            Validación automática con AI 🤖
+          </div>
         </div>
-      </div>
-    ),
-  },
-  {
-    emoji: "🚚",
-    emojiSize: "text-8xl sm:text-9xl",
-    title: "4. Entrega o recojo",
-    subtitle: "Tú eliges cómo recibirlo",
-    description:
-      "Escoge entre delivery a tu casa (rápido y seguro) o recojo gratis en la tienda del vendor. Ingresa tus datos de contacto.",
-    tip: "💡 Delivery en menos de 24h en Iquitos ⚡",
-    gradient: "from-amber-500 via-orange-500 to-red-500",
-    mockup: (
-      <div className="grid grid-cols-2 gap-2">
-        <div className="rounded-xl bg-white/15 backdrop-blur border border-white/30 p-3 text-center">
-          <div className="text-2xl">🏠</div>
-          <div className="text-xs font-bold mt-1">Delivery</div>
-          <div className="text-[10px] opacity-80">A tu casa</div>
+      ),
+    },
+    {
+      emoji: "🎉",
+      emojiSize: "text-8xl sm:text-9xl",
+      title: "¡Y listo!",
+      subtitle: "Recibirás tu pedido pronto",
+      description:
+        "Te enviaremos actualizaciones por WhatsApp desde que se confirma tu pago hasta que llega a tus manos.",
+      tip: "🌟 ¡Deja tu reseña después de recibir!",
+      gradient: "from-pink-500 via-rose-500 to-red-500",
+      mockup: (
+        <div className="flex items-center justify-center gap-2 text-5xl animate-bounce">
+          📦 ➡️ 🏠
         </div>
-        <div className="rounded-xl bg-white/15 backdrop-blur border border-white/30 p-3 text-center">
-          <div className="text-2xl">🏪</div>
-          <div className="text-xs font-bold mt-1">Recojo</div>
-          <div className="text-[10px] opacity-80">Gratis</div>
-        </div>
-      </div>
-    ),
-  },
-  {
-    emoji: "💜",
-    emojiSize: "text-8xl sm:text-9xl",
-    title: "5. Paga con Yape",
-    subtitle: "Rápido y 100% seguro",
-    description:
-      "Escanea el QR o copia el número, paga con Yape/Plin, y sube tu comprobante. ¡Nuestra AI lo valida en segundos!",
-    tip: "🔒 Compra 100% protegida por Meliora",
-    gradient: "from-violet-600 via-purple-600 to-indigo-600",
-    mockup: (
-      <div className="rounded-2xl bg-white/15 backdrop-blur border border-white/30 p-4 text-center">
-        <div className="text-4xl mb-1">💜</div>
-        <div className="text-sm font-black">Yape / Plin</div>
-        <div className="text-[10px] opacity-80 mt-1">
-          Validación automática con AI 🤖
-        </div>
-      </div>
-    ),
-  },
-  {
-    emoji: "🎉",
-    emojiSize: "text-8xl sm:text-9xl",
-    title: "¡Y listo!",
-    subtitle: "Recibirás tu pedido pronto",
-    description:
-      "Te enviaremos actualizaciones por WhatsApp desde que se confirma tu pago hasta que llega a tus manos.",
-    tip: "🌟 ¡Deja tu reseña después de recibir!",
-    gradient: "from-pink-500 via-rose-500 to-red-500",
-    mockup: (
-      <div className="flex items-center justify-center gap-2 text-5xl animate-bounce">
-        📦 ➡️ 🏠
-      </div>
-    ),
-  },
-];
+      ),
+    },
+  ];
+}
 
 const STORAGE_KEY = "meliora_tutorial_seen_v1";
 
 export default function HowToBuyTutorial({
+  storeName = "esta tienda",
   onClose,
   autoStart = false,
 }: TutorialProps) {
+  const SLIDES = getSlides(storeName);
+
   const [isOpen, setIsOpen] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [dontShowAgain, setDontShowAgain] = useState(false);
@@ -216,7 +223,7 @@ export default function HowToBuyTutorial({
       setIsFinished(true);
       setTimeout(handleClose, 1200);
     }
-  }, [currentSlide, handleClose]);
+  }, [currentSlide, handleClose, SLIDES.length]);
 
   const handlePrev = useCallback(() => {
     if (currentSlide > 0) setCurrentSlide((p) => p - 1);
@@ -263,7 +270,8 @@ export default function HowToBuyTutorial({
     if (distance < -50) handlePrev();
   };
 
-  // Botón flotante SIEMPRE visible
+  // 🆕 v22.13.1 - Botón flotante REPOSICIONADO
+  // Ubicación: BOTTOM-LEFT para no chocar con WhatsApp (que está en bottom-right)
   const FloatingButton = (
     <button
       type="button"
@@ -272,10 +280,10 @@ export default function HowToBuyTutorial({
         setIsFinished(false);
         setIsOpen(true);
       }}
-      className="fixed bottom-6 right-6 z-40 group flex items-center gap-2 rounded-full bg-linear-to-r from-purple-600 via-pink-600 to-orange-500 px-5 py-3 text-white shadow-2xl hover:shadow-purple-500/50 hover:scale-110 active:scale-95 transition-all duration-300 animate-pulse hover:animate-none"
+      className="fixed bottom-6 left-6 z-40 group flex items-center gap-2 rounded-full bg-linear-to-r from-purple-600 via-pink-600 to-orange-500 px-4 py-3 text-white shadow-2xl hover:shadow-purple-500/50 hover:scale-110 active:scale-95 transition-all duration-300"
       aria-label="¿Cómo comprar?"
     >
-      <span className="text-2xl">💡</span>
+      <span className="text-2xl animate-pulse">💡</span>
       <span className="text-sm font-bold hidden sm:inline whitespace-nowrap">
         ¿Cómo comprar?
       </span>
@@ -324,11 +332,11 @@ export default function HowToBuyTutorial({
           </div>
 
           <div className="flex items-center justify-between p-4 pt-6">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">🎓</span>
-              <div>
-                <div className="text-xs font-bold uppercase tracking-wider text-gray-400">
-                  Tutorial · Meliora Dropship
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-2xl shrink-0">🎓</span>
+              <div className="min-w-0">
+                <div className="text-xs font-bold uppercase tracking-wider text-gray-400 truncate">
+                  Tutorial · {storeName}
                 </div>
                 <div className="text-sm font-black text-gray-900">
                   Paso {currentSlide + 1} de {SLIDES.length}
@@ -339,7 +347,7 @@ export default function HowToBuyTutorial({
             <button
               type="button"
               onClick={handleClose}
-              className="text-sm font-semibold text-gray-500 hover:text-gray-900 underline"
+              className="text-sm font-semibold text-gray-500 hover:text-gray-900 underline shrink-0 ml-2"
             >
               Saltar
             </button>
