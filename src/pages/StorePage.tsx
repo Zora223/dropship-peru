@@ -1,7 +1,10 @@
 // src/pages/StorePage.tsx
+// 🆕 v22.13 - Con tutorial HowToBuy integrado
+
 import WhatsappFloatingButton from "../components/WhatsappFloatingButton";
 import FreeShippingBadge from "../components/FreeShippingBadge";
-import ProductDetailModal from "../components/ProductDetailModal"; // 🆕
+import ProductDetailModal from "../components/ProductDetailModal";
+import HowToBuyTutorial from "../components/HowToBuyTutorial"; // 🆕
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useCart } from "../contexts/CartContext";
@@ -85,8 +88,6 @@ export default function StorePage() {
   const [favoriteLoadingId, setFavoriteLoadingId] = useState<string | null>(null);
   const [favoriteMessage, setFavoriteMessage] = useState<string | null>(null);
   const [reviewsModal, setReviewsModal] = useState<ReviewsModalState | null>(null);
-
-  // 🆕 Estado para el modal de detalle del producto
   const [selectedProduct, setSelectedProduct] = useState<PublicStoreProduct | null>(null);
 
   useEffect(() => {
@@ -147,7 +148,6 @@ export default function StorePage() {
     return methods.filter(m => m && m.enabled);
   }, [store?.payment_methods]);
 
-  // 🆕 handleAdd ahora acepta cantidad y color opcionales
   const handleAdd = (product: PublicStoreProduct, quantity: number = 1, selectedColor: string | null = null) => {
     if (!isPurchasable(product.real_stock) || !store) return;
     const images = normalizeImages(product.images);
@@ -358,7 +358,7 @@ export default function StorePage() {
                   className={`group overflow-hidden rounded-2xl sm:rounded-3xl bg-white shadow-sm transition cursor-pointer ${
                     canBuy ? "hover:-translate-y-1 hover:shadow-2xl" : "opacity-75"
                   }`}
-                  onClick={() => setSelectedProduct(product)} // 🆕 Click abre modal
+                  onClick={() => setSelectedProduct(product)}
                 >
                   {/* Imagen */}
                   <div className="relative aspect-square sm:aspect-4/3 overflow-hidden bg-linear-to-br from-gray-100 to-gray-200">
@@ -384,7 +384,7 @@ export default function StorePage() {
                       ))}
                     </div>
 
-                    {/* Favorito — con stopPropagation para no abrir el modal */}
+                    {/* Favorito */}
                     <button
                       type="button"
                       onClick={(e) => {
@@ -466,7 +466,6 @@ export default function StorePage() {
                         </div>
                       </div>
 
-                      {/* Botón agregar — con stopPropagation */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -567,7 +566,7 @@ export default function StorePage() {
           )}
 
           <div className="mt-8 sm:mt-10 text-center text-xs text-gray-400">
-            Tienda creada con Dropship Perú 🌴
+            Tienda creada con Meliora Dropship 🌴
           </div>
         </div>
       </div>
@@ -593,7 +592,7 @@ export default function StorePage() {
         />
       )}
 
-      {/* 🆕 MODAL DE DETALLE DEL PRODUCTO */}
+      {/* MODAL DE DETALLE DEL PRODUCTO */}
       {selectedProduct && (
         <ProductDetailModal
           product={selectedProduct}
@@ -607,6 +606,14 @@ export default function StorePage() {
           themeSecondaryColor={theme.secondary_color}
         />
       )}
+
+      {/* 🎓 TUTORIAL "¿Cómo comprar?" - v22.13 */}
+      <HowToBuyTutorial
+        primaryColor={theme.primary_color}
+        secondaryColor={theme.secondary_color}
+        autoStart={true}
+        onClose={() => {}}
+      />
     </div>
   );
 }
