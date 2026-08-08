@@ -1,5 +1,5 @@
 // src/components/vendor/ProductLaunchKitViewer.tsx
-// 🎨 v22.3 - Modal BLINDADO + share personalizado + regenerar
+// 🎨 v22.4.1 - Cada red social usa SU contenido específico
 
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
@@ -27,6 +27,8 @@ type TabId =
   | "whatsapp"
   | "email";
 
+type NetworkType = "instagram" | "facebook" | "whatsapp" | "tiktok" | "email" | "generic";
+
 interface StoreData {
   name: string;
   slug: string;
@@ -34,6 +36,11 @@ interface StoreData {
   contact_phone?: string;
   instagram?: string;
   facebook?: string;
+}
+
+// 🔥 Tipo extendido para incluir tiktok_caption
+interface ExtendedKit extends LaunchKit {
+  tiktok_caption?: string;
 }
 
 export default function ProductLaunchKitViewer({
@@ -50,6 +57,7 @@ export default function ProductLaunchKitViewer({
   const [shareCount, setShareCount] = useState(0);
 
   const categoryInfo = getCategoryInfo(kit.detected_category);
+  const extendedKit = kit as ExtendedKit;
 
   useEffect(() => {
     const loadStore = async () => {
@@ -94,12 +102,67 @@ export default function ProductLaunchKitViewer({
     }
   };
 
-  const buildShareText = (baseCaption: string, includeHashtags = true) => {
-    let text = baseCaption;
-    if (includeHashtags && kit.hashtags?.length) {
-      text += `\n\n${kit.hashtags.join(" ")}`;
+  // 🔥 v22.4.1: Cada red usa SU contenido específico
+  const buildTextForNetwork = (network: NetworkType): string => {
+    let text = "";
+    let includeHashtags = false;
+    let includeLink = true;
+
+    switch (network) {
+      case "instagram":
+        // Instagram: caption IG + hashtags integrados (SÍ usa hashtags)
+        text = kit.caption_instagram || "";
+        includeHashtags = true;
+        includeLink = false; // IG usa "link en bio"
+        break;
+
+      case "facebook":
+        // Facebook: caption FB + link directo (NO usa hashtags como IG)
+        text = kit.caption_facebook || "";
+        includeHashtags = false;
+        includeLink = false; // El link ya viene en el caption_facebook
+        break;
+
+      case "whatsapp":
+        // WhatsApp: mensaje personal (JAMÁS hashtags)
+        text = kit.whatsapp_message || kit.caption_instagram || "";
+        includeHashtags = false;
+        includeLink = false; // Ya viene incluido en whatsapp_message
+        break;
+
+      case "tiktok":
+        // TikTok: caption corto + hashtags (poquitos)
+        text = extendedKit.tiktok_caption || kit.caption_instagram || "";
+        includeHashtags = true;
+        includeLink = false; // TikTok usa "link en bio"
+        break;
+
+      case "email":
+        // Email: body completo (SIN hashtags)
+        text = kit.email_body || "";
+        includeHashtags = false;
+        includeLink = false; // El link ya viene en el email_body
+        break;
+
+      default:
+        // Compartir genérico: usa Instagram con todo incluido
+        text = kit.caption_instagram || "";
+        includeHashtags = true;
+        includeLink = true;
     }
-    text += `\n\n👉 Cómprame aquí:\n${productUrl}`;
+
+    // Agregar hashtags si aplica
+    if (includeHashtags && kit.hashtags?.length) {
+      const tagsToUse =
+        network === "tiktok" ? kit.hashtags.slice(0, 5) : kit.hashtags.slice(0, 20);
+      text += `\n\n${tagsToUse.join(" ")}`;
+    }
+
+    // Agregar link si aplica
+    if (includeLink) {
+      text += `\n\n🛒 ${productUrl}`;
+    }
+
     return text;
   };
 
@@ -124,7 +187,6 @@ export default function ProductLaunchKitViewer({
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      // Si el usuario canceló, no es error
       if (errorMsg.includes("cancel") || errorMsg.includes("AbortError")) {
         return true;
       }
@@ -133,12 +195,15 @@ export default function ProductLaunchKitViewer({
     return false;
   };
 
-  // 🚀 COMPARTIR TODO
+  // 🚀 COMPARTIR TODO (usa Instagram como base con todo)
   const shareEverything = async () => {
     setSharing(true);
     try {
-      const shareText = buildShareText(kit.caption_instagram || "");
-      const shared = await shareWithFile(shareText, "Mi producto");
+      const shareText = buildTextForNetwork("generic");
+      const shared = await shareWithFile(
+        shareText,
+        kit.caption_instagram?.slice(0, 50) || "Mi producto"
+      );
 
       if (shared) {
         setShareCount((c) => c + 1);
@@ -158,29 +223,26 @@ export default function ProductLaunchKitViewer({
     }
   };
 
+  // 📷 INSTAGRAM: Caption IG + hashtags
   const shareToInstagram = async () => {
-    const shareText = buildShareText(kit.caption_instagram || "");
-    const shared = await shareWithFile(shareText, "Instagram");
+    const shareText = buildTextForNetwork("instagram");
+    const shared = await shareWithFile(shareText, "Instagram Post");
 
     if (!shared) {
       await copyToClipboard(shareText);
       await handleDownload();
       setCopiedField("instagram");
       setTimeout(() => setCopiedField(null), 3000);
-
-      if (isMobile) {
-        window.open("https://www.instagram.com/", "_blank");
-      } else {
-        window.open("https://www.instagram.com/", "_blank");
-      }
+      window.open("https://www.instagram.com/", "_blank");
     } else {
       setShareCount((c) => c + 1);
     }
   };
 
+  // 📘 FACEBOOK: Caption FB con link (SIN hashtags como IG)
   const shareToFacebook = async () => {
-    const shareText = buildShareText(kit.caption_facebook || "");
-    const shared = await shareWithFile(shareText, "Facebook");
+    const shareText = buildTextForNetwork("facebook");
+    const shared = await shareWithFile(shareText, "Facebook Post");
 
     if (!shared) {
       const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
@@ -192,10 +254,9 @@ export default function ProductLaunchKitViewer({
     }
   };
 
+  // 💬 WHATSAPP: Mensaje personal (SIN hashtags)
   const shareToWhatsApp = async () => {
-    const shareText = buildShareText(
-      kit.whatsapp_message || kit.caption_instagram || ""
-    );
+    const shareText = buildTextForNetwork("whatsapp");
     const shared = await shareWithFile(shareText, "WhatsApp");
 
     if (!shared) {
@@ -206,8 +267,9 @@ export default function ProductLaunchKitViewer({
     }
   };
 
+  // 📱 WHATSAPP ESTADO
   const shareToWhatsAppStatus = async () => {
-    const shareText = buildShareText(kit.whatsapp_message || "");
+    const shareText = buildTextForNetwork("whatsapp");
     await copyToClipboard(shareText);
     await handleDownload();
     setCopiedField("wa-status");
@@ -218,8 +280,9 @@ export default function ProductLaunchKitViewer({
     );
   };
 
+  // 🎵 TIKTOK: Caption corto + 5 hashtags
   const shareToTikTok = async () => {
-    const shareText = buildShareText(kit.caption_instagram || "");
+    const shareText = buildTextForNetwork("tiktok");
     const shared = await shareWithFile(shareText, "TikTok");
 
     if (!shared) {
@@ -360,7 +423,7 @@ export default function ProductLaunchKitViewer({
                     🚀 Comparte con 1 tap
                   </h3>
                   <p className="mt-1 text-xs text-gray-600">
-                    Imagen + texto + link → todo listo · Puedes compartir múltiples veces
+                    Cada red usa su contenido personalizado · Puedes compartir varias veces
                   </p>
                 </div>
 
@@ -409,7 +472,7 @@ export default function ProductLaunchKitViewer({
                       <div className="flex-1 text-left min-w-0">
                         <div className="text-sm sm:text-base font-black truncate">Instagram</div>
                         <div className="text-[10px] opacity-90 truncate">
-                          {copiedField === "instagram" ? "✅ Copiado" : "Post + Reels"}
+                          {copiedField === "instagram" ? "✅ Copiado" : "+ 20 hashtags"}
                         </div>
                       </div>
                     </div>
@@ -423,7 +486,7 @@ export default function ProductLaunchKitViewer({
                       <div className="text-2xl sm:text-3xl">📘</div>
                       <div className="flex-1 text-left min-w-0">
                         <div className="text-sm sm:text-base font-black truncate">Facebook</div>
-                        <div className="text-[10px] opacity-90 truncate">Post con link</div>
+                        <div className="text-[10px] opacity-90 truncate">Sin hashtags + link</div>
                       </div>
                     </div>
                   </button>
@@ -436,7 +499,7 @@ export default function ProductLaunchKitViewer({
                       <div className="text-2xl sm:text-3xl">💬</div>
                       <div className="flex-1 text-left min-w-0">
                         <div className="text-sm sm:text-base font-black truncate">WhatsApp</div>
-                        <div className="text-[10px] opacity-90 truncate">Directo</div>
+                        <div className="text-[10px] opacity-90 truncate">Personal, sin #</div>
                       </div>
                     </div>
                   </button>
@@ -450,7 +513,7 @@ export default function ProductLaunchKitViewer({
                       <div className="flex-1 text-left min-w-0">
                         <div className="text-sm sm:text-base font-black truncate">Estado WA</div>
                         <div className="text-[10px] opacity-90 truncate">
-                          {copiedField === "wa-status" ? "✅ Copiado" : "Estados"}
+                          {copiedField === "wa-status" ? "✅ Copiado" : "Para Estados"}
                         </div>
                       </div>
                     </div>
@@ -465,7 +528,11 @@ export default function ProductLaunchKitViewer({
                       <div className="text-left">
                         <div className="text-sm sm:text-base font-black">TikTok</div>
                         <div className="text-[10px] opacity-90">
-                          {copiedField === "tiktok" ? "✅ Copiado" : "Caption listo"}
+                          {copiedField === "tiktok"
+                            ? "✅ Copiado"
+                            : extendedKit.tiktok_caption
+                            ? "Caption corto + 5 hashtags"
+                            : "Caption viral"}
                         </div>
                       </div>
                     </div>
@@ -483,6 +550,27 @@ export default function ProductLaunchKitViewer({
                     </div>
                   </div>
                 )}
+
+                {/* Guía visual de personalización */}
+                <div className="rounded-xl bg-purple-50 border-2 border-purple-200 p-3">
+                  <div className="text-[11px] font-bold text-purple-900 mb-2">
+                    📊 Cada red recibe contenido diferente:
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                    <div className="bg-white/60 rounded px-2 py-1">
+                      <strong>📷 IG:</strong> Aspiracional + 20 #
+                    </div>
+                    <div className="bg-white/60 rounded px-2 py-1">
+                      <strong>📘 FB:</strong> Informativo + link
+                    </div>
+                    <div className="bg-white/60 rounded px-2 py-1">
+                      <strong>💬 WA:</strong> Personal, sin #
+                    </div>
+                    <div className="bg-white/60 rounded px-2 py-1">
+                      <strong>🎵 TT:</strong> Corto + 5 #
+                    </div>
+                  </div>
+                </div>
 
                 {/* Botón regenerar */}
                 {onRegenerate && (
@@ -523,19 +611,17 @@ export default function ProductLaunchKitViewer({
                   <div className="mb-2 flex items-center gap-2">
                     <span className="text-xl">📷</span>
                     <span className="text-sm font-bold text-pink-900">Caption Instagram</span>
+                    <span className="ml-auto text-[10px] font-bold text-pink-600">+ 20 hashtags</span>
                   </div>
                   <p className="whitespace-pre-wrap text-sm text-gray-800">
                     {kit.caption_instagram}
                   </p>
-                  <div className="mt-3 pt-3 border-t border-pink-200 text-xs text-pink-700">
-                    <strong>+ Link:</strong> {productUrl}
-                  </div>
                 </div>
 
                 <div className="flex gap-2">
                   <button
                     onClick={() =>
-                      handleCopy(buildShareText(kit.caption_instagram!), "instagram")
+                      handleCopy(buildTextForNetwork("instagram"), "instagram")
                     }
                     className={`flex-1 rounded-xl py-3 text-sm font-bold ${
                       copiedField === "instagram" ? "bg-emerald-500 text-white" : "bg-gray-900 text-white"
@@ -560,19 +646,17 @@ export default function ProductLaunchKitViewer({
                   <div className="mb-2 flex items-center gap-2">
                     <span className="text-xl">📘</span>
                     <span className="text-sm font-bold text-blue-900">Caption Facebook</span>
+                    <span className="ml-auto text-[10px] font-bold text-blue-600">Sin hashtags + link</span>
                   </div>
                   <p className="whitespace-pre-wrap text-sm text-gray-800">
                     {kit.caption_facebook}
                   </p>
-                  <div className="mt-3 pt-3 border-t border-blue-200 text-xs text-blue-700">
-                    <strong>+ Link:</strong> {productUrl}
-                  </div>
                 </div>
 
                 <div className="flex gap-2">
                   <button
                     onClick={() =>
-                      handleCopy(buildShareText(kit.caption_facebook!), "facebook")
+                      handleCopy(buildTextForNetwork("facebook"), "facebook")
                     }
                     className={`flex-1 rounded-xl py-3 text-sm font-bold ${
                       copiedField === "facebook" ? "bg-emerald-500 text-white" : "bg-gray-900 text-white"
@@ -599,27 +683,46 @@ export default function ProductLaunchKitViewer({
                     <span className="text-sm font-bold text-purple-900">
                       {kit.hashtags.length} Hashtags
                     </span>
+                    <span className="ml-auto text-[10px] font-bold text-purple-600">Solo IG/TikTok</span>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {kit.hashtags.map((tag, i) => (
                       <span
                         key={i}
-                        className="rounded-full bg-white border border-purple-200 px-2 py-0.5 text-xs font-semibold text-purple-700"
+                        className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          i < 5
+                            ? "bg-purple-100 border border-purple-300 text-purple-800"
+                            : "bg-white border border-purple-200 text-purple-700"
+                        }`}
+                        title={i < 5 ? "Top 5 para TikTok" : "Solo para Instagram"}
                       >
                         {tag}
                       </span>
                     ))}
                   </div>
+                  <div className="mt-3 text-[10px] text-purple-700 bg-white/50 rounded px-2 py-1">
+                    💡 Los primeros 5 se usan en TikTok, todos en Instagram
+                  </div>
                 </div>
 
-                <button
-                  onClick={() => handleCopy(kit.hashtags!.join(" "), "hashtags")}
-                  className={`w-full rounded-xl py-3 text-sm font-bold ${
-                    copiedField === "hashtags" ? "bg-emerald-500 text-white" : "bg-gray-900 text-white"
-                  }`}
-                >
-                  {copiedField === "hashtags" ? "✅ Copiado" : "📋 Copiar todos"}
-                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handleCopy(kit.hashtags!.slice(0, 5).join(" "), "hashtags-5")}
+                    className={`rounded-xl py-3 text-xs font-bold ${
+                      copiedField === "hashtags-5" ? "bg-emerald-500 text-white" : "bg-gray-900 text-white"
+                    }`}
+                  >
+                    {copiedField === "hashtags-5" ? "✅ Copiado" : "📋 Top 5 (TikTok)"}
+                  </button>
+                  <button
+                    onClick={() => handleCopy(kit.hashtags!.join(" "), "hashtags")}
+                    className={`rounded-xl py-3 text-xs font-bold ${
+                      copiedField === "hashtags" ? "bg-emerald-500 text-white" : "bg-gray-900 text-white"
+                    }`}
+                  >
+                    {copiedField === "hashtags" ? "✅ Copiado" : "📋 Todos (IG)"}
+                  </button>
+                </div>
               </div>
             )}
 
@@ -630,21 +733,19 @@ export default function ProductLaunchKitViewer({
                   <div className="mb-2 flex items-center gap-2">
                     <span className="text-xl">💬</span>
                     <span className="text-sm font-bold text-emerald-900">Mensaje WhatsApp</span>
+                    <span className="ml-auto text-[10px] font-bold text-emerald-600">Sin hashtags · Personal</span>
                   </div>
                   <div className="rounded-xl bg-[#dcf8c6] p-3 shadow-sm">
                     <p className="whitespace-pre-wrap text-sm text-gray-800">
                       {kit.whatsapp_message}
                     </p>
                   </div>
-                  <div className="mt-3 pt-3 border-t border-emerald-200 text-xs text-emerald-700">
-                    <strong>+ Link:</strong> {productUrl}
-                  </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
                   <button
                     onClick={() =>
-                      handleCopy(buildShareText(kit.whatsapp_message!, false), "whatsapp")
+                      handleCopy(buildTextForNetwork("whatsapp"), "whatsapp")
                     }
                     className={`rounded-xl py-3 text-xs font-bold ${
                       copiedField === "whatsapp" ? "bg-emerald-500 text-white" : "bg-gray-900 text-white"
@@ -679,18 +780,14 @@ export default function ProductLaunchKitViewer({
                 <div className="rounded-2xl border-2 border-orange-200 bg-white p-4">
                   <div className="mb-2 flex items-center gap-2">
                     <span className="text-xl">📧</span>
-                    <span className="text-sm font-bold text-orange-900">Cuerpo</span>
+                    <span className="text-sm font-bold text-orange-900">Cuerpo del email</span>
+                    <span className="ml-auto text-[10px] font-bold text-orange-600">Formal + link</span>
                   </div>
                   <p className="whitespace-pre-wrap text-sm text-gray-800">{kit.email_body}</p>
-                  <div className="mt-3 pt-3 border-t border-orange-200 text-xs text-orange-700">
-                    <strong>+ Link:</strong> {productUrl}
-                  </div>
                 </div>
 
                 <button
-                  onClick={() =>
-                    handleCopy(`${kit.email_body}\n\n👉 ${productUrl}`, "email-body")
-                  }
+                  onClick={() => handleCopy(buildTextForNetwork("email"), "email-body")}
                   className={`w-full rounded-xl py-3 text-sm font-bold ${
                     copiedField === "email-body" ? "bg-emerald-500 text-white" : "bg-gray-900 text-white"
                   }`}
