@@ -1,100 +1,11 @@
 // src/lib/suppliers.ts
-// Cliente para gestionar proveedores
-// ├─ Suppliers (tabla suppliers) - registros simples usados en catalog_products
-// └─ SupplierProfiles (tabla supplier_profiles) - usuarios con login y panel
+// v22.6 — Sin código legacy + conteo real de productos
+// Cliente para gestionar proveedores (supplier_profiles)
 
 import { supabase } from "./supabase";
-import type { DbSupplier } from "../types/database";
-
 
 // ═══════════════════════════════════════════════════════════
-// 📦 PARTE 1 — SUPPLIERS (tabla suppliers)
-// Sistema viejo: registros simples asociados a catalog_products
-// ═══════════════════════════════════════════════════════════
-
-/**
- * Obtiene todos los proveedores (tabla suppliers, sistema legacy).
- */
-export type LegacySupplierInput = {
-  name: string;
-  contact_email: string;
-  contact_phone: string | null;
-  notes: string | null;
-  is_active: boolean;
-};
-export async function fetchSuppliers(): Promise<DbSupplier[]> {
-  const { data, error } = await supabase
-    .from("suppliers")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  return (data ?? []) as DbSupplier[];
-}
-
-/**
- * Crea un proveedor simple.
- */
-export async function createSupplier(
-  input: Omit<DbSupplier, "id" | "created_at">
-): Promise<DbSupplier> {
-  const { data, error } = await supabase
-    .from("suppliers")
-    .insert(input)
-    .select()
-    .single();
-
-  if (error) throw new Error(error.message);
-  return data as DbSupplier;
-}
-
-/**
- * Actualiza un proveedor.
- */
-export async function updateSupplier(
-  id: string,
-  input: Partial<Omit<DbSupplier, "id" | "created_at">>
-): Promise<DbSupplier> {
-  const { data, error } = await supabase
-    .from("suppliers")
-    .update(input)
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) throw new Error(error.message);
-  return data as DbSupplier;
-}
-
-/**
- * Activa/desactiva un proveedor.
- */
-export async function toggleSupplierActive(
-  id: string,
-  isActive: boolean
-): Promise<DbSupplier> {
-  const { data, error } = await supabase
-    .from("suppliers")
-    .update({ is_active: isActive })
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) throw new Error(error.message);
-  return data as DbSupplier;
-}
-
-/**
- * Elimina un proveedor.
- */
-export async function deleteSupplier(id: string): Promise<void> {
-  const { error } = await supabase.from("suppliers").delete().eq("id", id);
-  if (error) throw new Error(error.message);
-}
-
-// ═══════════════════════════════════════════════════════════
-// 🏭 PARTE 2 — SUPPLIER_PROFILES (nuevos usuarios proveedores)
-// Sistema nuevo: proveedores con login, panel propio, etc.
+// 🏭 SUPPLIER_PROFILES — Usuarios proveedores con login
 // ═══════════════════════════════════════════════════════════
 
 // ─── TIPOS ─────────────────────────────────────────────────
@@ -123,7 +34,6 @@ export interface SupplierProfile {
   admin_notes: string | null;
   approved_at: string | null;
   approved_by: string | null;
-  supplier_id: string | null; // FK opcional a suppliers legacy
   created_at: string;
   updated_at: string;
 }
@@ -147,10 +57,41 @@ export type SupplierInput = Omit<
   | "approved_at"
   | "approved_by"
   | "admin_notes"
-  | "supplier_id"
   | "created_at"
   | "updated_at"
 >;
+
+// ─── HELPER interno: enriquecer con conteo real ─────────────
+
+async function enrichWithProductCount<T extends { id: string }>(
+  suppliers: T[]
+): Promise<(T & { total_products: number })[]> {
+  if (!suppliers || suppliers.length === 0) return [];
+
+  const supplierIds = suppliers.map((s) => s.id);
+
+  const { data: products, error } = await supabase
+    .from("catalog_products")
+    .select("supplier_id")
+    .in("supplier_id", supplierIds)
+    .is("deleted_at", null);
+
+  if (error) {
+    console.warn("Error contando productos:", error);
+  }
+
+  const productCount: Record<string, number> = {};
+  (products ?? []).forEach((p) => {
+    if (p.supplier_id) {
+      productCount[p.supplier_id] = (productCount[p.supplier_id] ?? 0) + 1;
+    }
+  });
+
+  return suppliers.map((s) => ({
+    ...s,
+    total_products: productCount[s.id] ?? 0,
+  }));
+}
 
 // ─── MI PERFIL (proveedor autenticado) ─────────────────────
 
@@ -194,7 +135,7 @@ export async function upsertMySupplierProfile(
 // ─── ADMIN ─────────────────────────────────────────────────
 
 /**
- * Obtiene todos los proveedores-usuarios (con su perfil de auth).
+ * Obtiene todos los proveedores-usuarios (con su perfil de auth + stats reales).
  */
 export async function getAllSupplierProfiles(): Promise<SupplierWithProfile[]> {
   const { data, error } = await supabase
@@ -213,7 +154,10 @@ export async function getAllSupplierProfiles(): Promise<SupplierWithProfile[]> {
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as unknown as SupplierWithProfile[];
+  if (!data || data.length === 0) return [];
+
+  const enriched = await enrichWithProductCount(data as any[]);
+  return enriched as unknown as SupplierWithProfile[];
 }
 
 /**
@@ -238,7 +182,10 @@ export async function getPendingSupplierProfiles(): Promise<
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as unknown as SupplierWithProfile[];
+  if (!data || data.length === 0) return [];
+
+  const enriched = await enrichWithProductCount(data as any[]);
+  return enriched as unknown as SupplierWithProfile[];
 }
 
 /**
@@ -263,7 +210,10 @@ export async function getActiveSupplierProfiles(): Promise<
     .order("business_name", { ascending: true });
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as unknown as SupplierWithProfile[];
+  if (!data || data.length === 0) return [];
+
+  const enriched = await enrichWithProductCount(data as any[]);
+  return enriched as unknown as SupplierWithProfile[];
 }
 
 /**
@@ -288,7 +238,19 @@ export async function getSupplierProfileById(
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  return (data as unknown as SupplierWithProfile | null) ?? null;
+  if (!data) return null;
+
+  // Contar productos reales
+  const { count } = await supabase
+    .from("catalog_products")
+    .select("*", { count: "exact", head: true })
+    .eq("supplier_id", id)
+    .is("deleted_at", null);
+
+  return {
+    ...(data as any),
+    total_products: count ?? 0,
+  } as unknown as SupplierWithProfile;
 }
 
 /**
@@ -344,21 +306,6 @@ export async function updateSupplierNotes(
     .from("supplier_profiles")
     .update({ admin_notes: notes, updated_at: new Date().toISOString() })
     .eq("id", supplierId);
-  if (error) throw new Error(error.message);
-}
-
-/**
- * Vincula un supplier_profile con un supplier (legacy) existente.
- * Útil cuando un proveedor ya registrado en suppliers se une a la plataforma.
- */
-export async function linkSupplierProfileToLegacy(
-  supplierProfileId: string,
-  legacySupplierId: string
-): Promise<void> {
-  const { error } = await supabase
-    .from("supplier_profiles")
-    .update({ supplier_id: legacySupplierId })
-    .eq("id", supplierProfileId);
   if (error) throw new Error(error.message);
 }
 
