@@ -4,14 +4,14 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 
 const navItems = [
   { to: "/admin", label: "Resumen", icon: "📊", exact: true },
-  { to: "/admin/settings", label: "Configuración", icon: "⚙️" },      // 🆕 v19
-{ to: "/admin/discounts", label: "Descuentos", icon: "🎁" },        // 🆕 v19
+  { to: "/admin/settings", label: "Configuración", icon: "⚙️" },
+  { to: "/admin/discounts", label: "Descuentos", icon: "🎁" },
   { to: "/admin/catalog", label: "Catálogo", icon: "📦" },
   { to: "/admin/suppliers", label: "Proveedores", icon: "🏭" },
   { to: "/admin/users", label: "Usuarios", icon: "👥" },
   { to: "/admin/deliveries", label: "Deliveries", icon: "🛵" },
   { to: "/admin/delivery-payments", label: "Liq. Deliveries", icon: "💰" },
-  { to: "/admin/supplier-payouts", label: "Pagos a Proveedores", icon: "💵" }, // 🆕 v19
+  { to: "/admin/supplier-payouts", label: "Pagos a Proveedores", icon: "💵" },
   { to: "/admin/stores", label: "Tiendas", icon: "🏪" },
   { to: "/admin/orders", label: "Pedidos", icon: "🧾" },
   { to: "/admin/payments", label: "Métodos de pago", icon: "💳" },
@@ -20,6 +20,7 @@ const navItems = [
   { to: "/admin/whatsapp", label: "WhatsApp Bot", icon: "💬" },
   { to: "/admin/whatsapp-templates", label: "WA Templates", icon: "📝" },
   { to: "/admin/whatsapp-logs", label: "WA Logs", icon: "📋" },
+  { to: "/admin/ai", label: "AI & Créditos", icon: "🍌" },
 ];
 
 function isActivePath(pathname: string, to: string, exact?: boolean) {
@@ -159,9 +160,9 @@ export default function AdminLayout() {
             Administración
           </span>
         </div>
-<div className="mx-auto max-w-6xl w-full min-w-0">
-  <Outlet />
-</div>
+        <div className="mx-auto max-w-6xl w-full min-w-0">
+          <Outlet />
+        </div>
       </main>
     </div>
   );

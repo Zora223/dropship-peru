@@ -8,6 +8,7 @@ import { Routes, Route } from "react-router-dom";
 import AdminSupplierPayoutsPage from "./pages/admin/AdminSupplierPayoutsPage";
 import AdminSettingsPage from "./pages/admin/AdminSettingsPage";
 import AdminDiscountsPage from "./pages/admin/AdminDiscountsPage";
+import AdminAIPage from "./pages/admin/AdminAIPage";
 
 // Páginas legales
 import TermsPage from "./pages/legal/TermsPage";
@@ -128,6 +129,7 @@ export default function AppRoutes() {
         <Route path="whatsapp" element={<AdminWhatsappPage />} />
         <Route path="whatsapp-templates" element={<AdminWhatsappTemplatesPage />} />
         <Route path="whatsapp-logs" element={<AdminWhatsappLogsPage />} />
+        <Route path="ai" element={<AdminAIPage />} />
       </Route>
 
       {/* Vendor */}
