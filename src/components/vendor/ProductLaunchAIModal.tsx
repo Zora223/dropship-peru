@@ -1,5 +1,5 @@
 // src/components/vendor/ProductLaunchAIModal.tsx
-// 🍌 v22.3 - Con reutilización de kits + no gasta créditos si ya existe
+// 🍌 v22.6 - Con reutilización de kits + prop onCreditsUpdate
 
 import { useState, useEffect } from "react";
 import {
@@ -17,6 +17,7 @@ interface ProductLaunchAIModalProps {
   creditsRemaining: number;
   plan: string;
   onSuccess?: (kit: LaunchKit) => void;
+  onCreditsUpdate?: (credits: number) => void; // 🆕 v22.6
 }
 
 type Step = "checking" | "reuse_option" | "confirm" | "generating" | "completed" | "error";
@@ -39,6 +40,7 @@ export default function ProductLaunchAIModal({
   creditsRemaining: initialCredits,
   plan,
   onSuccess,
+  onCreditsUpdate, // 🆕
 }: ProductLaunchAIModalProps) {
   const [step, setStep] = useState<Step>("checking");
   const [progress, setProgress] = useState(0);
@@ -116,6 +118,7 @@ export default function ProductLaunchAIModal({
 
       setResultKit(response.kit);
       setCredits(response.credits_remaining);
+      onCreditsUpdate?.(response.credits_remaining); // 🆕 Notifica al padre
       setProgress(100);
       setCurrentStage(GENERATION_STAGES.length - 1);
 
