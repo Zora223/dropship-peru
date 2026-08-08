@@ -1,6 +1,7 @@
 // ============================================================
-// PRODUCT FORM MODAL (Supplier) - v2 con validaciones estrictas
-// 🆕 v16 FASE 3 - Igual calidad que vendor pero MÁS estricto
+// PRODUCT FORM MODAL (Supplier) - v22.6
+// 🆕 Límites ampliados: 15 fotos / 10MB
+// 🆕 Fix bug: input file resetea correctamente al eliminar
 // ============================================================
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -28,8 +29,9 @@ interface ProductFormModalProps {
   onSaved: () => void;
 }
 
-const MAX_IMAGES = 8;
-const MAX_IMAGE_MB = 5;
+// 🆕 v22.6 — Límites ampliados
+const MAX_IMAGES = 15;
+const MAX_IMAGE_MB = 10;
 const MIN_IMAGE_DIMENSION = 400;
 
 const EMPTY_FORM: ProductFormData = {
@@ -133,9 +135,10 @@ export default function ProductFormModal({
   ): Promise<{ valid: boolean; reason?: string }> => {
     return new Promise((resolve) => {
       if (file.size > MAX_IMAGE_MB * 1024 * 1024) {
+        const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
         resolve({
           valid: false,
-          reason: `"${file.name}" pesa más de ${MAX_IMAGE_MB}MB`,
+          reason: `"${file.name}" pesa ${sizeMB}MB (máx ${MAX_IMAGE_MB}MB)`,
         });
         return;
       }
@@ -174,7 +177,13 @@ export default function ProductFormModal({
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const files = e.target.files;
-    if (!files || files.length === 0) return;
+    // 🆕 FIX: Resetear input INMEDIATAMENTE para permitir re-selección del mismo archivo
+    const inputEl = e.target;
+
+    if (!files || files.length === 0) {
+      inputEl.value = "";
+      return;
+    }
 
     const remaining = MAX_IMAGES - form.images.length;
     if (remaining <= 0) {
@@ -182,11 +191,19 @@ export default function ProductFormModal({
         "Límite alcanzado",
         `Máximo ${MAX_IMAGES} fotos por producto`
       );
-      e.target.value = "";
+      inputEl.value = "";
       return;
     }
 
     const filesArray = Array.from(files).slice(0, remaining);
+
+    if (files.length > remaining) {
+      toast.warning(
+        "Algunas fotos se ignoraron",
+        `Solo caben ${remaining} más (máximo ${MAX_IMAGES} en total)`
+      );
+    }
+
     const rejected: string[] = [];
     const validFiles: File[] = [];
 
@@ -208,7 +225,7 @@ export default function ProductFormModal({
     }
 
     if (validFiles.length === 0) {
-      e.target.value = "";
+      inputEl.value = "";
       return;
     }
 
@@ -235,7 +252,7 @@ export default function ProductFormModal({
       );
     } finally {
       setUploading(false);
-      e.target.value = "";
+      inputEl.value = "";
     }
   };
 
@@ -244,8 +261,18 @@ export default function ProductFormModal({
       ...prev,
       images: prev.images.filter((img) => img !== url),
     }));
+
+    // 🆕 FIX: Resetear input file al eliminar
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+
     // Borrar del storage en background
-    await deleteProductImage(url);
+    try {
+      await deleteProductImage(url);
+    } catch (err) {
+      console.warn("No se pudo borrar del storage:", err);
+    }
   };
 
   const makePrincipal = (url: string) => {
