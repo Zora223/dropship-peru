@@ -1,5 +1,5 @@
 // src/components/vendor/ProductLaunchKitViewer.tsx
-// 🎨 v22.12 - Modo NATIVO simple con Web Share API
+// 🎨 v22.12.1 - Web Share API nativo + foto en móvil
 
 import { useState, useEffect } from "react";
 import { QRCodeCanvas } from "qrcode.react";
@@ -41,7 +41,6 @@ interface ExtendedKit extends LaunchKit {
   tiktok_caption?: string;
 }
 
-// Mensajes promocionales para la tienda
 const PROMO_MESSAGES = [
   {
     id: "new_collection",
@@ -114,6 +113,23 @@ const PROMO_MESSAGES = [
   },
 ];
 
+// ─────────────────────────────────────────────
+// Helpers fuera del componente (no cambian entre renders)
+// ─────────────────────────────────────────────
+
+/** Descarga la imagen del kit y la convierte en File para Web Share API */
+async function fetchImageFile(imageUrl: string): Promise<File | null> {
+  try {
+    const response = await fetch(imageUrl);
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    const ext = blob.type.includes("png") ? "png" : "jpg";
+    return new File([blob], `producto.${ext}`, { type: blob.type });
+  } catch {
+    return null;
+  }
+}
+
 export default function ProductLaunchKitViewer({
   isOpen,
   kit,
@@ -124,7 +140,9 @@ export default function ProductLaunchKitViewer({
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [imageFullscreen, setImageFullscreen] = useState(false);
   const [store, setStore] = useState<StoreData | null>(null);
-  const [selectedPromo, setSelectedPromo] = useState<string>("new_collection");
+  const [selectedPromo, setSelectedPromo] = useState("new_collection");
+  // Indica que shareNative está cargando la imagen
+  const [sharing, setSharing] = useState<string | null>(null);
 
   const categoryInfo = getCategoryInfo(kit.detected_category);
   const extendedKit = kit as ExtendedKit;
@@ -148,7 +166,7 @@ export default function ProductLaunchKitViewer({
   const storeUrl = store?.slug ? `${baseUrl}/tienda/${store.slug}` : baseUrl;
 
   // ═══════════════════════════════════════════════════════════
-  // HELPERS
+  // HELPERS UI
   // ═══════════════════════════════════════════════════════════
 
   const handleCopy = async (text: string, field: string) => {
@@ -169,63 +187,76 @@ export default function ProductLaunchKitViewer({
   };
 
   // ═══════════════════════════════════════════════════════════
-  // 🚀 COMPARTIR NATIVO (Web Share API)
+  // 🚀 SHARE NATIVO — texto + foto (móvil) / solo texto (desktop)
   // ═══════════════════════════════════════════════════════════
 
-  const shareNative = async (text: string, title = "Mira este producto") => {
-    // Si el navegador soporta share API → usarlo (móvil abre menú nativo)
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title,
-          text,
-          url: productUrl,
-        });
-      } catch (err) {
-        // Usuario canceló, no hacer nada
-        const msg = err instanceof Error ? err.message : String(err);
-        if (!msg.includes("cancel") && !msg.includes("Abort")) {
-          console.warn("Share error:", err);
+  /**
+   * Intenta compartir con foto (Android / iOS con Web Share API Level 2).
+   * Si no soporta archivos → comparte solo texto + URL.
+   * Si no soporta share en absoluto → copia al portapapeles.
+   */
+  const shareNative = async (
+    text: string,
+    shareId: string,
+    title = "Mira este producto",
+    targetUrl = productUrl
+  ) => {
+    setSharing(shareId);
+
+    try {
+      const imageUrl = kit.enhanced_image_url || kit.original_image_url;
+
+      // ── Intento 1: Share con archivo (móvil moderno) ──────────────
+      if (imageUrl && navigator.canShare) {
+        const file = await fetchImageFile(imageUrl);
+        if (file) {
+          const dataWithFile: ShareData = {
+            title,
+            text,
+            files: [file],
+          };
+          if (navigator.canShare(dataWithFile)) {
+            await navigator.share(dataWithFile);
+            return; // ✅ éxito con foto
+          }
         }
       }
-    } else {
-      // Fallback: copiar al portapapeles
-      await copyToClipboard(`${text}\n\n${productUrl}`);
-      setCopiedField("nativeshare");
-      setTimeout(() => setCopiedField(null), 2000);
-      alert("📋 Texto copiado al portapapeles");
+
+      // ── Intento 2: Share sin archivo pero con URL ─────────────────
+      if (navigator.share) {
+        await navigator.share({ title, text, url: targetUrl });
+        return; // ✅ éxito sin foto
+      }
+
+      // ── Fallback: copiar al portapapeles ──────────────────────────
+      await copyToClipboard(`${text}\n\n${targetUrl}`);
+      setCopiedField(shareId);
+      setTimeout(() => setCopiedField(null), 2500);
+    } catch (err) {
+      // El usuario canceló → ignorar silenciosamente
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.toLowerCase().includes("cancel") && !msg.toLowerCase().includes("abort")) {
+        console.warn("shareNative error:", err);
+      }
+    } finally {
+      setSharing(null);
     }
   };
 
-  const shareStoreNative = async (text: string, title = "Mira mi tienda") => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title,
-          text,
-          url: storeUrl,
-        });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (!msg.includes("cancel") && !msg.includes("Abort")) {
-          console.warn("Share error:", err);
-        }
-      }
-    } else {
-      await copyToClipboard(text);
-      setCopiedField("store-native");
-      setTimeout(() => setCopiedField(null), 2000);
-      alert("📋 Texto copiado al portapapeles");
-    }
-  };
+  /** Variante para compartir la tienda (URL = storeUrl) */
+  const shareStoreNative = (text: string, title?: string) =>
+    shareNative(text, "store-share", title ?? store?.name ?? "Mi tienda", storeUrl);
 
   // ═══════════════════════════════════════════════════════════
-  // 💬 WhatsApp directo (link universal wa.me)
+  // 💬 WhatsApp (link universal — funciona en móvil y desktop)
   // ═══════════════════════════════════════════════════════════
 
   const openWhatsApp = (text: string) => {
-    const waUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.open(waUrl, "_blank", "noopener,noreferrer");
+    window.open(
+      `https://wa.me/?text=${encodeURIComponent(text)}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
   };
 
   // ═══════════════════════════════════════════════════════════
@@ -239,33 +270,71 @@ export default function ProductLaunchKitViewer({
   };
 
   const copyStoreMessage = async () => {
-    const msg = getSelectedPromoMessage();
-    await copyToClipboard(msg);
-    setCopiedField("promo-msg");
-    setTimeout(() => setCopiedField(null), 2000);
+    await handleCopy(getSelectedPromoMessage(), "promo-msg");
   };
 
   const copyStoreLink = async () => {
-    await copyToClipboard(storeUrl);
-    setCopiedField("store-link");
-    setTimeout(() => setCopiedField(null), 2000);
+    await handleCopy(storeUrl, "store-link");
   };
+
+  // ═══════════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════════
 
   if (!isOpen) return null;
 
   const TABS: { id: TabId; label: string; icon: string; hasContent: boolean }[] = [
-    { id: "publish", label: "🚀 PUBLICAR", icon: "🚀", hasContent: true },
-    { id: "store", label: "🏪 MI TIENDA", icon: "🏪", hasContent: !!store },
-    { id: "image", label: "Imagen", icon: "📸", hasContent: !!kit.enhanced_image_url },
-    { id: "instagram", label: "Instagram", icon: "📷", hasContent: !!kit.caption_instagram },
-    { id: "facebook", label: "Facebook", icon: "📘", hasContent: !!kit.caption_facebook },
-    { id: "hashtags", label: "Hashtags", icon: "🏷️", hasContent: !!kit.hashtags?.length },
-    { id: "whatsapp", label: "WhatsApp", icon: "💬", hasContent: !!kit.whatsapp_message },
-    { id: "email", label: "Email", icon: "📧", hasContent: !!kit.email_body },
+    { id: "publish",   label: "🚀 PUBLICAR", icon: "🚀", hasContent: true },
+    { id: "store",     label: "🏪 MI TIENDA", icon: "🏪", hasContent: !!store },
+    { id: "image",     label: "Imagen",      icon: "📸", hasContent: !!kit.enhanced_image_url },
+    { id: "instagram", label: "Instagram",   icon: "📷", hasContent: !!kit.caption_instagram },
+    { id: "facebook",  label: "Facebook",    icon: "📘", hasContent: !!kit.caption_facebook },
+    { id: "hashtags",  label: "Hashtags",    icon: "🏷️", hasContent: !!kit.hashtags?.length },
+    { id: "whatsapp",  label: "WhatsApp",    icon: "💬", hasContent: !!kit.whatsapp_message },
+    { id: "email",     label: "Email",       icon: "📧", hasContent: !!kit.email_body },
   ];
+
+  // ── Botón de compartir reutilizable ───────────────────────
+  const ShareBtn = ({
+    text,
+    shareId,
+    title,
+    className,
+    children,
+  }: {
+    text: string;
+    shareId: string;
+    title?: string;
+    className: string;
+    children: React.ReactNode;
+  }) => (
+    <button
+      onClick={() => shareNative(text, shareId, title)}
+      disabled={sharing === shareId}
+      className={`${className} disabled:opacity-60 disabled:cursor-wait transition`}
+    >
+      {sharing === shareId ? "⏳" : children}
+    </button>
+  );
+
+  // ── Botón copiar reutilizable ─────────────────────────────
+  const CopyBtn = ({
+    text,
+    field,
+    className,
+  }: {
+    text: string;
+    field: string;
+    className: string;
+  }) => (
+    <button onClick={() => handleCopy(text, field)} className={`${className} transition`}>
+      {copiedField === field ? "✅ Copiado" : "📋 Copiar"}
+    </button>
+  );
 
   return (
     <>
+      {/* ── Fullscreen imagen ─────────────────────────────── */}
       {imageFullscreen && kit.enhanced_image_url && (
         <div
           className="fixed inset-0 z-60 flex items-center justify-center bg-black/95 p-4"
@@ -285,12 +354,13 @@ export default function ProductLaunchKitViewer({
         </div>
       )}
 
+      {/* ── Modal principal ───────────────────────────────── */}
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-2 sm:p-4">
         <div
           className="relative w-full max-w-4xl h-[95vh] sm:h-[90vh] overflow-hidden rounded-2xl sm:rounded-3xl bg-white shadow-2xl flex flex-col"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Header */}
+          {/* ── Header ────────────────────────────────────── */}
           <div className="relative bg-linear-to-br from-emerald-500 via-teal-500 to-cyan-500 p-4 text-white shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 min-w-0">
@@ -304,7 +374,6 @@ export default function ProductLaunchKitViewer({
                   </h2>
                 </div>
               </div>
-
               <button
                 onClick={onClose}
                 className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-xl text-white hover:bg-white/30 shrink-0"
@@ -331,7 +400,7 @@ export default function ProductLaunchKitViewer({
             </div>
           </div>
 
-          {/* Tabs */}
+          {/* ── Tabs ──────────────────────────────────────── */}
           <div className="border-b border-gray-200 bg-gray-50 overflow-x-auto shrink-0">
             <div className="flex min-w-max">
               {TABS.map((tab) => (
@@ -358,9 +427,12 @@ export default function ProductLaunchKitViewer({
             </div>
           </div>
 
-          {/* Content */}
+          {/* ── Content ───────────────────────────────────── */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 min-h-0">
-            {/* 🚀 PUBLICAR - MODO NATIVO SIMPLE */}
+
+            {/* ══════════════════════════════════════════════
+                🚀 PUBLICAR
+            ══════════════════════════════════════════════ */}
             {activeTab === "publish" && (
               <div className="space-y-4">
                 <div className="text-center">
@@ -368,120 +440,101 @@ export default function ProductLaunchKitViewer({
                     🚀 Compartir producto
                   </h3>
                   <p className="mt-1 text-xs text-gray-600">
-                    Click en cualquier red → se abre el menú nativo
+                    En móvil → abre menú nativo con foto incluida 📸
                   </p>
                 </div>
 
-                {/* Preview del producto */}
-                <div className="rounded-xl overflow-hidden bg-gray-100 border-2 border-gray-200 max-w-50 mx-auto">
+                {/* Preview */}
+                <div
+                  className="rounded-xl overflow-hidden bg-gray-100 border-2 border-gray-200 max-w-[200px] mx-auto cursor-pointer"
+                  onClick={() => setImageFullscreen(true)}
+                >
                   <img
                     src={kit.enhanced_image_url || kit.original_image_url}
                     alt="Producto"
-                    className="w-full h-auto object-contain aspect-square cursor-pointer"
-                    onClick={() => setImageFullscreen(true)}
+                    className="w-full h-auto object-contain aspect-square"
                   />
                 </div>
 
-                {/* 📷 INSTAGRAM */}
-                <div className="rounded-2xl bg-linear-to-br from-purple-50 to-pink-50 border-2 border-pink-200 p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-2xl">📷</span>
-                    <span className="text-sm font-black text-pink-900">Instagram</span>
-                  </div>
-                  <p className="text-xs text-gray-700 mb-3 line-clamp-3 whitespace-pre-wrap">
-                    {kit.caption_instagram}
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() =>
-                        handleCopy(
-                          kit.caption_instagram + "\n\n" + (kit.hashtags?.join(" ") || ""),
-                          "ig-copy"
-                        )
-                      }
-                      className={`flex-1 rounded-xl py-2.5 text-xs font-bold transition ${
-                        copiedField === "ig-copy"
-                          ? "bg-emerald-500 text-white"
-                          : "bg-white border-2 border-pink-300 text-pink-700 hover:bg-pink-50"
-                      }`}
-                    >
-                      {copiedField === "ig-copy" ? "✅ Copiado" : "📋 Copiar"}
-                    </button>
-                    <button
-                      onClick={() =>
-                        shareNative(
-                          kit.caption_instagram + "\n\n" + (kit.hashtags?.join(" ") || ""),
-                          "Instagram"
-                        )
-                      }
+                {/* ─ Instagram ─ */}
+                {kit.caption_instagram && (
+                  <NetworkCard
+                    emoji="📷"
+                    label="Instagram"
+                    labelColor="text-pink-900"
+                    bg="bg-linear-to-br from-purple-50 to-pink-50"
+                    border="border-pink-200"
+                    preview={kit.caption_instagram}
+                  >
+                    <CopyBtn
+                      text={kit.caption_instagram + "\n\n" + (kit.hashtags?.join(" ") ?? "")}
+                      field="ig-copy"
+                      className="flex-1 rounded-xl py-2.5 text-xs font-bold bg-white border-2 border-pink-300 text-pink-700 hover:bg-pink-50"
+                    />
+                    <ShareBtn
+                      text={kit.caption_instagram + "\n\n" + (kit.hashtags?.join(" ") ?? "")}
+                      shareId="ig-share"
+                      title="Instagram"
                       className="flex-1 rounded-xl bg-linear-to-r from-purple-500 to-pink-500 py-2.5 text-xs font-bold text-white shadow"
                     >
                       📤 Compartir
-                    </button>
-                  </div>
-                </div>
+                    </ShareBtn>
+                  </NetworkCard>
+                )}
 
-                {/* 📘 FACEBOOK */}
-                <div className="rounded-2xl bg-linear-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-2xl">📘</span>
-                    <span className="text-sm font-black text-blue-900">Facebook</span>
-                  </div>
-                  <p className="text-xs text-gray-700 mb-3 line-clamp-3 whitespace-pre-wrap">
-                    {kit.caption_facebook}
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleCopy(kit.caption_facebook || "", "fb-copy")}
-                      className={`flex-1 rounded-xl py-2.5 text-xs font-bold transition ${
-                        copiedField === "fb-copy"
-                          ? "bg-emerald-500 text-white"
-                          : "bg-white border-2 border-blue-300 text-blue-700 hover:bg-blue-50"
-                      }`}
-                    >
-                      {copiedField === "fb-copy" ? "✅ Copiado" : "📋 Copiar"}
-                    </button>
-                    <button
-                      onClick={() => shareNative(kit.caption_facebook || "", "Facebook")}
+                {/* ─ Facebook ─ */}
+                {kit.caption_facebook && (
+                  <NetworkCard
+                    emoji="📘"
+                    label="Facebook"
+                    labelColor="text-blue-900"
+                    bg="bg-linear-to-br from-blue-50 to-indigo-50"
+                    border="border-blue-200"
+                    preview={kit.caption_facebook}
+                  >
+                    <CopyBtn
+                      text={kit.caption_facebook}
+                      field="fb-copy"
+                      className="flex-1 rounded-xl py-2.5 text-xs font-bold bg-white border-2 border-blue-300 text-blue-700 hover:bg-blue-50"
+                    />
+                    <ShareBtn
+                      text={kit.caption_facebook}
+                      shareId="fb-share"
+                      title="Facebook"
                       className="flex-1 rounded-xl bg-blue-600 py-2.5 text-xs font-bold text-white shadow"
                     >
                       📤 Compartir
-                    </button>
-                  </div>
-                </div>
+                    </ShareBtn>
+                  </NetworkCard>
+                )}
 
-                {/* 💬 WHATSAPP */}
-                <div className="rounded-2xl bg-linear-to-br from-emerald-50 to-green-50 border-2 border-emerald-200 p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-2xl">💬</span>
-                    <span className="text-sm font-black text-emerald-900">WhatsApp</span>
-                  </div>
-                  <p className="text-xs text-gray-700 mb-3 line-clamp-3 whitespace-pre-wrap">
-                    {kit.whatsapp_message}
-                  </p>
-                  <div className="flex gap-2">
+                {/* ─ WhatsApp ─ */}
+                {kit.whatsapp_message && (
+                  <NetworkCard
+                    emoji="💬"
+                    label="WhatsApp"
+                    labelColor="text-emerald-900"
+                    bg="bg-linear-to-br from-emerald-50 to-green-50"
+                    border="border-emerald-200"
+                    preview={kit.whatsapp_message}
+                  >
+                    <CopyBtn
+                      text={kit.whatsapp_message}
+                      field="wa-copy"
+                      className="flex-1 rounded-xl py-2.5 text-xs font-bold bg-white border-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                    />
                     <button
-                      onClick={() => handleCopy(kit.whatsapp_message || "", "wa-copy")}
-                      className={`flex-1 rounded-xl py-2.5 text-xs font-bold transition ${
-                        copiedField === "wa-copy"
-                          ? "bg-emerald-500 text-white"
-                          : "bg-white border-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-                      }`}
-                    >
-                      {copiedField === "wa-copy" ? "✅ Copiado" : "📋 Copiar"}
-                    </button>
-                    <button
-                      onClick={() => openWhatsApp(kit.whatsapp_message || "")}
-                      className="flex-1 rounded-xl bg-emerald-500 py-2.5 text-xs font-bold text-white shadow"
+                      onClick={() => openWhatsApp(kit.whatsapp_message!)}
+                      className="flex-1 rounded-xl bg-emerald-500 py-2.5 text-xs font-bold text-white shadow transition hover:bg-emerald-600"
                     >
                       💬 Enviar
                     </button>
-                  </div>
-                </div>
+                  </NetworkCard>
+                )}
 
-                {/* 🎵 TIKTOK */}
+                {/* ─ TikTok ─ */}
                 {extendedKit.tiktok_caption && (
-                  <div className="rounded-2xl bg-linear-to-br from-gray-900 to-black p-4 text-white">
+                  <div className="rounded-2xl bg-linear-to-br from-gray-900 to-black p-4 text-white border-2 border-gray-700">
                     <div className="flex items-center gap-2 mb-3">
                       <span className="text-2xl">🎵</span>
                       <span className="text-sm font-black">TikTok</span>
@@ -490,58 +543,55 @@ export default function ProductLaunchKitViewer({
                       {extendedKit.tiktok_caption}
                     </p>
                     <div className="flex gap-2">
-                      <button
-                        onClick={() =>
-                          handleCopy(
-                            extendedKit.tiktok_caption +
-                              "\n\n" +
-                              (kit.hashtags?.slice(0, 5).join(" ") || ""),
-                            "tt-copy"
-                          )
+                      <CopyBtn
+                        text={
+                          extendedKit.tiktok_caption +
+                          "\n\n" +
+                          (kit.hashtags?.slice(0, 5).join(" ") ?? "")
                         }
-                        className={`flex-1 rounded-xl py-2.5 text-xs font-bold transition ${
-                          copiedField === "tt-copy"
-                            ? "bg-emerald-500 text-white"
-                            : "bg-white/20 text-white hover:bg-white/30"
-                        }`}
-                      >
-                        {copiedField === "tt-copy" ? "✅ Copiado" : "📋 Copiar"}
-                      </button>
-                      <button
-                        onClick={() =>
-                          shareNative(extendedKit.tiktok_caption || "", "TikTok")
+                        field="tt-copy"
+                        className="flex-1 rounded-xl py-2.5 text-xs font-bold bg-white/20 text-white hover:bg-white/30"
+                      />
+                      <ShareBtn
+                        text={
+                          extendedKit.tiktok_caption +
+                          "\n\n" +
+                          (kit.hashtags?.slice(0, 5).join(" ") ?? "")
                         }
+                        shareId="tt-share"
+                        title="TikTok"
                         className="flex-1 rounded-xl bg-white text-black py-2.5 text-xs font-bold shadow"
                       >
                         📤 Compartir
-                      </button>
+                      </ShareBtn>
                     </div>
                   </div>
                 )}
 
-                {/* 📧 EMAIL */}
-                <div className="rounded-2xl bg-linear-to-br from-orange-50 to-red-50 border-2 border-orange-200 p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-2xl">📧</span>
-                    <span className="text-sm font-black text-orange-900">Email</span>
+                {/* ─ Email ─ */}
+                {kit.email_body && (
+                  <div className="rounded-2xl bg-linear-to-br from-orange-50 to-red-50 border-2 border-orange-200 p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-2xl">📧</span>
+                      <span className="text-sm font-black text-orange-900">Email</span>
+                    </div>
+                    <p className="text-xs text-gray-700 mb-3 line-clamp-2">
+                      <strong>Asunto:</strong> {kit.email_subject}
+                    </p>
+                    <button
+                      onClick={() => {
+                        window.location.href = `mailto:?subject=${encodeURIComponent(
+                          kit.email_subject ?? ""
+                        )}&body=${encodeURIComponent(kit.email_body ?? "")}`;
+                      }}
+                      className="w-full rounded-xl bg-orange-500 py-2.5 text-xs font-bold text-white shadow hover:bg-orange-600 transition"
+                    >
+                      📧 Abrir email
+                    </button>
                   </div>
-                  <p className="text-xs text-gray-700 mb-3 line-clamp-2">
-                    <strong>Asunto:</strong> {kit.email_subject}
-                  </p>
-                  <button
-                    onClick={() => {
-                      const mailto = `mailto:?subject=${encodeURIComponent(
-                        kit.email_subject || ""
-                      )}&body=${encodeURIComponent(kit.email_body || "")}`;
-                      window.location.href = mailto;
-                    }}
-                    className="w-full rounded-xl bg-orange-500 py-2.5 text-xs font-bold text-white shadow"
-                  >
-                    📧 Abrir email
-                  </button>
-                </div>
+                )}
 
-                {/* Link del producto */}
+                {/* ─ Link del producto ─ */}
                 {store?.slug && (
                   <div className="rounded-xl bg-gray-50 border border-gray-200 p-3">
                     <div className="text-[11px] font-bold text-gray-700 mb-1">
@@ -565,6 +615,24 @@ export default function ProductLaunchKitViewer({
                   </div>
                 )}
 
+                {/* ─ Tienda CTA ─ */}
+                {store && (
+                  <button
+                    onClick={() => setActiveTab("store")}
+                    className="w-full rounded-xl border-2 border-blue-300 bg-linear-to-br from-blue-50 to-cyan-50 p-4 text-blue-900 hover:shadow-md transition"
+                  >
+                    <div className="flex items-center gap-3 justify-center">
+                      <span className="text-3xl">🏪</span>
+                      <div className="text-left">
+                        <div className="text-sm font-black">¿Quieres promocionar tu tienda?</div>
+                        <div className="text-[11px] opacity-80">
+                          Mensajes listos + QR + link → Click aquí
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                )}
+
                 {onRegenerate && (
                   <button
                     onClick={onRegenerate}
@@ -576,7 +644,9 @@ export default function ProductLaunchKitViewer({
               </div>
             )}
 
-            {/* 🏪 MI TIENDA */}
+            {/* ══════════════════════════════════════════════
+                🏪 MI TIENDA
+            ══════════════════════════════════════════════ */}
             {activeTab === "store" && store && (
               <div className="space-y-4">
                 <div className="text-center">
@@ -623,7 +693,7 @@ export default function ProductLaunchKitViewer({
                         </button>
                         <button
                           onClick={downloadQR}
-                          className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-gray-800"
+                          className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-gray-800 transition"
                         >
                           📥 Descargar QR
                         </button>
@@ -659,9 +729,7 @@ export default function ProductLaunchKitViewer({
                 <div className="rounded-2xl border-2 border-emerald-200 bg-linear-to-br from-emerald-50 to-teal-50 p-4">
                   <div className="mb-2 flex items-center gap-2">
                     <span className="text-xl">👀</span>
-                    <span className="text-sm font-bold text-emerald-900">
-                      Vista previa
-                    </span>
+                    <span className="text-sm font-bold text-emerald-900">Vista previa</span>
                   </div>
                   <div className="rounded-xl bg-[#dcf8c6] p-3 shadow-sm">
                     <p className="whitespace-pre-wrap text-sm text-gray-800">
@@ -670,7 +738,7 @@ export default function ProductLaunchKitViewer({
                   </div>
                 </div>
 
-                {/* Botones de compartir NATIVOS */}
+                {/* Botones compartir tienda */}
                 <div className="flex gap-2">
                   <button
                     onClick={copyStoreMessage}
@@ -684,24 +752,21 @@ export default function ProductLaunchKitViewer({
                   </button>
                   <button
                     onClick={() => openWhatsApp(getSelectedPromoMessage())}
-                    className="flex-1 rounded-xl bg-emerald-500 py-3 text-xs font-bold text-white shadow"
+                    className="flex-1 rounded-xl bg-emerald-500 py-3 text-xs font-bold text-white shadow hover:bg-emerald-600 transition"
                   >
                     💬 WhatsApp
                   </button>
                   <button
-                    onClick={() =>
-                      shareStoreNative(getSelectedPromoMessage(), store.name)
-                    }
-                    className="flex-1 rounded-xl bg-linear-to-r from-purple-500 to-pink-500 py-3 text-xs font-bold text-white shadow"
+                    onClick={() => shareStoreNative(getSelectedPromoMessage())}
+                    disabled={sharing === "store-share"}
+                    className="flex-1 rounded-xl bg-linear-to-r from-purple-500 to-pink-500 py-3 text-xs font-bold text-white shadow disabled:opacity-60 disabled:cursor-wait transition"
                   >
-                    📤 Compartir
+                    {sharing === "store-share" ? "⏳" : "📤 Compartir"}
                   </button>
                 </div>
 
                 <div className="rounded-xl bg-amber-50 border-2 border-amber-200 p-3">
-                  <div className="text-[11px] font-bold text-amber-900 mb-2">
-                    💡 Tips:
-                  </div>
+                  <div className="text-[11px] font-bold text-amber-900 mb-2">💡 Tips:</div>
                   <ul className="space-y-1 text-[11px] text-amber-800">
                     <li>📱 Comparte el QR en tarjetas de presentación</li>
                     <li>🖨️ Imprime el QR y pégalo en tu local</li>
@@ -711,106 +776,102 @@ export default function ProductLaunchKitViewer({
               </div>
             )}
 
-            {/* IMAGEN */}
+            {/* ══════════════════════════════════════════════
+                📸 IMAGEN
+            ══════════════════════════════════════════════ */}
             {activeTab === "image" && kit.enhanced_image_url && (
               <div className="space-y-4">
-                <div className="rounded-2xl overflow-hidden bg-gray-100 border-2 border-gray-200 max-w-md mx-auto">
+                <div
+                  className="rounded-2xl overflow-hidden bg-gray-100 border-2 border-gray-200 max-w-md mx-auto cursor-pointer"
+                  onClick={() => setImageFullscreen(true)}
+                >
                   <img
                     src={kit.enhanced_image_url}
                     alt="Producto"
-                    className="w-full h-auto object-contain aspect-square cursor-pointer"
-                    onClick={() => setImageFullscreen(true)}
+                    className="w-full h-auto object-contain aspect-square"
                   />
                 </div>
                 <p className="text-center text-xs text-gray-500">
-                  Click en la imagen para verla en pantalla completa
+                  Toca la imagen para pantalla completa
                 </p>
+                <ShareBtn
+                  text="Mira este producto"
+                  shareId="img-share"
+                  title="Producto"
+                  className="w-full rounded-xl bg-linear-to-r from-emerald-500 to-teal-500 py-3 text-sm font-bold text-white shadow-lg"
+                >
+                  📤 Compartir imagen
+                </ShareBtn>
               </div>
             )}
 
-            {/* INSTAGRAM */}
+            {/* ══════════════════════════════════════════════
+                📷 INSTAGRAM
+            ══════════════════════════════════════════════ */}
             {activeTab === "instagram" && kit.caption_instagram && (
               <div className="space-y-4">
                 <div className="rounded-2xl border-2 border-pink-200 bg-linear-to-br from-pink-50 to-purple-50 p-4">
                   <div className="mb-2 flex items-center gap-2">
                     <span className="text-xl">📷</span>
-                    <span className="text-sm font-bold text-pink-900">
-                      Caption Instagram
-                    </span>
+                    <span className="text-sm font-bold text-pink-900">Caption Instagram</span>
                   </div>
                   <p className="whitespace-pre-wrap text-sm text-gray-800">
                     {kit.caption_instagram}
                   </p>
                 </div>
-
                 <div className="flex gap-2">
-                  <button
-                    onClick={() =>
-                      handleCopy(
-                        kit.caption_instagram + "\n\n" + (kit.hashtags?.join(" ") || ""),
-                        "instagram-copy"
-                      )
-                    }
-                    className={`flex-1 rounded-xl py-3 text-sm font-bold ${
-                      copiedField === "instagram-copy"
-                        ? "bg-emerald-500 text-white"
-                        : "bg-gray-900 text-white"
-                    }`}
-                  >
-                    {copiedField === "instagram-copy" ? "✅ Copiado" : "📋 Copiar"}
-                  </button>
-                  <button
-                    onClick={() =>
-                      shareNative(
-                        kit.caption_instagram + "\n\n" + (kit.hashtags?.join(" ") || ""),
-                        "Instagram"
-                      )
-                    }
+                  <CopyBtn
+                    text={kit.caption_instagram + "\n\n" + (kit.hashtags?.join(" ") ?? "")}
+                    field="instagram-copy"
+                    className="flex-1 rounded-xl py-3 text-sm font-bold bg-gray-900 text-white"
+                  />
+                  <ShareBtn
+                    text={kit.caption_instagram + "\n\n" + (kit.hashtags?.join(" ") ?? "")}
+                    shareId="ig-tab-share"
+                    title="Instagram"
                     className="flex-1 rounded-xl bg-linear-to-r from-purple-500 to-pink-500 py-3 text-sm font-bold text-white shadow"
                   >
                     📤 Compartir
-                  </button>
+                  </ShareBtn>
                 </div>
               </div>
             )}
 
-            {/* FACEBOOK */}
+            {/* ══════════════════════════════════════════════
+                📘 FACEBOOK
+            ══════════════════════════════════════════════ */}
             {activeTab === "facebook" && kit.caption_facebook && (
               <div className="space-y-4">
                 <div className="rounded-2xl border-2 border-blue-200 bg-linear-to-br from-blue-50 to-indigo-50 p-4">
                   <div className="mb-2 flex items-center gap-2">
                     <span className="text-xl">📘</span>
-                    <span className="text-sm font-bold text-blue-900">
-                      Caption Facebook
-                    </span>
+                    <span className="text-sm font-bold text-blue-900">Caption Facebook</span>
                   </div>
                   <p className="whitespace-pre-wrap text-sm text-gray-800">
                     {kit.caption_facebook}
                   </p>
                 </div>
-
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => handleCopy(kit.caption_facebook || "", "facebook-copy")}
-                    className={`flex-1 rounded-xl py-3 text-sm font-bold ${
-                      copiedField === "facebook-copy"
-                        ? "bg-emerald-500 text-white"
-                        : "bg-gray-900 text-white"
-                    }`}
-                  >
-                    {copiedField === "facebook-copy" ? "✅ Copiado" : "📋 Copiar"}
-                  </button>
-                  <button
-                    onClick={() => shareNative(kit.caption_facebook || "", "Facebook")}
+                  <CopyBtn
+                    text={kit.caption_facebook}
+                    field="facebook-copy"
+                    className="flex-1 rounded-xl py-3 text-sm font-bold bg-gray-900 text-white"
+                  />
+                  <ShareBtn
+                    text={kit.caption_facebook}
+                    shareId="fb-tab-share"
+                    title="Facebook"
                     className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white shadow"
                   >
                     📤 Compartir
-                  </button>
+                  </ShareBtn>
                 </div>
               </div>
             )}
 
-            {/* HASHTAGS */}
+            {/* ══════════════════════════════════════════════
+                🏷️ HASHTAGS
+            ══════════════════════════════════════════════ */}
             {activeTab === "hashtags" && kit.hashtags && kit.hashtags.length > 0 && (
               <div className="space-y-4">
                 <div className="rounded-2xl border-2 border-purple-200 bg-linear-to-br from-purple-50 to-pink-50 p-4">
@@ -835,43 +896,34 @@ export default function ProductLaunchKitViewer({
                     ))}
                   </div>
                 </div>
-
                 <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() =>
-                      handleCopy(kit.hashtags!.slice(0, 5).join(" "), "hashtags-5")
-                    }
-                    className={`rounded-xl py-3 text-xs font-bold ${
-                      copiedField === "hashtags-5"
-                        ? "bg-emerald-500 text-white"
-                        : "bg-gray-900 text-white"
-                    }`}
-                  >
-                    {copiedField === "hashtags-5" ? "✅ Copiado" : "📋 Top 5 (TikTok)"}
-                  </button>
-                  <button
-                    onClick={() => handleCopy(kit.hashtags!.join(" "), "hashtags")}
-                    className={`rounded-xl py-3 text-xs font-bold ${
-                      copiedField === "hashtags"
-                        ? "bg-emerald-500 text-white"
-                        : "bg-gray-900 text-white"
-                    }`}
-                  >
-                    {copiedField === "hashtags" ? "✅ Copiado" : "📋 Todos (IG)"}
-                  </button>
+                  <CopyBtn
+                    text={kit.hashtags.slice(0, 5).join(" ")}
+                    field="hashtags-5"
+                    className="rounded-xl py-3 text-xs font-bold bg-gray-900 text-white"
+                  />
+                  <CopyBtn
+                    text={kit.hashtags.join(" ")}
+                    field="hashtags-all"
+                    className="rounded-xl py-3 text-xs font-bold bg-gray-700 text-white"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[10px] text-center text-gray-500">
+                  <span>Top 5 (TikTok)</span>
+                  <span>Todos (Instagram)</span>
                 </div>
               </div>
             )}
 
-            {/* WHATSAPP */}
+            {/* ══════════════════════════════════════════════
+                💬 WHATSAPP
+            ══════════════════════════════════════════════ */}
             {activeTab === "whatsapp" && kit.whatsapp_message && (
               <div className="space-y-4">
                 <div className="rounded-2xl border-2 border-emerald-200 bg-linear-to-br from-emerald-50 to-green-50 p-4">
                   <div className="mb-2 flex items-center gap-2">
                     <span className="text-xl">💬</span>
-                    <span className="text-sm font-bold text-emerald-900">
-                      Mensaje WhatsApp
-                    </span>
+                    <span className="text-sm font-bold text-emerald-900">Mensaje WhatsApp</span>
                   </div>
                   <div className="rounded-xl bg-[#dcf8c6] p-3 shadow-sm">
                     <p className="whitespace-pre-wrap text-sm text-gray-800">
@@ -879,21 +931,15 @@ export default function ProductLaunchKitViewer({
                     </p>
                   </div>
                 </div>
-
                 <div className="flex gap-2">
+                  <CopyBtn
+                    text={kit.whatsapp_message}
+                    field="wa-tab-copy"
+                    className="flex-1 rounded-xl py-3 text-sm font-bold bg-gray-900 text-white"
+                  />
                   <button
-                    onClick={() => handleCopy(kit.whatsapp_message || "", "wa-tab-copy")}
-                    className={`flex-1 rounded-xl py-3 text-sm font-bold ${
-                      copiedField === "wa-tab-copy"
-                        ? "bg-emerald-500 text-white"
-                        : "bg-gray-900 text-white"
-                    }`}
-                  >
-                    {copiedField === "wa-tab-copy" ? "✅ Copiado" : "📋 Copiar"}
-                  </button>
-                  <button
-                    onClick={() => openWhatsApp(kit.whatsapp_message || "")}
-                    className="flex-1 rounded-xl bg-emerald-500 py-3 text-sm font-bold text-white shadow"
+                    onClick={() => openWhatsApp(kit.whatsapp_message!)}
+                    className="flex-1 rounded-xl bg-emerald-500 py-3 text-sm font-bold text-white shadow hover:bg-emerald-600 transition"
                   >
                     💬 Enviar
                   </button>
@@ -901,7 +947,9 @@ export default function ProductLaunchKitViewer({
               </div>
             )}
 
-            {/* EMAIL */}
+            {/* ══════════════════════════════════════════════
+                📧 EMAIL
+            ══════════════════════════════════════════════ */}
             {activeTab === "email" && kit.email_body && (
               <div className="space-y-4">
                 <div className="rounded-xl border-2 border-orange-200 bg-orange-50 p-3">
@@ -910,38 +958,26 @@ export default function ProductLaunchKitViewer({
                   </div>
                   <p className="text-sm font-bold text-gray-900">{kit.email_subject}</p>
                 </div>
-
                 <div className="rounded-2xl border-2 border-orange-200 bg-white p-4">
                   <div className="mb-2 flex items-center gap-2">
                     <span className="text-xl">📧</span>
-                    <span className="text-sm font-bold text-orange-900">
-                      Cuerpo del email
-                    </span>
+                    <span className="text-sm font-bold text-orange-900">Cuerpo del email</span>
                   </div>
-                  <p className="whitespace-pre-wrap text-sm text-gray-800">
-                    {kit.email_body}
-                  </p>
+                  <p className="whitespace-pre-wrap text-sm text-gray-800">{kit.email_body}</p>
                 </div>
-
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => handleCopy(kit.email_body || "", "email-body")}
-                    className={`flex-1 rounded-xl py-3 text-sm font-bold ${
-                      copiedField === "email-body"
-                        ? "bg-emerald-500 text-white"
-                        : "bg-gray-900 text-white"
-                    }`}
-                  >
-                    {copiedField === "email-body" ? "✅ Copiado" : "📋 Copiar"}
-                  </button>
+                  <CopyBtn
+                    text={kit.email_body}
+                    field="email-body"
+                    className="flex-1 rounded-xl py-3 text-sm font-bold bg-gray-900 text-white"
+                  />
                   <button
                     onClick={() => {
-                      const mailto = `mailto:?subject=${encodeURIComponent(
-                        kit.email_subject || ""
-                      )}&body=${encodeURIComponent(kit.email_body || "")}`;
-                      window.location.href = mailto;
+                      window.location.href = `mailto:?subject=${encodeURIComponent(
+                        kit.email_subject ?? ""
+                      )}&body=${encodeURIComponent(kit.email_body ?? "")}`;
                     }}
-                    className="flex-1 rounded-xl bg-orange-500 py-3 text-sm font-bold text-white shadow"
+                    className="flex-1 rounded-xl bg-orange-500 py-3 text-sm font-bold text-white shadow hover:bg-orange-600 transition"
                   >
                     📧 Abrir email
                   </button>
@@ -950,7 +986,7 @@ export default function ProductLaunchKitViewer({
             )}
           </div>
 
-          {/* Footer */}
+          {/* ── Footer ────────────────────────────────────── */}
           <div className="border-t border-gray-200 bg-gray-50 p-3 shrink-0">
             <div className="flex items-center justify-between gap-4">
               <p className="text-[10px] text-gray-500">🚀 Powered by Groq</p>
@@ -965,5 +1001,37 @@ export default function ProductLaunchKitViewer({
         </div>
       </div>
     </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Sub-componente: tarjeta de red social (evita repetición)
+// ─────────────────────────────────────────────────────────────
+function NetworkCard({
+  emoji,
+  label,
+  labelColor,
+  bg,
+  border,
+  preview,
+  children,
+}: {
+  emoji: string;
+  label: string;
+  labelColor: string;
+  bg: string;
+  border: string;
+  preview: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`rounded-2xl ${bg} border-2 ${border} p-4`}>
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-2xl">{emoji}</span>
+        <span className={`text-sm font-black ${labelColor}`}>{label}</span>
+      </div>
+      <p className="text-xs text-gray-700 mb-3 line-clamp-3 whitespace-pre-wrap">{preview}</p>
+      <div className="flex gap-2">{children}</div>
+    </div>
   );
 }
