@@ -237,3 +237,27 @@ export interface DbProductReview {
   avg_rating: number;
   review_count: number;
 }
+// 🆕 v22.13 - Vista con stock real
+export interface DbProductWithRealStock {
+  id: string;
+  store_id: string;
+  source: "catalog" | "own";
+  catalog_product_id: string | null;
+  name: string;
+  description: string | null;
+  price: number;
+  compare_at_price: number | null;
+  stock: number;
+  sku: string | null;
+  category: string | null;
+  images: string[];
+  is_active: boolean;
+  featured: boolean;
+  created_at: string;
+  updated_at: string;
+  // 🆕 Campos de la vista
+  real_stock: number;
+  catalog_stock: number | null;
+  catalog_is_active: boolean | null;
+  catalog_deleted_at: string | null;
+}
