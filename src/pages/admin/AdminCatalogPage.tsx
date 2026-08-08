@@ -5,12 +5,14 @@ import {
   deleteCatalogProduct,
   toggleCatalogProductActive,
 } from "../../lib/catalog";
-import { fetchSuppliers } from "../../lib/suppliers";
-import type { DbCatalogProduct, DbSupplier } from "../../types/database";
+import { getActiveSupplierProfiles } from "../../lib/suppliers";
+import type { DbCatalogProduct } from "../../types/database";
 
 export default function AdminCatalogPage() {
   const [products, setProducts] = useState<DbCatalogProduct[]>([]);
-  const [suppliers, setSuppliers] = useState<DbSupplier[]>([]);
+  const [suppliers, setSuppliers] = useState<
+    { id: string; business_name: string }[]
+  >([]);
 
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -30,11 +32,16 @@ export default function AdminCatalogPage() {
 
       const [productsData, suppliersData] = await Promise.all([
         fetchCatalogProducts(),
-        fetchSuppliers(),
+        getActiveSupplierProfiles(),
       ]);
 
       setProducts(productsData);
-      setSuppliers(suppliersData);
+      setSuppliers(
+        suppliersData.map((s) => ({
+          id: s.id,
+          business_name: s.business_name,
+        }))
+      );
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : "Error al cargar datos");
@@ -50,11 +57,7 @@ export default function AdminCatalogPage() {
   const categories = useMemo(() => {
     return [
       "Todas",
-      ...new Set(
-        products
-          .map((product) => product.category)
-          .filter(Boolean)
-      ),
+      ...new Set(products.map((product) => product.category).filter(Boolean)),
     ];
   }, [products]);
 
@@ -157,9 +160,7 @@ export default function AdminCatalogPage() {
       }, 3000);
     } catch (err) {
       console.error(err);
-      setError(
-        err instanceof Error ? err.message : "Error al cambiar estado"
-      );
+      setError(err instanceof Error ? err.message : "Error al cambiar estado");
     } finally {
       setActionLoadingId(null);
     }
@@ -167,7 +168,7 @@ export default function AdminCatalogPage() {
 
   async function handleDelete(product: DbCatalogProduct) {
     const confirmed = window.confirm(
-      `¿Eliminar "${product.name}" del catálogo maestro? Esta acción no se puede deshacer.`
+      `¿Eliminar "${product.name}" del catálogo maestro?\n\nSe marcará como eliminado (soft delete). Los pedidos históricos se mantienen.`
     );
 
     if (!confirmed) return;
@@ -188,9 +189,7 @@ export default function AdminCatalogPage() {
       }, 3000);
     } catch (err) {
       console.error(err);
-      setError(
-        err instanceof Error ? err.message : "Error al eliminar producto"
-      );
+      setError(err instanceof Error ? err.message : "Error al eliminar producto");
     } finally {
       setActionLoadingId(null);
     }
@@ -221,7 +220,7 @@ export default function AdminCatalogPage() {
           onClick={openNew}
           disabled={suppliers.length === 0}
           className="rounded-xl bg-gray-900 px-5 py-2.5 text-sm font-bold text-white shadow transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-          title={suppliers.length === 0 ? "Primero crea un proveedor" : ""}
+          title={suppliers.length === 0 ? "Primero necesitas proveedores activos" : ""}
         >
           + Nuevo producto
         </button>
@@ -241,8 +240,8 @@ export default function AdminCatalogPage() {
 
       {suppliers.length === 0 && (
         <div className="rounded-2xl border-l-4 border-amber-500 bg-amber-50 p-4 text-sm text-amber-900">
-          ⚠️ <strong>No tienes proveedores registrados.</strong> Ve a la sección
-          “Proveedores” y crea al menos uno antes de agregar productos al catálogo.
+          ⚠️ <strong>No hay proveedores activos.</strong> Los proveedores deben
+          registrarse y ser aprobados antes de que puedas crear productos.
         </div>
       )}
 
@@ -316,10 +315,7 @@ export default function AdminCatalogPage() {
         <CatalogProductForm
           onClose={closeForm}
           onSaved={handleSaved}
-          suppliers={suppliers.map((supplier) => ({
-            id: supplier.id,
-            name: supplier.name,
-          }))}
+          suppliers={suppliers}
           initial={editing}
         />
       )}

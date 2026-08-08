@@ -7,7 +7,6 @@ const navItems = [
   { to: "/admin/settings", label: "Configuración", icon: "⚙️" },
   { to: "/admin/discounts", label: "Descuentos", icon: "🎁" },
   { to: "/admin/catalog", label: "Catálogo", icon: "📦" },
-  { to: "/admin/suppliers", label: "Proveedores", icon: "🏭" },
   { to: "/admin/users", label: "Usuarios", icon: "👥" },
   { to: "/admin/deliveries", label: "Deliveries", icon: "🛵" },
   { to: "/admin/delivery-payments", label: "Liq. Deliveries", icon: "💰" },

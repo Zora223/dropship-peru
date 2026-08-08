@@ -26,16 +26,6 @@ export interface DbProfile {
   updated_at: string;
 }
 
-export interface DbSupplier {
-  id: string;
-  name: string;
-  contact_email: string;
-  contact_phone: string | null;
-  notes: string | null;
-  is_active: boolean;
-  created_at: string;
-}
-
 export interface DbCatalogProduct {
   id: string;
   supplier_id: string;
@@ -48,6 +38,7 @@ export interface DbCatalogProduct {
   category: string;
   images: string[];
   is_active: boolean;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -135,7 +126,6 @@ export interface DbOrder {
   customer_email: string;
   customer_phone: string;
 
-  // 🆕 v16 - shipping_address ahora puede ser null (pickup)
   shipping_address: DbShippingAddress | null;
 
   items: DbOrderItem[];
@@ -149,7 +139,6 @@ export interface DbOrder {
   created_at: string;
   updated_at: string;
 
-  // 🆕 Campos de delivery (Sesión 6 - FASE 1)
   delivery_id: string | null;
   delivery_status:
     | "unassigned"
@@ -162,7 +151,6 @@ export interface DbOrder {
   delivery_delivered_at: string | null;
   delivery_notes: string | null;
 
-  // 🆕 v16 FASE 3 - Modo de entrega + fechas/franjas
   delivery_mode: DeliveryMode | null;
   delivery_date: string | null;
   delivery_time_slot: string | null;
@@ -170,18 +158,15 @@ export interface DbOrder {
   pickup_location_id: string | null;
   pickup_time_slot: string | null;
 
-  // 🆕 v18 - Código pickup (nombre real BD)
   pickup_confirmation_code: string | null;
   pickup_ready_at: string | null;
   pickup_completed_at: string | null;
   pickup_address: any | null;
 
-  // 🆕 v19 - Descuentos gamificados
   discount_amount: number;
   discount_pct: number;
   discount_tier: string | null;
 
-  // 🆕 v20 - Sistema de pagos escrow
   cart_type: CartType | null;
   payment_receiver: PaymentReceiver;
   delivery_debt: number;

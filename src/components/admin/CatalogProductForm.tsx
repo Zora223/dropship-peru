@@ -6,7 +6,7 @@ import type { DbCatalogProduct } from "../../types/database";
 interface CatalogProductFormProps {
   onClose: () => void;
   onSaved: (product: DbCatalogProduct) => void;
-  suppliers: { id: string; name: string }[];
+  suppliers: { id: string; business_name: string }[];
   initial?: DbCatalogProduct | null;
 }
 
@@ -53,7 +53,11 @@ export default function CatalogProductForm({
     }
   }, [initial]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >
+  ) => {
     const { name, value, type } = e.target;
     setForm((prev) => ({
       ...prev,
@@ -102,10 +106,13 @@ export default function CatalogProductForm({
     setSaving(true);
 
     try {
-      // 1. Subir nuevas imágenes
       let newImageUrls: string[] = [];
       if (pendingFiles.length > 0) {
-        newImageUrls = await uploadMultipleFiles("product-images", pendingFiles, "catalog");
+        newImageUrls = await uploadMultipleFiles(
+          "product-images",
+          pendingFiles,
+          "catalog"
+        );
       }
 
       const allImages = [...existingImages, ...newImageUrls];
@@ -131,7 +138,6 @@ export default function CatalogProductForm({
         result = await createCatalogProduct(payload);
       }
 
-      // 2. Eliminar las imágenes removidas del Storage
       for (const url of removedExistingImages) {
         try {
           await deleteFileByUrl("product-images", url);
@@ -140,7 +146,6 @@ export default function CatalogProductForm({
         }
       }
 
-      // Liberar URLs locales
       previews.forEach((url) => URL.revokeObjectURL(url));
 
       onSaved(result);
@@ -164,9 +169,16 @@ export default function CatalogProductForm({
       >
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white p-6">
           <h2 className="text-xl font-bold text-gray-900">
-            {isEditing ? "Editar producto del catálogo" : "Nuevo producto en catálogo"}
+            {isEditing
+              ? "Editar producto del catálogo"
+              : "Nuevo producto en catálogo"}
           </h2>
-          <button onClick={onClose} className="text-2xl text-gray-400 hover:text-gray-600">×</button>
+          <button
+            onClick={onClose}
+            className="text-2xl text-gray-400 hover:text-gray-600"
+          >
+            ×
+          </button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5 p-6">
@@ -178,11 +190,20 @@ export default function CatalogProductForm({
 
           {/* Fotos */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700">Fotos del producto</label>
+            <label className="block text-sm font-semibold text-gray-700">
+              Fotos del producto
+            </label>
             <div className="mt-2 grid grid-cols-4 gap-3">
               {existingImages.map((url, i) => (
-                <div key={`existing-${i}`} className="group relative aspect-square overflow-hidden rounded-xl border border-gray-200">
-                  <img src={url} alt={`Imagen ${i + 1}`} className="h-full w-full object-cover" />
+                <div
+                  key={`existing-${i}`}
+                  className="group relative aspect-square overflow-hidden rounded-xl border border-gray-200"
+                >
+                  <img
+                    src={url}
+                    alt={`Imagen ${i + 1}`}
+                    className="h-full w-full object-cover"
+                  />
                   {i === 0 && (
                     <span className="absolute left-1 top-1 rounded-full bg-rose-500 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white shadow">
                       Principal
@@ -199,8 +220,15 @@ export default function CatalogProductForm({
               ))}
 
               {previews.map((url, i) => (
-                <div key={`pending-${i}`} className="group relative aspect-square overflow-hidden rounded-xl border-2 border-emerald-300">
-                  <img src={url} alt={`Nueva ${i + 1}`} className="h-full w-full object-cover" />
+                <div
+                  key={`pending-${i}`}
+                  className="group relative aspect-square overflow-hidden rounded-xl border-2 border-emerald-300"
+                >
+                  <img
+                    src={url}
+                    alt={`Nueva ${i + 1}`}
+                    className="h-full w-full object-cover"
+                  />
                   <span className="absolute left-1 top-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white shadow">
                     Nueva
                   </span>
@@ -224,14 +252,20 @@ export default function CatalogProductForm({
                   disabled={saving}
                 />
                 <div className="text-2xl text-gray-400">+</div>
-                <div className="mt-1 text-[10px] font-semibold text-gray-500">Agregar</div>
+                <div className="mt-1 text-[10px] font-semibold text-gray-500">
+                  Agregar
+                </div>
               </label>
             </div>
-            <p className="mt-2 text-xs text-gray-400">JPG, PNG o WebP. Máximo 5 MB cada una.</p>
+            <p className="mt-2 text-xs text-gray-400">
+              JPG, PNG o WebP. Máximo 5 MB cada una.
+            </p>
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-gray-700">Proveedor</label>
+            <label className="block text-sm font-semibold text-gray-700">
+              Proveedor
+            </label>
             <select
               name="supplier_id"
               required
@@ -239,15 +273,21 @@ export default function CatalogProductForm({
               onChange={handleChange}
               className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
             >
-              {suppliers.length === 0 && <option value="">Sin proveedores registrados</option>}
+              {suppliers.length === 0 && (
+                <option value="">Sin proveedores activos</option>
+              )}
               {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
+                <option key={s.id} value={s.id}>
+                  {s.business_name}
+                </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-gray-700">Nombre del producto</label>
+            <label className="block text-sm font-semibold text-gray-700">
+              Nombre del producto
+            </label>
             <input
               name="name"
               required
@@ -259,7 +299,9 @@ export default function CatalogProductForm({
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-gray-700">Descripción</label>
+            <label className="block text-sm font-semibold text-gray-700">
+              Descripción
+            </label>
             <textarea
               name="description"
               rows={3}
@@ -272,7 +314,9 @@ export default function CatalogProductForm({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-semibold text-gray-700">Precio base (S/)</label>
+              <label className="block text-sm font-semibold text-gray-700">
+                Precio base (S/)
+              </label>
               <input
                 name="base_price"
                 type="number"
@@ -283,10 +327,14 @@ export default function CatalogProductForm({
                 className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
                 placeholder="0.00"
               />
-              <p className="mt-1 text-xs text-gray-400">Lo que cobra el proveedor</p>
+              <p className="mt-1 text-xs text-gray-400">
+                Lo que cobra el proveedor
+              </p>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700">Precio sugerido (S/)</label>
+              <label className="block text-sm font-semibold text-gray-700">
+                Precio sugerido (S/)
+              </label>
               <input
                 name="suggested_price"
                 type="number"
@@ -297,13 +345,17 @@ export default function CatalogProductForm({
                 className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
                 placeholder="0.00"
               />
-              <p className="mt-1 text-xs text-gray-400">Precio recomendado al vendor</p>
+              <p className="mt-1 text-xs text-gray-400">
+                Precio recomendado al vendor
+              </p>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-semibold text-gray-700">Stock disponible</label>
+              <label className="block text-sm font-semibold text-gray-700">
+                Stock disponible
+              </label>
               <input
                 name="stock"
                 type="number"
@@ -315,7 +367,9 @@ export default function CatalogProductForm({
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700">SKU (único)</label>
+              <label className="block text-sm font-semibold text-gray-700">
+                SKU (único)
+              </label>
               <input
                 name="sku"
                 required
@@ -328,7 +382,9 @@ export default function CatalogProductForm({
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-gray-700">Categoría</label>
+            <label className="block text-sm font-semibold text-gray-700">
+              Categoría
+            </label>
             <input
               name="category"
               required
@@ -348,8 +404,12 @@ export default function CatalogProductForm({
               className="h-5 w-5 rounded border-gray-300 text-rose-600 focus:ring-rose-500"
             />
             <div>
-              <div className="text-sm font-semibold text-gray-900">Producto activo</div>
-              <div className="text-xs text-gray-500">Disponible para que los vendors lo importen</div>
+              <div className="text-sm font-semibold text-gray-900">
+                Producto activo
+              </div>
+              <div className="text-xs text-gray-500">
+                Disponible para que los vendors lo importen
+              </div>
             </div>
           </label>
 

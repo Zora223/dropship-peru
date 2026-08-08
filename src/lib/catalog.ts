@@ -1,13 +1,13 @@
 import { supabase } from "./supabase";
 import { deleteFileByUrl } from "./storage";
-import type { DbCatalogProduct, DbSupplier } from "../types/database";
+import type { DbCatalogProduct } from "../types/database";
 
 // ============================================
-// TYPES 🆕 v16
+// TYPES 🆕 v22.6 (sin suppliers legacy)
 // ============================================
 
 /**
- * 🆕 Catalog product con info del proveedor incluida
+ * Catalog product con info del proveedor incluida
  */
 export interface CatalogProductWithSupplier extends DbCatalogProduct {
   supplier?: {
@@ -25,8 +25,7 @@ export interface CatalogProductWithSupplier extends DbCatalogProduct {
 // ============================================
 
 /**
- * 🆕 v16: Ahora trae info del proveedor asociado.
- * Usa join a supplier_profiles vía supplier_id.
+ * Trae productos del catálogo con info del proveedor (supplier_profiles)
  */
 export async function fetchCatalogProducts(): Promise<
   CatalogProductWithSupplier[]
@@ -46,6 +45,7 @@ export async function fetchCatalogProducts(): Promise<
       )
     `
     )
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -102,7 +102,29 @@ export async function updateCatalogProduct(
   return data as DbCatalogProduct;
 }
 
+/**
+ * SOFT DELETE — no borra físicamente
+ */
 export async function deleteCatalogProduct(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("catalog_products")
+    .update({
+      deleted_at: new Date().toISOString(),
+      is_active: false,
+    })
+    .eq("id", id);
+
+  if (error) {
+    console.error("Error deleting catalog product:", error);
+    throw error;
+  }
+}
+
+/**
+ * HARD DELETE — borra físicamente + limpia imágenes
+ * Solo para uso admin cuando quiere limpieza total
+ */
+export async function hardDeleteCatalogProduct(id: string): Promise<void> {
   // Primero obtener las imágenes para eliminarlas del storage
   const { data: product } = await supabase
     .from("catalog_products")
@@ -111,9 +133,13 @@ export async function deleteCatalogProduct(id: string): Promise<void> {
     .single();
 
   // Eliminar el producto
-  const { error } = await supabase.from("catalog_products").delete().eq("id", id);
+  const { error } = await supabase
+    .from("catalog_products")
+    .delete()
+    .eq("id", id);
+
   if (error) {
-    console.error("Error deleting catalog product:", error);
+    console.error("Error hard-deleting catalog product:", error);
     throw error;
   }
 
@@ -138,22 +164,4 @@ export async function toggleCatalogProductActive(
     .update({ is_active })
     .eq("id", id);
   if (error) throw error;
-}
-
-// ============================================
-// SUPPLIERS (auxiliar, para el select del form)
-// ============================================
-
-export async function fetchSuppliers(): Promise<DbSupplier[]> {
-  const { data, error } = await supabase
-    .from("suppliers")
-    .select("*")
-    .eq("is_active", true)
-    .order("name");
-
-  if (error) {
-    console.error("Error fetching suppliers:", error);
-    throw error;
-  }
-  return data ?? [];
 }
