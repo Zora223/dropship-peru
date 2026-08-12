@@ -1,8 +1,12 @@
+// src/pages/OrderSuccessPage.tsx
+// 🔥 v22.14 - Fix QR según payment_receiver (catalog=platform, own=vendor)
+
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { fetchOrderSuccessData } from "../lib/order-success";
 import WhatsappFloatingButton from "../components/WhatsappFloatingButton";
 import PaymentReceiptModal from "../components/PaymentReceiptModal";
+import PaymentQrDisplay from "../components/PaymentQrDisplay";
 import type { ValidationResponse } from "../lib/payment-validation";
 import type {
   DbOrder,
@@ -116,7 +120,11 @@ function buildPaymentMessage(order: DbOrder, storeName: string): string {
   ].join("\n");
 }
 
-function PaymentDetails({
+/**
+ * 🔥 Componente legacy — solo se usa para métodos que NO tienen QR
+ * (tarjeta y contra-entrega)
+ */
+function PaymentDetailsLegacy({
   order,
   store,
   method,
@@ -146,88 +154,6 @@ function PaymentDetails({
       </div>
 
       <div className="mt-5 space-y-3 text-sm">
-        {(order.payment_method === "yape" ||
-          order.payment_method === "plin") && (
-          <>
-            {config.phone && (
-              <div className="flex justify-between gap-4 rounded-xl bg-gray-50 p-3">
-                <span className="text-gray-500">Número</span>
-                <span className="font-bold text-gray-900">{config.phone}</span>
-              </div>
-            )}
-
-            {config.holder_name && (
-              <div className="flex justify-between gap-4 rounded-xl bg-gray-50 p-3">
-                <span className="text-gray-500">Titular</span>
-                <span className="font-bold text-gray-900">
-                  {config.holder_name}
-                </span>
-              </div>
-            )}
-
-            {config.qr_url && (
-              <div className="rounded-xl bg-gray-50 p-4 text-center">
-                <div className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-400">
-                  QR de pago
-                </div>
-
-                <img
-                  src={config.qr_url}
-                  alt={`QR ${paymentLabel}`}
-                  className="mx-auto max-h-60 rounded-xl object-contain"
-                />
-              </div>
-            )}
-          </>
-        )}
-
-        {order.payment_method === "transfer" && (
-          <>
-            {config.bank_name && (
-              <div className="flex justify-between gap-4 rounded-xl bg-gray-50 p-3">
-                <span className="text-gray-500">Banco</span>
-                <span className="font-bold text-gray-900">
-                  {config.bank_name}
-                </span>
-              </div>
-            )}
-
-            {config.account_holder && (
-              <div className="flex justify-between gap-4 rounded-xl bg-gray-50 p-3">
-                <span className="text-gray-500">Titular</span>
-                <span className="font-bold text-gray-900">
-                  {config.account_holder}
-                </span>
-              </div>
-            )}
-
-            {config.account_number && (
-              <div className="flex justify-between gap-4 rounded-xl bg-gray-50 p-3">
-                <span className="text-gray-500">Cuenta</span>
-                <span className="font-bold text-gray-900">
-                  {config.account_number}
-                </span>
-              </div>
-            )}
-
-            {config.cci && (
-              <div className="flex justify-between gap-4 rounded-xl bg-gray-50 p-3">
-                <span className="text-gray-500">CCI</span>
-                <span className="font-bold text-gray-900">{config.cci}</span>
-              </div>
-            )}
-
-            {config.document_number && (
-              <div className="flex justify-between gap-4 rounded-xl bg-gray-50 p-3">
-                <span className="text-gray-500">DNI/RUC</span>
-                <span className="font-bold text-gray-900">
-                  {config.document_number}
-                </span>
-              </div>
-            )}
-          </>
-        )}
-
         {order.payment_method === "card" && (
           <div className="rounded-xl bg-gray-50 p-3 text-gray-600">
             Tu pago con tarjeta será validado por la plataforma o la tienda.
@@ -281,7 +207,7 @@ export default function OrderSuccessPage() {
   const [error, setError] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
 
-  // 🆕 Modal de validación OCR
+  // Modal de validación OCR
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
 
   const theme = getTheme(store);
@@ -367,13 +293,12 @@ export default function OrderSuccessPage() {
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
-  // 🆕 Callback cuando OCR valida el pago
+  // Callback cuando OCR valida el pago
   function handlePaymentValidated(result: ValidationResponse) {
     setReceiptModalOpen(false);
 
     // Si fue aprobado, recargamos los datos del pedido
     if (result.status === "approved" && orderNumber) {
-      // Recargar la página para ver el nuevo estado
       window.location.reload();
     }
   }
@@ -415,8 +340,14 @@ export default function OrderSuccessPage() {
     order.payment_method !== "cash_on_delivery" &&
     order.payment_method !== "card";
 
-  // 🆕 OCR disponible solo para Yape/Plin/Transfer con pago pendiente
+  // OCR disponible solo para Yape/Plin/Transfer con pago pendiente
   const canUseAIValidation = needsPaymentProof;
+
+  // 🔥 v22.14 - Determinar si usa QR (Yape/Plin/Transfer)
+  const usesQrPayment =
+    order.payment_method === "yape" ||
+    order.payment_method === "plin" ||
+    order.payment_method === "transfer";
 
   return (
     <div
@@ -463,7 +394,7 @@ export default function OrderSuccessPage() {
           </div>
         </div>
 
-        {/* 🆕 CARD DESTACADO — Validación automática con IA */}
+        {/* CARD DESTACADO — Validación automática con IA */}
         {canUseAIValidation && (
           <div className="mt-8 overflow-hidden rounded-3xl border-2 border-purple-200 bg-linear-to-br from-purple-50 to-fuchsia-50 shadow-lg">
             <div className="p-6">
@@ -520,7 +451,6 @@ export default function OrderSuccessPage() {
               </div>
             </div>
 
-            {/* Link visible */}
             <div className="mt-4 rounded-xl bg-white/70 p-3">
               <div className="text-[10px] font-bold uppercase tracking-wider text-blue-600">
                 Tu link de seguimiento
@@ -530,7 +460,6 @@ export default function OrderSuccessPage() {
               </div>
             </div>
 
-            {/* Botones */}
             <div className="mt-4 grid gap-2 sm:grid-cols-3">
               <Link
                 to={`/pedido/${order.order_number}`}
@@ -618,11 +547,60 @@ export default function OrderSuccessPage() {
               </div>
             </div>
 
-            <PaymentDetails
-              order={order}
-              store={store}
-              method={paymentMethod}
-            />
+            {/* 🔥 v22.14 FIX: QR según payment_receiver */}
+            {usesQrPayment ? (
+              <div className="rounded-3xl bg-white p-6 shadow-sm">
+                <div className="mb-4 flex items-center gap-3">
+                  <div className="text-3xl">
+                    {PAYMENT_ICONS[order.payment_method]}
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900">
+                      Pago con {PAYMENT_LABELS[order.payment_method]}
+                    </h2>
+                    <p className="text-sm text-gray-500">
+                      {order.payment_receiver === "platform"
+                        ? "🏢 Pago seguro a Dropship Perú"
+                        : `🏪 Pago directo a ${store?.name ?? "la tienda"}`}
+                    </p>
+                  </div>
+                </div>
+
+                <PaymentQrDisplay
+                  paymentReceiver={
+                    order.payment_receiver as "platform" | "vendor"
+                  }
+                  vendorId={
+                    order.payment_receiver === "vendor" ? order.store_id : null
+                  }
+                  paymentMethod={
+                    order.payment_method as "yape" | "plin" | "transfer"
+                  }
+                  total={Number(order.total)}
+                  storeName={store?.name}
+                />
+
+                {store?.whatsapp && (
+                  <a
+                    href={getWhatsappUrl(
+                      store.whatsapp,
+                      buildPaymentMessage(order, store.name)
+                    )}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-center text-sm font-bold text-white transition hover:bg-emerald-600 hover:shadow-lg"
+                  >
+                    📸 Enviar comprobante por WhatsApp
+                  </a>
+                )}
+              </div>
+            ) : (
+              <PaymentDetailsLegacy
+                order={order}
+                store={store}
+                method={paymentMethod}
+              />
+            )}
 
             <div className="rounded-3xl bg-white p-6 shadow-sm">
               <h2 className="text-lg font-bold text-gray-900">
@@ -676,7 +654,7 @@ export default function OrderSuccessPage() {
               </div>
             </div>
 
-            {/* 🆕 v20 - Dirección o pickup dinámico */}
+            {/* Dirección o pickup dinámico */}
             <div className="rounded-3xl bg-white p-6 shadow-sm">
               <h2 className="text-lg font-bold text-gray-900">
                 {order.delivery_mode === "store_pickup"
@@ -886,7 +864,7 @@ export default function OrderSuccessPage() {
         />
       )}
 
-      {/* 🆕 Modal de validación OCR */}
+      {/* Modal de validación OCR */}
       {order && (
         <PaymentReceiptModal
           orderId={order.id}
