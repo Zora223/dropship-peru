@@ -1,6 +1,6 @@
 // ============================================================
 // SUPPLIER PRODUCTS — Funciones CRUD para proveedores
-// v22.13 — Soft delete + Colores disponibles
+// v22.14 — Soft delete + Colores + Marcar agotado / Reponer stock
 // ============================================================
 
 import { supabase } from "./supabase";
@@ -17,7 +17,7 @@ export interface SupplierProduct {
   sku: string;
   category: string;
   images: string[];
-  colors: string[]; // 🆕 v22.13
+  colors: string[];
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -34,7 +34,7 @@ export interface ProductFormData {
   sku: string;
   category: string;
   images: string[];
-  colors: string[]; // 🆕 v22.13
+  colors: string[];
   is_active: boolean;
 }
 
@@ -79,7 +79,7 @@ export async function listSupplierProducts(
 
   return products.map((p) => ({
     ...p,
-    colors: p.colors ?? [], // 🆕 default vacío por seguridad
+    colors: p.colors ?? [],
     vendors_count: countMap[p.id] ?? 0,
   })) as SupplierProduct[];
 }
@@ -97,7 +97,7 @@ export function calculateStats(products: SupplierProduct[]): SupplierProductStat
 }
 
 // ============================================================
-// CREAR PRODUCTO 🆕 con colors
+// CREAR PRODUCTO
 // ============================================================
 export async function createProduct(
   supplierId: string,
@@ -115,7 +115,7 @@ export async function createProduct(
       sku: data.sku.trim(),
       category: data.category.trim(),
       images: data.images,
-      colors: data.colors ?? [], // 🆕
+      colors: data.colors ?? [],
       is_active: data.is_active,
     })
     .select("*")
@@ -126,7 +126,7 @@ export async function createProduct(
 }
 
 // ============================================================
-// ACTUALIZAR PRODUCTO 🆕 con colors
+// ACTUALIZAR PRODUCTO
 // ============================================================
 export async function updateProduct(
   productId: string,
@@ -173,6 +173,81 @@ export async function toggleActive(
     .from("catalog_products")
     .update({
       is_active: isActive,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", productId);
+
+  if (error) throw error;
+}
+
+// ============================================================
+// 🆕 v22.14 — MARCAR PRODUCTO COMO AGOTADO (stock = 0)
+// El TRIGGER se encarga de sincronizar automáticamente
+// a todos los products de vendors que importaron este producto.
+// ============================================================
+export async function markAsOutOfStock(productId: string): Promise<void> {
+  const { error } = await supabase
+    .from("catalog_products")
+    .update({
+      stock: 0,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", productId);
+
+  if (error) throw error;
+}
+
+// ============================================================
+// 🆕 v22.14 — REPONER STOCK (agrega cantidad al stock actual)
+// El TRIGGER se encarga de sincronizar automáticamente
+// a todos los products de vendors.
+// ============================================================
+export async function restoreStock(
+  productId: string,
+  newStock: number
+): Promise<void> {
+  if (newStock < 0) {
+    throw new Error("El stock no puede ser negativo");
+  }
+
+  const { error } = await supabase
+    .from("catalog_products")
+    .update({
+      stock: newStock,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", productId);
+
+  if (error) throw error;
+}
+
+// ============================================================
+// 🆕 v22.14 — AGREGAR STOCK (suma al stock existente)
+// Útil cuando el proveedor recibe más mercadería
+// ============================================================
+export async function addStock(
+  productId: string,
+  amountToAdd: number
+): Promise<void> {
+  if (amountToAdd <= 0) {
+    throw new Error("La cantidad a agregar debe ser mayor a 0");
+  }
+
+  // Primero obtenemos el stock actual
+  const { data: current, error: fetchError } = await supabase
+    .from("catalog_products")
+    .select("stock")
+    .eq("id", productId)
+    .single();
+
+  if (fetchError) throw fetchError;
+
+  const newStock = (current?.stock ?? 0) + amountToAdd;
+
+  const { error } = await supabase
+    .from("catalog_products")
+    .update({
+      stock: newStock,
       updated_at: new Date().toISOString(),
     })
     .eq("id", productId);
