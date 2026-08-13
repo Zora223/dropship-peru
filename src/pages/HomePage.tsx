@@ -152,7 +152,7 @@ export default function HomePage() {
           </div>
 
           {loading ? (
-            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
                 <div key={i} className="aspect-square animate-pulse rounded-2xl bg-gray-200" />
               ))}
