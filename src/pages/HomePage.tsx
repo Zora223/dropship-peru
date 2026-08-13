@@ -1,25 +1,21 @@
 // src/pages/HomePage.tsx
-// 🏪 v22.15 - HomePage híbrida: identidad + marketplace público
+// 🏪 v22.17 - HomePage sin exposición de tiendas (respeta cartera protegida)
 
 import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import {
   getFeaturedProducts,
-  getFeaturedStores,
   getCategories,
   getMarketplaceStats,
   type MarketplaceProduct,
-  type MarketplaceStore,
   type MarketplaceCategory,
   type MarketplaceStats,
 } from "../lib/marketplace";
 import ProductCard from "../components/marketplace/ProductCard";
-import StoreCard from "../components/marketplace/StoreCard";
 import SEOHead from "../components/marketplace/SEOHead";
 
 export default function HomePage() {
   const [products, setProducts] = useState<MarketplaceProduct[]>([]);
-  const [stores, setStores] = useState<MarketplaceStore[]>([]);
   const [categories, setCategories] = useState<MarketplaceCategory[]>([]);
   const [stats, setStats] = useState<MarketplaceStats>({
     total_stores: 0,
@@ -34,16 +30,13 @@ export default function HomePage() {
     async function loadMarketplace() {
       try {
         setLoading(true);
-        const [productsData, storesData, categoriesData, statsData] =
-          await Promise.all([
-            getFeaturedProducts(12),
-            getFeaturedStores(8),
-            getCategories(),
-            getMarketplaceStats(),
-          ]);
+        const [productsData, categoriesData, statsData] = await Promise.all([
+          getFeaturedProducts(12),
+          getCategories(),
+          getMarketplaceStats(),
+        ]);
 
         setProducts(productsData);
-        setStores(storesData);
         setCategories(categoriesData);
         setStats(statsData);
       } catch (err) {
@@ -66,8 +59,8 @@ export default function HomePage() {
   return (
     <div className="space-y-16">
       <SEOHead
-        title="Dropship Perú - Marketplace de tiendas peruanas verificadas"
-        description="Descubre productos únicos de tiendas peruanas. Envíos en 24-48h en Iquitos y Lima. Compra directo a emprendedores locales."
+        title="Dropship Perú - Marketplace de productos peruanos"
+        description="Descubre productos únicos de emprendedores peruanos. Envíos en 24-48h en Iquitos y Lima. Compra directo a tiendas verificadas."
       />
 
       {/* ═══════════════════════════════════════════════
@@ -89,12 +82,12 @@ export default function HomePage() {
 
           <h1 className="text-4xl font-extrabold tracking-tight md:text-6xl">
             Descubre productos <br />
-            <span className="text-rose-400">de tiendas peruanas</span>
+            <span className="text-rose-400">de emprendedores peruanos</span>
           </h1>
 
           <p className="mx-auto mt-6 max-w-xl text-lg text-gray-300 md:text-xl">
             El marketplace <strong className="text-emerald-300">nacido en la Amazonía</strong>.
-            Compra directo a emprendedores. Envíos rápidos.
+            Compra directo. Envíos rápidos.
           </p>
 
           {/* Buscador */}
@@ -120,15 +113,15 @@ export default function HomePage() {
           {stats.total_products > 0 && (
             <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-sm text-white/80">
               <div>
-                <span className="font-black text-emerald-300">{stats.total_stores}</span> tiendas
-              </div>
-              <span className="opacity-50">·</span>
-              <div>
                 <span className="font-black text-rose-300">{stats.total_products}</span> productos
               </div>
               <span className="opacity-50">·</span>
               <div>
                 <span className="font-black text-amber-300">{stats.total_categories}</span> categorías
+              </div>
+              <span className="opacity-50">·</span>
+              <div>
+                <span className="font-black text-emerald-300">24-48h</span> envío
               </div>
             </div>
           )}
@@ -153,12 +146,12 @@ export default function HomePage() {
 
           {loading ? (
             <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((i) => (
                 <div key={i} className="aspect-square animate-pulse rounded-2xl bg-gray-200" />
               ))}
             </div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {products.map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}
@@ -204,29 +197,7 @@ export default function HomePage() {
       )}
 
       {/* ═══════════════════════════════════════════════
-          TIENDAS DESTACADAS
-      ═══════════════════════════════════════════════ */}
-      {stores.length > 0 && (
-        <section>
-          <div className="mb-6">
-            <h2 className="text-2xl font-black tracking-tight text-gray-900 md:text-3xl">
-              🏪 Tiendas verificadas
-            </h2>
-            <p className="mt-1 text-sm text-gray-500">
-              Emprendedores peruanos con productos únicos
-            </p>
-          </div>
-
-          <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4">
-            {stores.map((store) => (
-              <StoreCard key={store.id} store={store} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* ═══════════════════════════════════════════════
-          IDENTIDAD IQUITEÑA (original)
+          IDENTIDAD IQUITEÑA
       ═══════════════════════════════════════════════ */}
       <section className="rounded-3xl bg-linear-to-br from-emerald-50 via-teal-50 to-cyan-50 p-8 shadow-sm md:p-10">
         <div className="grid gap-8 md:grid-cols-3 md:items-center">
@@ -263,7 +234,7 @@ export default function HomePage() {
       </section>
 
       {/* ═══════════════════════════════════════════════
-          CTA VENDEDORES (original mejorado)
+          CTA VENDEDORES
       ═══════════════════════════════════════════════ */}
       <section className="rounded-3xl bg-white p-8 shadow-sm md:p-10">
         <div className="grid gap-8 lg:grid-cols-2 lg:items-center">
