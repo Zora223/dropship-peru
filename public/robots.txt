@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /vendor/
+Disallow: /supplier/
+Disallow: /customer/
+Disallow: /delivery/
+Disallow: /checkout
+Disallow: /payment
+
+Sitemap: https://dropship-peru-mym.netlify.app/sitemap.xml

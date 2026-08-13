@@ -1,4 +1,6 @@
 // src/AppRoutes.tsx
+// 🏪 v22.15 - Rutas públicas de marketplace + categorías + búsqueda
+
 import VendorDeliverySettingsPage from "./pages/vendor/VendorDeliverySettingsPage";
 import AdminWhatsappTemplatesPage from "./pages/admin/AdminWhatsappTemplatesPage";
 import AdminWhatsappLogsPage from "./pages/admin/AdminWhatsappLogsPage";
@@ -28,6 +30,10 @@ import PaymentPage from "./pages/PaymentPage";
 import OrderSuccessPage from "./pages/OrderSuccessPage";
 import OrderTrackingPage from "./pages/OrderTrackingPage";
 import NotFoundPage from "./pages/NotFoundPage";
+
+// 🆕 v22.15 - Páginas públicas marketplace
+import PublicCategoryPage from "./pages/PublicCategoryPage";
+import SearchPage from "./pages/SearchPage";
 
 import AdminLayout from "./layouts/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -102,6 +108,10 @@ export default function AppRoutes() {
       <Route path="/payment" element={<PaymentPage />} />
       <Route path="/order-success" element={<OrderSuccessPage />} />
       <Route path="/pedido/:orderNumber" element={<OrderTrackingPage />} />
+
+      {/* 🆕 v22.15 - Marketplace público */}
+      <Route path="/categoria/:slug" element={<PublicCategoryPage />} />
+      <Route path="/buscar" element={<SearchPage />} />
 
       {/* Admin */}
       <Route
