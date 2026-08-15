@@ -1,5 +1,5 @@
 // src/pages/HomePage.tsx
-// 🏪 v22.17 - HomePage sin exposición de tiendas (respeta cartera protegida)
+// 🏪 v22.20 - Homepage estilo "collage de apps" iOS/Android
 
 import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
@@ -13,6 +13,26 @@ import {
 } from "../lib/marketplace";
 import ProductCard from "../components/marketplace/ProductCard";
 import SEOHead from "../components/marketplace/SEOHead";
+
+// 🎨 Colores de fondo bonitos para cada categoría (rotativos)
+const CATEGORY_BG_COLORS = [
+  "from-rose-100 to-pink-200",
+  "from-blue-100 to-cyan-200",
+  "from-amber-100 to-orange-200",
+  "from-emerald-100 to-teal-200",
+  "from-purple-100 to-fuchsia-200",
+  "from-yellow-100 to-amber-200",
+  "from-indigo-100 to-blue-200",
+  "from-lime-100 to-green-200",
+  "from-red-100 to-rose-200",
+  "from-sky-100 to-blue-200",
+  "from-fuchsia-100 to-pink-200",
+  "from-teal-100 to-cyan-200",
+];
+
+function getCategoryBgColor(index: number): string {
+  return CATEGORY_BG_COLORS[index % CATEGORY_BG_COLORS.length];
+}
 
 export default function HomePage() {
   const [products, setProducts] = useState<MarketplaceProduct[]>([]);
@@ -31,7 +51,7 @@ export default function HomePage() {
       try {
         setLoading(true);
         const [productsData, categoriesData, statsData] = await Promise.all([
-          getFeaturedProducts(12),
+          getFeaturedProducts(18),
           getCategories(),
           getMarketplaceStats(),
         ]);
@@ -57,10 +77,10 @@ export default function HomePage() {
   };
 
   return (
-    <div className="space-y-16">
+    <div className="space-y-12">
       <SEOHead
         title="Dropship Perú - Marketplace de productos peruanos"
-        description="Descubre productos únicos de emprendedores peruanos. Envíos en 24-48h en Iquitos y Lima. Compra directo a tiendas verificadas."
+        description="Descubre productos únicos de emprendedores peruanos. Envíos en 24-48h en Iquitos y Lima."
       />
 
       {/* ═══════════════════════════════════════════════
@@ -74,30 +94,29 @@ export default function HomePage() {
           🌿
         </div>
 
-        <div className="relative px-6 py-16 text-center md:px-16 md:py-24">
-          <div className="mx-auto mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/20 px-4 py-2 text-xs font-bold uppercase tracking-wider text-emerald-200 backdrop-blur">
+        <div className="relative px-6 py-12 text-center md:px-16 md:py-20">
+          <div className="mx-auto mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/20 px-4 py-2 text-xs font-bold uppercase tracking-wider text-emerald-200 backdrop-blur">
             <span>🌴</span>
             <span>Hecho en Iquitos, para todo el Perú</span>
           </div>
 
-          <h1 className="text-4xl font-extrabold tracking-tight md:text-6xl">
+          <h1 className="text-3xl font-extrabold tracking-tight md:text-5xl">
             Descubre productos <br />
             <span className="text-rose-400">de emprendedores peruanos</span>
           </h1>
 
-          <p className="mx-auto mt-6 max-w-xl text-lg text-gray-300 md:text-xl">
-            El marketplace <strong className="text-emerald-300">nacido en la Amazonía</strong>.
-            Compra directo. Envíos rápidos.
+          <p className="mx-auto mt-4 max-w-xl text-base text-gray-300 md:text-lg">
+            Compra directo. Envíos rápidos. Sin esperar Lima 🚀
           </p>
 
           {/* Buscador */}
-          <form onSubmit={handleSearch} className="mx-auto mt-8 max-w-2xl">
+          <form onSubmit={handleSearch} className="mx-auto mt-6 max-w-2xl">
             <div className="flex gap-2 rounded-full bg-white p-2 shadow-2xl">
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="🔍 Buscar productos, categorías..."
+                placeholder="🔍 Buscar productos..."
                 className="flex-1 rounded-full bg-transparent px-4 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400"
               />
               <button
@@ -109,9 +128,8 @@ export default function HomePage() {
             </div>
           </form>
 
-          {/* Stats social proof */}
           {stats.total_products > 0 && (
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-sm text-white/80">
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-4 text-sm text-white/80">
               <div>
                 <span className="font-black text-rose-300">{stats.total_products}</span> productos
               </div>
@@ -129,7 +147,53 @@ export default function HomePage() {
       </section>
 
       {/* ═══════════════════════════════════════════════
-          PRODUCTOS DESTACADOS
+          🎨 CATEGORÍAS — Estilo collage apps
+      ═══════════════════════════════════════════════ */}
+      {categories.length > 0 && (
+        <section>
+          <div className="mb-6 text-center">
+            <h2 className="text-2xl font-black tracking-tight text-gray-900 md:text-3xl">
+              📁 Explora por categoría
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Toca una categoría para ver todos los productos
+            </p>
+          </div>
+
+          {/* Grid tipo apps de celular */}
+          <div className="grid gap-3 grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+            {categories.slice(0, 16).map((cat, idx) => (
+              <Link
+                key={cat.name}
+                to={`/categoria/${encodeURIComponent(cat.name.toLowerCase().replace(/\s+/g, "-"))}`}
+                className="group flex flex-col items-center"
+              >
+                {/* Icono cuadrado tipo app */}
+                <div
+                  className={`aspect-square w-full rounded-2xl bg-linear-to-br ${getCategoryBgColor(idx)} p-3 shadow-md transition group-hover:-translate-y-1 group-hover:shadow-lg flex items-center justify-center`}
+                >
+                  <div className="text-4xl sm:text-5xl transition group-hover:scale-110">
+                    {cat.emoji}
+                  </div>
+                </div>
+
+                {/* Nombre debajo (como en iOS/Android) */}
+                <div className="mt-2 text-center">
+                  <div className="text-xs font-bold text-gray-900 line-clamp-1">
+                    {cat.name}
+                  </div>
+                  <div className="text-[10px] text-gray-500">
+                    {cat.product_count} {cat.product_count === 1 ? "prod." : "prods."}
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ═══════════════════════════════════════════════
+          🔥 PRODUCTOS DESTACADOS — Grid pequeño
       ═══════════════════════════════════════════════ */}
       {(loading || products.length > 0) && (
         <section>
@@ -145,54 +209,18 @@ export default function HomePage() {
           </div>
 
           {loading ? (
-            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            <div className="grid gap-2 grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((i) => (
-                <div key={i} className="aspect-square animate-pulse rounded-2xl bg-gray-200" />
+                <div key={i} className="aspect-square animate-pulse rounded-xl bg-gray-200" />
               ))}
             </div>
           ) : (
-            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            <div className="grid gap-2 grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
               {products.map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}
             </div>
           )}
-        </section>
-      )}
-
-      {/* ═══════════════════════════════════════════════
-          CATEGORÍAS
-      ═══════════════════════════════════════════════ */}
-      {categories.length > 0 && (
-        <section>
-          <div className="mb-6">
-            <h2 className="text-2xl font-black tracking-tight text-gray-900 md:text-3xl">
-              📁 Explora por categoría
-            </h2>
-            <p className="mt-1 text-sm text-gray-500">
-              Encuentra lo que buscas
-            </p>
-          </div>
-
-          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-            {categories.slice(0, 12).map((cat) => (
-              <Link
-                key={cat.name}
-                to={`/categoria/${encodeURIComponent(cat.name.toLowerCase().replace(/\s+/g, "-"))}`}
-                className="group flex flex-col items-center justify-center rounded-2xl bg-white p-4 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
-              >
-                <div className="text-4xl transition group-hover:scale-110">
-                  {cat.emoji}
-                </div>
-                <h3 className="mt-2 text-center text-xs font-bold text-gray-900">
-                  {cat.name}
-                </h3>
-                <span className="mt-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600">
-                  {cat.product_count} productos
-                </span>
-              </Link>
-            ))}
-          </div>
         </section>
       )}
 
@@ -325,157 +353,6 @@ export default function HomePage() {
               <p className="mt-1 text-sm text-gray-600">
                 Pedidos organizados, pagos automáticos, envíos gestionados.
               </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ═══════════════════════════════════════════════
-          CÓMO FUNCIONA
-      ═══════════════════════════════════════════════ */}
-      <section className="rounded-3xl bg-white p-8 shadow-sm md:p-10">
-        <div className="text-center">
-          <h2 className="text-3xl font-black tracking-tight text-gray-900">
-            ¿Cómo funciona?
-          </h2>
-          <p className="mx-auto mt-3 max-w-xl text-gray-500">
-            Un flujo simple para vender online sin complicaciones.
-          </p>
-        </div>
-
-        <div className="mt-10 grid gap-6 md:grid-cols-3">
-          <div className="rounded-2xl bg-gray-50 p-6 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-100 text-2xl font-black">
-              1
-            </div>
-            <h3 className="mt-4 font-bold text-gray-900">Crea tu tienda</h3>
-            <p className="mt-2 text-sm text-gray-600">
-              Configura nombre, logo, productos, colores y métodos de pago.
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-gray-50 p-6 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-100 text-2xl font-black">
-              2
-            </div>
-            <h3 className="mt-4 font-bold text-gray-900">Comparte tu enlace</h3>
-            <p className="mt-2 text-sm text-gray-600">
-              Envía tu link por WhatsApp, Instagram, Facebook o campañas.
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-gray-50 p-6 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-100 text-2xl font-black">
-              3
-            </div>
-            <h3 className="mt-4 font-bold text-gray-900">Recibe pedidos</h3>
-            <p className="mt-2 text-sm text-gray-600">
-              Gestiona pagos, estados, envíos y productos desde tu panel.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ═══════════════════════════════════════════════
-          PROVEEDORES
-      ═══════════════════════════════════════════════ */}
-      <section className="overflow-hidden rounded-3xl bg-linear-to-br from-amber-50 via-orange-50 to-amber-100 shadow-sm">
-        <div className="grid gap-8 p-8 md:grid-cols-2 md:items-center md:gap-12 md:p-12">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-amber-500/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-amber-700">
-              <span>🏭</span>
-              <span>Para proveedores mayoristas</span>
-            </div>
-
-            <h2 className="mt-4 text-3xl font-black tracking-tight text-gray-900 md:text-4xl">
-              ¿Vendes al por mayor?
-            </h2>
-
-            <p className="mt-4 text-lg text-gray-700">
-              Súbete a la plataforma. Nuestras tiendas venderán tus productos y
-              tú recibes el pago <b>al instante por Yape</b> cuando confirmes cada
-              pedido.
-            </p>
-
-            <ul className="mt-6 space-y-3">
-              <li className="flex items-start gap-3">
-                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white">
-                  ✓
-                </span>
-                <div>
-                  <div className="font-semibold text-gray-900">Cobros inmediatos por Yape</div>
-                  <div className="text-sm text-gray-600">
-                    Al confirmar disponibilidad, te pagamos al toque
-                  </div>
-                </div>
-              </li>
-              <li className="flex items-start gap-3">
-                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white">
-                  ✓
-                </span>
-                <div>
-                  <div className="font-semibold text-gray-900">Cero riesgo, cero espera</div>
-                  <div className="text-sm text-gray-600">
-                    No adelantas nada, no esperas al cliente
-                  </div>
-                </div>
-              </li>
-              <li className="flex items-start gap-3">
-                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white">
-                  ✓
-                </span>
-                <div>
-                  <div className="font-semibold text-gray-900">Múltiples vendedores</div>
-                  <div className="text-sm text-gray-600">
-                    Amplía tu alcance sin invertir en publicidad
-                  </div>
-                </div>
-              </li>
-            </ul>
-
-            <Link
-              to="/registro-proveedor"
-              className="mt-8 inline-block rounded-full bg-amber-500 px-8 py-3.5 text-base font-semibold text-white shadow-lg transition hover:bg-amber-600 hover:shadow-xl"
-            >
-              🏭 Regístrate como proveedor
-            </Link>
-          </div>
-
-          <div className="relative">
-            <div className="rounded-3xl bg-white p-6 shadow-2xl">
-              <div className="mb-4">
-                <div className="text-xs font-bold uppercase tracking-wider text-gray-400">
-                  Panel Proveedor
-                </div>
-                <div className="mt-1 text-lg font-bold text-gray-900">
-                  Hola Kevin 👋
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
-                  <div className="text-xl">🆕</div>
-                  <div className="mt-1 text-lg font-bold text-gray-900">3</div>
-                  <div className="text-[10px] font-semibold text-gray-600">Por atender</div>
-                </div>
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-                  <div className="text-xl">✅</div>
-                  <div className="mt-1 text-lg font-bold text-gray-900">8</div>
-                  <div className="text-[10px] font-semibold text-gray-600">Confirmados</div>
-                </div>
-                <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
-                  <div className="text-xl">💰</div>
-                  <div className="mt-1 text-sm font-bold text-gray-900">S/. 950</div>
-                  <div className="text-[10px] font-semibold text-gray-600">Cobrado hoy</div>
-                </div>
-              </div>
-
-              <div className="mt-3 flex items-center gap-2 rounded-xl bg-emerald-50 p-2 text-[10px] text-emerald-800">
-                <span>💚</span>
-                <span className="font-semibold">
-                  Al confirmar, te pagamos por Yape
-                </span>
-              </div>
             </div>
           </div>
         </div>

@@ -1,17 +1,13 @@
 // src/types/database.ts
+// 🆕 v22.20 - Agregado campo sizes (tallas) en productos
+
 export type UserRole = "admin" | "vendor" | "customer" | "delivery" | "supplier";
 export type ProductSource = "catalog" | "own";
 export type OrderStatus = "pending_payment" | "confirmed" | "shipped" | "delivered" | "cancelled";
 export type PaymentMethodType = "yape" | "plin" | "card" | "transfer" | "cash_on_delivery";
 export type SubscriptionStatus = "trial" | "active" | "expired" | "cancelled";
-
-// 🆕 v16 - Modo de entrega
 export type DeliveryMode = "home_delivery" | "store_pickup";
-
-// 🆕 v20 - Tipo de carrito (escrow)
 export type CartType = "catalog" | "vendor_own" | "mixed";
-
-// 🆕 v20 - Receptor del pago
 export type PaymentReceiver = "platform" | "vendor";
 
 export interface DbProfile {
@@ -37,7 +33,8 @@ export interface DbCatalogProduct {
   sku: string;
   category: string;
   images: string[];
-   colors: string[]; // 🆕 v22.13
+  colors: string[];
+  sizes: string[]; // 🆕 v22.20
   is_active: boolean;
   deleted_at?: string | null;
   created_at: string;
@@ -94,6 +91,8 @@ export interface DbProduct {
   sku: string | null;
   category: string | null;
   images: string[];
+  colors: string[]; // 🆕 v22.20
+  sizes: string[]; // 🆕 v22.20
   is_active: boolean;
   featured: boolean;
   created_at: string;
@@ -107,8 +106,9 @@ export interface DbOrderItem {
   unit_price: number;
   quantity: number;
   subtotal: number;
-  // 🆕 v22.13 - Imagen opcional (se hidrata desde products/catalog_products)
   product_image?: string | null;
+  selected_color?: string | null; // 🆕 v22.20
+  selected_size?: string | null; // 🆕 v22.20
 }
 
 export interface DbShippingAddress {
@@ -128,9 +128,7 @@ export interface DbOrder {
   customer_name: string;
   customer_email: string;
   customer_phone: string;
-
   shipping_address: DbShippingAddress | null;
-
   items: DbOrderItem[];
   subtotal: number;
   total: number;
@@ -141,35 +139,24 @@ export interface DbOrder {
   has_catalog_items: boolean;
   created_at: string;
   updated_at: string;
-
   delivery_id: string | null;
-  delivery_status:
-    | "unassigned"
-    | "assigned"
-    | "picked_up"
-    | "delivered"
-    | "failed"
-    | null;
+  delivery_status: "unassigned" | "assigned" | "picked_up" | "delivered" | "failed" | null;
   delivery_assigned_at: string | null;
   delivery_delivered_at: string | null;
   delivery_notes: string | null;
-
   delivery_mode: DeliveryMode | null;
   delivery_date: string | null;
   delivery_time_slot: string | null;
   delivery_fee: number;
   pickup_location_id: string | null;
   pickup_time_slot: string | null;
-
   pickup_confirmation_code: string | null;
   pickup_ready_at: string | null;
   pickup_completed_at: string | null;
   pickup_address: any | null;
-
   discount_amount: number;
   discount_pct: number;
   discount_tier: string | null;
-
   cart_type: CartType | null;
   payment_receiver: PaymentReceiver;
   delivery_debt: number;
@@ -209,7 +196,6 @@ export interface DbPlatformSettings {
   banner_text: string;
   banner_link: string;
   seasonal_effect: string;
-
   promo_countdown_date: string | null;
   promo_dismissible: boolean;
   promo_link_text: string;
@@ -237,7 +223,7 @@ export interface DbProductReview {
   avg_rating: number;
   review_count: number;
 }
-// 🆕 v22.13 - Vista con stock real
+
 export interface DbProductWithRealStock {
   id: string;
   store_id: string;
@@ -251,11 +237,12 @@ export interface DbProductWithRealStock {
   sku: string | null;
   category: string | null;
   images: string[];
+  colors: string[]; // 🆕 v22.20
+  sizes: string[]; // 🆕 v22.20
   is_active: boolean;
   featured: boolean;
   created_at: string;
   updated_at: string;
-  // 🆕 Campos de la vista
   real_stock: number;
   catalog_stock: number | null;
   catalog_is_active: boolean | null;

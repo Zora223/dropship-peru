@@ -1,5 +1,5 @@
 // src/components/shared/ColorPicker.tsx
-// 🎨 v22.13 - Selector de colores reutilizable
+// 🎨 v22.20 - Guardado 100% seguro como strings simples
 
 import { useState } from "react";
 
@@ -27,6 +27,39 @@ const PRESET_COLORS: { name: string; hex: string }[] = [
   { name: "Plateado", hex: "#C0C0C0" },
 ];
 
+/**
+ * 🔒 Normaliza cualquier valor de color a string simple
+ * Elimina el problema de guardar objetos JSON como colores
+ */
+function ensureString(color: unknown): string {
+  if (typeof color === "string") {
+    // Si es un JSON string, extraer solo el nombre
+    if (color.trim().startsWith("{")) {
+      try {
+        const parsed = JSON.parse(color);
+        return typeof parsed.name === "string" ? parsed.name : "";
+      } catch {
+        return color;
+      }
+    }
+    return color;
+  }
+  if (color && typeof color === "object" && "name" in color) {
+    return String((color as { name: unknown }).name || "");
+  }
+  return "";
+}
+
+/**
+ * 🔒 Limpia array garantizando solo strings simples
+ */
+function cleanColorsArray(arr: unknown): string[] {
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .map(ensureString)
+    .filter((s) => s.length > 0);
+}
+
 export default function ColorPicker({
   selected,
   onChange,
@@ -35,31 +68,37 @@ export default function ColorPicker({
   const [customInput, setCustomInput] = useState("");
   const [showCustomInput, setShowCustomInput] = useState(false);
 
+  // 🔒 Normalizar el selected recibido (por si viene sucio de BD antigua)
+  const cleanSelected = cleanColorsArray(selected);
+
   const toggleColor = (colorName: string) => {
     if (disabled) return;
-    if (selected.includes(colorName)) {
-      onChange(selected.filter((c) => c !== colorName));
+    const isSelected = cleanSelected.some(
+      (s) => s.toLowerCase() === colorName.toLowerCase()
+    );
+    if (isSelected) {
+      onChange(cleanSelected.filter((c) => c.toLowerCase() !== colorName.toLowerCase()));
     } else {
-      onChange([...selected, colorName]);
+      onChange([...cleanSelected, colorName]);
     }
   };
 
   const addCustomColor = () => {
     const trimmed = customInput.trim();
     if (!trimmed) return;
-    if (selected.some((s) => s.toLowerCase() === trimmed.toLowerCase())) {
+    if (cleanSelected.some((s) => s.toLowerCase() === trimmed.toLowerCase())) {
       setCustomInput("");
       setShowCustomInput(false);
       return;
     }
-    onChange([...selected, trimmed]);
+    onChange([...cleanSelected, trimmed]);
     setCustomInput("");
     setShowCustomInput(false);
   };
 
   const removeColor = (colorName: string) => {
     if (disabled) return;
-    onChange(selected.filter((c) => c !== colorName));
+    onChange(cleanSelected.filter((c) => c !== colorName));
   };
 
   const getColorHex = (name: string): string => {
@@ -74,7 +113,7 @@ export default function ColorPicker({
       {/* Grid de presets */}
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
         {PRESET_COLORS.map((color) => {
-          const isSelected = selected.some(
+          const isSelected = cleanSelected.some(
             (s) => s.toLowerCase() === color.name.toLowerCase()
           );
           return (
@@ -148,13 +187,13 @@ export default function ColorPicker({
       )}
 
       {/* Colores seleccionados */}
-      {selected.length > 0 && (
+      {cleanSelected.length > 0 && (
         <div className="rounded-xl bg-gray-50 p-3">
           <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-gray-500">
-            Seleccionados ({selected.length})
+            Seleccionados ({cleanSelected.length})
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {selected.map((color) => (
+            {cleanSelected.map((color) => (
               <span
                 key={color}
                 className="inline-flex items-center gap-1.5 rounded-full bg-white border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-800 shadow-sm"

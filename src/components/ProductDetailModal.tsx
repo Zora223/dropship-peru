@@ -1,17 +1,23 @@
 // src/components/ProductDetailModal.tsx
-// 🆕 v22.13 - Soporte colores string[] unificado (usa color-utils)
+// 🎨 v22.20 - Selector de tallas + colores + guardado en carrito
 
 import { useState, useEffect } from "react";
 import FreeShippingBadge from "./FreeShippingBadge";
 import { ProductRatingBadge } from "./reviews/ProductRatingBadge";
 import { isPurchasable } from "../lib/product-badges";
-import { normalizeColorsArray } from "../lib/color-utils"; // 🆕 v22.13
+import { normalizeColorsArray } from "../lib/color-utils";
+import { normalizeSizes, needsSizes } from "../lib/size-utils";
 import type { PublicStoreProduct } from "../lib/public-store";
 
 interface ProductDetailModalProps {
   product: PublicStoreProduct;
   onClose: () => void;
-  onAddToCart: (product: PublicStoreProduct, quantity: number, selectedColor: string | null) => void;
+  onAddToCart: (
+    product: PublicStoreProduct,
+    quantity: number,
+    selectedColor: string | null,
+    selectedSize: string | null
+  ) => void;
   onOpenReviews: (product: PublicStoreProduct) => void;
   onToggleFavorite: (productId: string) => void;
   isFavorite: boolean;
@@ -39,16 +45,19 @@ export default function ProductDetailModal({
   themeSecondaryColor,
 }: ProductDetailModalProps) {
   const images = normalizeImages(product.images);
-  // 🆕 v22.13 - normalizeColorsArray convierte string[] o objetos a ColorObject[]
   const colors = normalizeColorsArray(product.colors);
+  const sizes = normalizeSizes(product.sizes);
+  const showSizes = needsSizes(product.category, sizes.length > 0);
   const canBuy = isPurchasable(product.real_stock);
   const avgRating = product.avg_rating || 0;
   const reviewCount = product.review_count || 0;
 
   const [currentImageIdx, setCurrentImageIdx] = useState(0);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
+  const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
+  const [sizeError, setSizeError] = useState(false);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -67,7 +76,15 @@ export default function ProductDetailModal({
 
   const handleAdd = () => {
     if (!canBuy) return;
-    onAddToCart(product, quantity, selectedColor);
+
+    // Validar que si tiene tallas, se seleccione una
+    if (sizes.length > 0 && !selectedSize) {
+      setSizeError(true);
+      setTimeout(() => setSizeError(false), 3000);
+      return;
+    }
+
+    onAddToCart(product, quantity, selectedColor, selectedSize);
     setAdded(true);
     setTimeout(() => setAdded(false), 1500);
   };
@@ -273,7 +290,54 @@ export default function ProductDetailModal({
               </div>
             )}
 
-            {/* 🎨 v22.13 - Selector de colores (OPCIONAL) */}
+            {/* 👕 SELECTOR DE TALLAS (nuevo) */}
+            {showSizes && sizes.length > 0 && (
+              <div className="mt-5">
+                <h3 className="text-sm font-bold text-gray-900 mb-3">
+                  👕 Elige tu talla
+                  {selectedSize && (
+                    <span className="ml-2 font-normal text-gray-600">
+                      · <span className="text-gray-900 font-black">{selectedSize}</span>
+                    </span>
+                  )}
+                  {sizes.length > 0 && !selectedSize && (
+                    <span className="ml-2 text-[10px] font-bold text-red-500">
+                      * Obligatorio
+                    </span>
+                  )}
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {sizes.map((size) => {
+                    const isSelected = selectedSize === size;
+                    return (
+                      <button
+                        key={size}
+                        onClick={() => {
+                          setSelectedSize(isSelected ? null : size);
+                          setSizeError(false);
+                        }}
+                        className={`flex h-12 min-w-12 items-center justify-center rounded-xl border-2 px-4 text-base font-bold transition ${
+                          isSelected
+                            ? "border-gray-900 bg-gray-900 text-white shadow-md"
+                            : sizeError
+                            ? "border-red-300 bg-red-50 text-red-700 animate-pulse"
+                            : "border-gray-200 bg-white text-gray-700 hover:border-gray-400"
+                        }`}
+                      >
+                        {size}
+                      </button>
+                    );
+                  })}
+                </div>
+                {sizeError && (
+                  <div className="mt-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs font-bold text-red-700">
+                    ⚠️ Debes seleccionar una talla para continuar
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 🎨 SELECTOR DE COLORES */}
             {colors.length > 0 && (
               <div className="mt-5">
                 <h3 className="text-sm font-bold text-gray-900 mb-3">

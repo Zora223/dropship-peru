@@ -1,5 +1,5 @@
 // src/lib/public-store.ts
-// 🆕 v22.13 - Soporte colors del catálogo
+// 🆕 v22.20 - Soporte tallas (sizes)
 
 import { supabase } from "./supabase";
 import type { DbStore, DbProduct } from "../types/database";
@@ -8,7 +8,8 @@ export interface PublicStoreProduct extends DbProduct {
   real_stock: number;
   avg_rating: number;
   review_count: number;
-  colors: string[]; // 🆕 v22.13 - siempre string[]
+  colors: string[];
+  sizes: string[]; // 🆕 v22.20
 }
 
 export async function fetchPublicStoreBySlug(
@@ -47,9 +48,6 @@ export async function fetchPublicStoreById(
   return data as DbStore | null;
 }
 
-/**
- * 🆕 v22.13 - Trae colores desde el catálogo (si es producto de catálogo)
- */
 export async function fetchPublicStoreProducts(
   storeId: string
 ): Promise<PublicStoreProduct[]> {
@@ -57,7 +55,7 @@ export async function fetchPublicStoreProducts(
     .from("products")
     .select(`
       *,
-      catalog:catalog_products!products_catalog_product_id_fkey(stock, is_active, colors)
+      catalog:catalog_products!products_catalog_product_id_fkey(stock, is_active, colors, sizes)
     `)
     .eq("store_id", storeId)
     .eq("is_active", true)
@@ -79,6 +77,7 @@ export async function fetchPublicStoreProducts(
             stock: number;
             is_active: boolean;
             colors: string[] | null;
+            sizes: string[] | null;
           } | null;
         }
       ).catalog;
@@ -92,11 +91,16 @@ export async function fetchPublicStoreProducts(
           ? catalog.stock
           : product.stock;
 
-      // 🆕 Colores: priorizar los del catálogo si es producto de catálogo
+      // Priorizar colores/tallas del catálogo si es producto de catálogo
       const colors: string[] =
         product.source === "catalog" && catalog?.colors
           ? catalog.colors
           : ((product as any).colors ?? []);
+
+      const sizes: string[] =
+        product.source === "catalog" && catalog?.sizes
+          ? catalog.sizes
+          : ((product as any).sizes ?? []);
 
       const avg_rating = Number((product as any).avg_rating) || 0;
       const review_count = Number((product as any).review_count) || 0;
@@ -107,6 +111,7 @@ export async function fetchPublicStoreProducts(
         avg_rating,
         review_count,
         colors,
+        sizes,
       } as PublicStoreProduct;
     })
     .filter((product): product is PublicStoreProduct => product !== null);

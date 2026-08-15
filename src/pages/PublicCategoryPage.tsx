@@ -1,5 +1,5 @@
 // src/pages/PublicCategoryPage.tsx
-// 🏪 v22.15 - Página pública por categoría (SEO)
+// 🏪 v22.20 - Página pública por categoría con grid compacto
 
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
@@ -15,7 +15,6 @@ export default function PublicCategoryPage() {
   const [products, setProducts] = useState<MarketplaceProduct[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Convertir slug a label legible: "ropa-de-mujer" → "Ropa De Mujer"
   const categoryLabel = slug
     ? decodeURIComponent(slug)
         .split("-")
@@ -28,7 +27,7 @@ export default function PublicCategoryPage() {
       if (!slug) return;
       try {
         setLoading(true);
-        const data = await getProductsByCategory(categoryLabel, 48);
+        const data = await getProductsByCategory(categoryLabel, 60);
         setProducts(data);
       } catch (err) {
         console.error(err);
@@ -43,7 +42,7 @@ export default function PublicCategoryPage() {
     <div className="space-y-6">
       <SEOHead
         title={`${categoryLabel} - Dropship Perú`}
-        description={`Explora productos de ${categoryLabel} de tiendas peruanas verificadas. Envíos rápidos en Iquitos y Lima.`}
+        description={`Explora productos de ${categoryLabel} de tiendas peruanas verificadas.`}
       />
 
       {/* Breadcrumb */}
@@ -56,20 +55,20 @@ export default function PublicCategoryPage() {
       </div>
 
       {/* Header */}
-      <div>
+      <div className="rounded-2xl bg-linear-to-br from-rose-50 via-pink-50 to-orange-50 p-6 text-center shadow-sm">
         <h1 className="text-3xl font-black tracking-tight text-gray-900 md:text-4xl">
           📁 {categoryLabel}
         </h1>
-        <p className="mt-2 text-gray-500">
+        <p className="mt-2 text-gray-600">
           {products.length} productos disponibles
         </p>
       </div>
 
-      {/* Grid */}
+      {/* Grid compacto (más productos por pantalla) */}
       {loading ? (
-        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-          {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-            <div key={i} className="aspect-square animate-pulse rounded-2xl bg-gray-200" />
+        <div className="grid gap-2 grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((i) => (
+            <div key={i} className="aspect-square animate-pulse rounded-xl bg-gray-200" />
           ))}
         </div>
       ) : products.length === 0 ? (
@@ -89,7 +88,7 @@ export default function PublicCategoryPage() {
           </Link>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        <div className="grid gap-2 grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
           {products.map((product) => (
             <ProductCard key={product.id} product={product} />
           ))}

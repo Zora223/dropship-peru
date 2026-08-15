@@ -1,3 +1,6 @@
+// src/contexts/CartContext.tsx
+// 🛒 v22.20 - Soporte talla y color en carrito
+
 import { createContext, useState, useContext, useMemo, useEffect } from "react";
 import type { ReactNode } from "react";
 import type { ProductSource } from "../types/database";
@@ -13,13 +16,15 @@ export interface CartItem {
   source: ProductSource;
   catalogProductId: string | null;
   image: string | null;
+  selectedColor?: string | null; // 🆕 v22.20
+  selectedSize?: string | null;  // 🆕 v22.20
 }
 
 interface CartContextType {
   items: CartItem[];
   addItem: (item: Omit<CartItem, "quantity">) => void;
-  removeItem: (productId: string) => void;
-  updateQuantity: (productId: string, quantity: number) => void;
+  removeItem: (productId: string, color?: string | null, size?: string | null) => void;
+  updateQuantity: (productId: string, quantity: number, color?: string | null, size?: string | null) => void;
   clearCart: () => void;
   total: number;
   count: number;
@@ -28,11 +33,8 @@ interface CartContextType {
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
+const CART_STORAGE_KEY = "dropship-peru-cart-v2"; // 🆕 v2 para invalidar cache viejo
 
-// 🆕 v20.8 - Clave para localStorage
-const CART_STORAGE_KEY = "dropship-peru-cart-v1";
-
-// 🆕 Leer carrito inicial desde localStorage
 function loadCartFromStorage(): CartItem[] {
   if (typeof window === "undefined") return [];
   try {
@@ -40,7 +42,6 @@ function loadCartFromStorage(): CartItem[] {
     if (!saved) return [];
     const parsed = JSON.parse(saved);
     if (!Array.isArray(parsed)) return [];
-    // Validar estructura mínima
     return parsed.filter(
       (item) =>
         item &&
@@ -55,7 +56,6 @@ function loadCartFromStorage(): CartItem[] {
   }
 }
 
-// 🆕 Guardar carrito en localStorage
 function saveCartToStorage(items: CartItem[]) {
   if (typeof window === "undefined") return;
   try {
@@ -65,11 +65,17 @@ function saveCartToStorage(items: CartItem[]) {
   }
 }
 
+/**
+ * Genera una clave única por producto + color + talla
+ * Permite tener el mismo producto con distintas tallas/colores en el carrito
+ */
+function getItemKey(item: Pick<CartItem, "productId" | "selectedColor" | "selectedSize">): string {
+  return `${item.productId}|${item.selectedColor ?? ""}|${item.selectedSize ?? ""}`;
+}
+
 export function CartProvider({ children }: { children: ReactNode }) {
-  // 🆕 Estado inicial desde localStorage
   const [items, setItems] = useState<CartItem[]>(() => loadCartFromStorage());
 
-  // 🆕 Persistir cambios en localStorage
   useEffect(() => {
     saveCartToStorage(items);
   }, [items]);
@@ -84,33 +90,42 @@ export function CartProvider({ children }: { children: ReactNode }) {
         return [{ ...item, quantity: 1 }];
       }
 
-      const existing = prev.find((i) => i.productId === item.productId);
+      // Buscar por productId + color + talla
+      const newKey = getItemKey(item);
+      const existing = prev.find((i) => getItemKey(i) === newKey);
+
       if (existing) {
         return prev.map((i) =>
-          i.productId === item.productId ? { ...i, quantity: i.quantity + 1 } : i
+          getItemKey(i) === newKey ? { ...i, quantity: i.quantity + 1 } : i
         );
       }
       return [...prev, { ...item, quantity: 1 }];
     });
   };
 
-  const removeItem = (productId: string) => {
-    setItems((prev) => prev.filter((i) => i.productId !== productId));
+  const removeItem = (productId: string, color?: string | null, size?: string | null) => {
+    const targetKey = getItemKey({ productId, selectedColor: color, selectedSize: size });
+    setItems((prev) => prev.filter((i) => getItemKey(i) !== targetKey));
   };
 
-  const updateQuantity = (productId: string, quantity: number) => {
+  const updateQuantity = (
+    productId: string,
+    quantity: number,
+    color?: string | null,
+    size?: string | null
+  ) => {
     if (quantity < 1) {
-      removeItem(productId);
+      removeItem(productId, color, size);
       return;
     }
+    const targetKey = getItemKey({ productId, selectedColor: color, selectedSize: size });
     setItems((prev) =>
-      prev.map((i) => (i.productId === productId ? { ...i, quantity } : i))
+      prev.map((i) => (getItemKey(i) === targetKey ? { ...i, quantity } : i))
     );
   };
 
   const clearCart = () => {
     setItems([]);
-    // 🆕 Limpiar también localStorage
     if (typeof window !== "undefined") {
       localStorage.removeItem(CART_STORAGE_KEY);
     }

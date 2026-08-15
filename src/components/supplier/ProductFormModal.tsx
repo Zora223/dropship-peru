@@ -1,8 +1,6 @@
 // ============================================================
-// PRODUCT FORM MODAL (Supplier) - v22.13
-// 🆕 Auto-Fill AI (gratis para suppliers)
-// 🆕 Selector de colores disponibles
-// 🆕 Límites: 15 fotos / 10MB
+// PRODUCT FORM MODAL (Supplier) - v22.20
+// 🆕 Auto-Fill AI + Colores + TALLAS (v22.20)
 // ============================================================
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -22,7 +20,9 @@ import {
   type SupplierQualityIssue,
 } from "../../lib/supplier-product-quality";
 import { autoFillProduct, type AutoFillData } from "../../lib/auto-fill-ai";
+import { isClothingCategory } from "../../lib/size-utils";
 import ColorPicker from "../shared/ColorPicker";
+import SizePicker from "../shared/SizePicker";
 
 interface ProductFormModalProps {
   supplierId: string;
@@ -45,11 +45,11 @@ const EMPTY_FORM: ProductFormData = {
   sku: "",
   category: "",
   images: [],
-  colors: [], // 🆕 v22.13
+  colors: [],
+  sizes: [], // 🆕 v22.20
   is_active: true,
 };
 
-// 🆕 Etapas del Auto-Fill
 const AI_STAGES = [
   { pct: 15, icon: "📸", label: "Analizando tu foto..." },
   { pct: 35, icon: "🧠", label: "Detectando qué es el producto..." },
@@ -75,7 +75,6 @@ export default function ProductFormModal({
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 🆕 Estados Auto-Fill AI
   const [aiLoading, setAiLoading] = useState(false);
   const [aiProgress, setAiProgress] = useState(0);
   const [aiStage, setAiStage] = useState(0);
@@ -92,7 +91,8 @@ export default function ProductFormModal({
         sku: product.sku,
         category: product.category,
         images: product.images ?? [],
-        colors: product.colors ?? [], // 🆕
+        colors: product.colors ?? [],
+        sizes: (product as any).sizes ?? [], // 🆕 v22.20
         is_active: product.is_active,
       });
       const isPreset = SUPPLIER_CATEGORIES.some(
@@ -109,7 +109,6 @@ export default function ProductFormModal({
     setAiError(null);
   }, [product, isOpen]);
 
-  // ========== SCORE ==========
   const quality = useMemo(() => {
     return calculateSupplierProductQuality({
       name: form.name,
@@ -127,7 +126,9 @@ export default function ProductFormModal({
   const wantsToPublish = form.is_active;
   const isBlocked = wantsToPublish && !canPublish;
 
-  // ========== HANDLERS ==========
+  // 🆕 v22.20 - Detectar si es ropa/calzado para mostrar tallas
+  const showSizesSection = isClothingCategory(form.category);
+
   const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value;
     if (value === "__custom__") {
@@ -151,7 +152,6 @@ export default function ProductFormModal({
     toast.success("SKU generado", "Puedes editarlo si quieres");
   };
 
-  // 🆕 AUTO-FILL AI HANDLER
   const handleAutoFillAI = async () => {
     if (form.images.length === 0) {
       toast.warning(
@@ -166,7 +166,6 @@ export default function ProductFormModal({
     setAiStage(0);
     setAiError(null);
 
-    // Simular progreso
     const interval = setInterval(() => {
       setAiStage((prev) => {
         if (prev >= AI_STAGES.length - 2) return prev;
@@ -184,22 +183,18 @@ export default function ProductFormModal({
       setAiProgress(100);
       setAiStage(AI_STAGES.length - 1);
 
-      // Aplicar datos al form
       setForm((prev) => ({
         ...prev,
         name: data.name || prev.name,
         description: data.description || prev.description,
         category: data.category || prev.category,
-        // Precios (base y sugerido)
         base_price: data.price_min ?? prev.base_price,
         suggested_price: data.price_suggested ?? prev.suggested_price,
-        // 🎨 Colores detectados por AI → agregar a los ya seleccionados
         colors: data.colors_detected && data.colors_detected.length > 0
           ? Array.from(new Set([...prev.colors, ...data.colors_detected]))
           : prev.colors,
       }));
 
-      // Si la categoría no es preset, activar custom
       if (data.category) {
         const isPreset = SUPPLIER_CATEGORIES.some(
           (c) => c.value === data.category || c.label === data.category
@@ -378,7 +373,6 @@ export default function ProductFormModal({
     toast.info("Imagen principal actualizada");
   };
 
-  // ========== SUBMIT ==========
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAttemptedSubmit(true);
@@ -426,7 +420,6 @@ export default function ProductFormModal({
 
   if (!isOpen) return null;
 
-  // ========== UI HELPERS ==========
   const totalImages = form.images.length;
   const nameLen = form.name.length;
   const descLen = form.description.length;
@@ -511,7 +504,7 @@ export default function ProductFormModal({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5 p-6">
-          {/* 🆕 AUTO-FILL AI HERO */}
+          {/* AUTO-FILL AI HERO */}
           {form.images.length === 0 ? (
             <div className="rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 p-5 text-center">
               <div className="text-3xl opacity-40">🪄</div>
@@ -996,7 +989,7 @@ export default function ProductFormModal({
             </div>
           </div>
 
-          {/* 🆕 COLORES DISPONIBLES */}
+          {/* COLORES DISPONIBLES */}
           <div className="rounded-2xl border border-gray-200 bg-white p-4">
             <div className="flex items-center justify-between mb-2">
               <label className="block text-sm font-semibold text-gray-700">
@@ -1015,6 +1008,38 @@ export default function ProductFormModal({
               disabled={saving || uploading}
             />
           </div>
+
+          {/* 🆕 v22.20 - TALLAS (solo si es ropa/calzado) */}
+          {showSizesSection && (
+            <div className="rounded-2xl border-2 border-blue-200 bg-blue-50/50 p-4">
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-semibold text-blue-900">
+                  👕 Tallas disponibles
+                </label>
+                <span className="text-xs text-blue-600">
+                  ({form.sizes.length} seleccionadas)
+                </span>
+              </div>
+              <p className="mb-3 text-xs text-blue-700">
+                💡 Detectamos que tu producto es de ropa/calzado. Indica las tallas que tienes en stock.
+              </p>
+              <SizePicker
+                selected={form.sizes}
+                onChange={(sizes) => setForm({ ...form, sizes })}
+                category={form.category}
+                disabled={saving || uploading}
+              />
+            </div>
+          )}
+
+          {/* Hint si NO es ropa pero quiere agregar tallas */}
+          {!showSizesSection && form.category && (
+            <div className="rounded-xl bg-gray-50 border border-gray-200 p-3 text-xs text-gray-600">
+              ℹ️ Las tallas solo se muestran para categorías de ropa o calzado.
+              Si tu producto necesita tallas, cambia la categoría o agrega palabras
+              como "ropa", "calzado" a la categoría personalizada.
+            </div>
+          )}
 
           {/* PRECIOS */}
           <div className="rounded-2xl bg-amber-50 p-4">

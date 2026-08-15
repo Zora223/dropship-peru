@@ -1,6 +1,6 @@
 // ============================================================
 // SUPPLIER PRODUCTS — Funciones CRUD para proveedores
-// v22.14 — Soft delete + Colores + Marcar agotado / Reponer stock
+// v22.20 — Soft delete + Colores + Tallas + Marcar agotado / Reponer stock
 // ============================================================
 
 import { supabase } from "./supabase";
@@ -18,6 +18,7 @@ export interface SupplierProduct {
   category: string;
   images: string[];
   colors: string[];
+  sizes: string[]; // 🆕 v22.20
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -35,6 +36,7 @@ export interface ProductFormData {
   category: string;
   images: string[];
   colors: string[];
+  sizes: string[]; // 🆕 v22.20
   is_active: boolean;
 }
 
@@ -80,6 +82,7 @@ export async function listSupplierProducts(
   return products.map((p) => ({
     ...p,
     colors: p.colors ?? [],
+    sizes: p.sizes ?? [], // 🆕 v22.20
     vendors_count: countMap[p.id] ?? 0,
   })) as SupplierProduct[];
 }
@@ -116,6 +119,7 @@ export async function createProduct(
       category: data.category.trim(),
       images: data.images,
       colors: data.colors ?? [],
+      sizes: data.sizes ?? [], // 🆕 v22.20
       is_active: data.is_active,
     })
     .select("*")
@@ -181,9 +185,7 @@ export async function toggleActive(
 }
 
 // ============================================================
-// 🆕 v22.14 — MARCAR PRODUCTO COMO AGOTADO (stock = 0)
-// El TRIGGER se encarga de sincronizar automáticamente
-// a todos los products de vendors que importaron este producto.
+// MARCAR PRODUCTO COMO AGOTADO (stock = 0)
 // ============================================================
 export async function markAsOutOfStock(productId: string): Promise<void> {
   const { error } = await supabase
@@ -198,9 +200,7 @@ export async function markAsOutOfStock(productId: string): Promise<void> {
 }
 
 // ============================================================
-// 🆕 v22.14 — REPONER STOCK (agrega cantidad al stock actual)
-// El TRIGGER se encarga de sincronizar automáticamente
-// a todos los products de vendors.
+// REPONER STOCK
 // ============================================================
 export async function restoreStock(
   productId: string,
@@ -222,8 +222,7 @@ export async function restoreStock(
 }
 
 // ============================================================
-// 🆕 v22.14 — AGREGAR STOCK (suma al stock existente)
-// Útil cuando el proveedor recibe más mercadería
+// AGREGAR STOCK (suma al existente)
 // ============================================================
 export async function addStock(
   productId: string,
@@ -233,7 +232,6 @@ export async function addStock(
     throw new Error("La cantidad a agregar debe ser mayor a 0");
   }
 
-  // Primero obtenemos el stock actual
   const { data: current, error: fetchError } = await supabase
     .from("catalog_products")
     .select("stock")
@@ -256,7 +254,7 @@ export async function addStock(
 }
 
 // ============================================================
-// SUBIR IMAGEN AL BUCKET (10MB v22.6)
+// SUBIR IMAGEN AL BUCKET (10MB)
 // ============================================================
 export async function uploadProductImage(file: File): Promise<string> {
   if (!file.type.startsWith("image/")) {

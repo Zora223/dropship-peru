@@ -1,5 +1,5 @@
 // src/lib/color-utils.ts
-// 🎨 v22.13 - Mapa de colores nombre → hex
+// 🎨 v22.20 - Fix parsing colores + soporte legacy JSON strings
 
 export const COLOR_HEX_MAP: Record<string, string> = {
   negro: "#000000",
@@ -28,6 +28,8 @@ export const COLOR_HEX_MAP: Record<string, string> = {
   coral: "#FB7185",
   lila: "#C4B5FD",
   menta: "#86EFAC",
+  café: "#78350F",
+  cafe: "#78350F",
 };
 
 export interface ColorObject {
@@ -35,25 +37,43 @@ export interface ColorObject {
   hex: string;
 }
 
-/**
- * Convierte un color (string o objeto) a formato { name, hex }
- * - "Negro" → { name: "Negro", hex: "#000000" }
- * - {name:"Negro", hex:"#000"} → mismo
- */
+function tryParseJsonColor(str: string): ColorObject | null {
+  try {
+    const trimmed = str.trim();
+    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === "object" && typeof parsed.name === "string") {
+        return {
+          name: parsed.name,
+          hex: typeof parsed.hex === "string" ? parsed.hex : getColorHex(parsed.name),
+        };
+      }
+    }
+  } catch {
+    // No es JSON válido
+  }
+  return null;
+}
+
 export function toColorObject(input: string | ColorObject): ColorObject {
   if (typeof input === "string") {
+    const parsed = tryParseJsonColor(input);
+    if (parsed) return parsed;
     const hex = COLOR_HEX_MAP[input.toLowerCase().trim()] ?? "#6B7280";
     return { name: input, hex };
   }
-  return input;
+
+  if (input && typeof input === "object" && "name" in input) {
+    return {
+      name: input.name,
+      hex: input.hex || getColorHex(input.name),
+    };
+  }
+
+  return { name: "Color", hex: "#6B7280" };
 }
 
-/**
- * Normaliza un array de colores (mezcla de strings/objetos) a Color[]
- */
-export function normalizeColorsArray(
-  colors: unknown
-): ColorObject[] {
+export function normalizeColorsArray(colors: unknown): ColorObject[] {
   if (!Array.isArray(colors)) return [];
   return colors
     .filter((c) => c !== null && c !== undefined)
@@ -67,9 +87,6 @@ export function normalizeColorsArray(
     .filter((c): c is ColorObject => c !== null);
 }
 
-/**
- * Obtiene solo el hex de un color
- */
 export function getColorHex(name: string): string {
   return COLOR_HEX_MAP[name.toLowerCase().trim()] ?? "#6B7280";
 }

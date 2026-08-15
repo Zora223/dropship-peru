@@ -1,5 +1,5 @@
 // src/pages/StorePage.tsx
-// 🆕 v22.13.1 - Tutorial con nombre de tienda dinámico
+// 🆕 v22.20 - Soporte tallas + colores en carrito
 
 import WhatsappFloatingButton from "../components/WhatsappFloatingButton";
 import FreeShippingBadge from "../components/FreeShippingBadge";
@@ -148,13 +148,28 @@ export default function StorePage() {
     return methods.filter(m => m && m.enabled);
   }, [store?.payment_methods]);
 
-  const handleAdd = (product: PublicStoreProduct, quantity: number = 1, selectedColor: string | null = null) => {
+  // 🆕 v22.20 - Ahora acepta talla también
+  const handleAdd = (
+    product: PublicStoreProduct,
+    quantity: number = 1,
+    selectedColor: string | null = null,
+    selectedSize: string | null = null
+  ) => {
     if (!isPurchasable(product.real_stock) || !store) return;
     const images = normalizeImages(product.images);
+
+    // Nombre con talla + color visible
+    const variantParts: string[] = [];
+    if (selectedSize) variantParts.push(`Talla ${selectedSize}`);
+    if (selectedColor) variantParts.push(selectedColor);
+    const displayName = variantParts.length > 0
+      ? `${product.name} (${variantParts.join(" · ")})`
+      : product.name;
+
     for (let i = 0; i < quantity; i++) {
       addItem({
         productId: product.id,
-        name: selectedColor ? `${product.name} (${selectedColor})` : product.name,
+        name: displayName,
         price: Number(product.price),
         storeId: store.id,
         storeSlug: store.slug,
@@ -162,6 +177,8 @@ export default function StorePage() {
         source: product.source,
         catalogProductId: product.catalog_product_id,
         image: images[0] ?? null,
+        selectedColor,
+        selectedSize, // 🆕 v22.20
       });
     }
     setAddedId(product.id);
@@ -469,7 +486,12 @@ export default function StorePage() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleAdd(product);
+                          // Si tiene tallas o colores, abrir modal para que elija
+                          if ((product.sizes?.length ?? 0) > 0 || (product.colors?.length ?? 0) > 0) {
+                            setSelectedProduct(product);
+                          } else {
+                            handleAdd(product);
+                          }
                         }}
                         disabled={!canBuy}
                         className={`shrink-0 rounded-full px-3 sm:px-5 py-2 sm:py-2.5 text-[11px] sm:text-sm font-bold shadow-md transition active:scale-95 ${
@@ -566,7 +588,7 @@ export default function StorePage() {
           )}
 
           <div className="mt-8 sm:mt-10 text-center text-xs text-gray-400">
-            Tienda creada con Meliora Dropship 🌴
+            Tienda creada con Dropship Perú 🌴
           </div>
         </div>
       </div>
@@ -607,7 +629,7 @@ export default function StorePage() {
         />
       )}
 
-      {/* 🎓 TUTORIAL "¿Cómo comprar?" - v22.13.1 */}
+      {/* Tutorial */}
       <HowToBuyTutorial
         storeName={store.name}
         primaryColor={theme.primary_color}
