@@ -1,5 +1,5 @@
 // src/lib/marketplace.ts
-// 🏪 v22.16 - Marketplace público con AGRUPACIÓN por catálogo (no competencia)
+// 🏪 v22.21 - Categorías con foto real + precio desde
 
 import { supabase } from "./supabase";
 
@@ -21,14 +21,12 @@ export interface MarketplaceProduct {
   review_count: number | null;
   colors: string[] | null;
   catalog_product_id: string | null;
-  // 🆕 v22.16 - Info de tienda asignada (aleatoria si es de catálogo)
   store: {
     id: string;
     name: string;
     slug: string;
     logo_url: string | null;
   };
-  // 🆕 v22.16 - Cuántas tiendas ofrecen este producto
   stores_count?: number;
 }
 
@@ -46,6 +44,8 @@ export interface MarketplaceCategory {
   name: string;
   emoji: string;
   product_count: number;
+  cover_image: string | null; // 🆕 v22.21 - Foto real
+  min_price: number | null;   // 🆕 v22.21 - Precio desde
 }
 
 export interface MarketplaceStats {
@@ -107,39 +107,26 @@ function mapProductRow(p: RawProductRow, storesCount = 1): MarketplaceProduct {
   };
 }
 
-/**
- * 🆕 v22.16 - Agrupa productos por catálogo (deduplica) y asigna vendedor aleatorio
- *
- * Si 5 vendedores tienen el mismo producto del catálogo:
- * - Devuelve 1 sola card
- * - Con vendedor asignado aleatoriamente (justo)
- * - Con contador de cuántas tiendas lo venden
- */
 function dedupeByCatalog(rawProducts: RawProductRow[]): MarketplaceProduct[] {
   const groupedByCatalog = new Map<string, RawProductRow[]>();
   const uniqueOwn: RawProductRow[] = [];
 
   for (const p of rawProducts) {
     if (p.catalog_product_id) {
-      // Es de catálogo → agrupar
       const key = p.catalog_product_id;
       const list = groupedByCatalog.get(key) ?? [];
       list.push(p);
       groupedByCatalog.set(key, list);
     } else {
-      // Es producto propio del vendedor → siempre único
       uniqueOwn.push(p);
     }
   }
 
   const result: MarketplaceProduct[] = [];
 
-  // Productos propios (únicos)
   uniqueOwn.forEach((p) => result.push(mapProductRow(p, 1)));
 
-  // Productos de catálogo (deduplicados + asignación aleatoria)
   groupedByCatalog.forEach((products) => {
-    // Escoge un vendedor aleatorio de los que ofrecen ese producto
     const randomIndex = Math.floor(Math.random() * products.length);
     const chosen = products[randomIndex];
     result.push(mapProductRow(chosen, products.length));
@@ -152,14 +139,9 @@ function dedupeByCatalog(rawProducts: RawProductRow[]): MarketplaceProduct[] {
 // PRODUCTOS DESTACADOS
 // ══════════════════════════════════════════════════════════
 
-/**
- * v22.16 - Trae productos deduplicados por catálogo
- * (evita mostrar el mismo producto en múltiples tarjetas)
- */
 export async function getFeaturedProducts(
   limit = 12
 ): Promise<MarketplaceProduct[]> {
-  // Traemos MÁS de lo necesario porque después deduplicamos
   const { data, error } = await supabase
     .from("products")
     .select(
@@ -175,7 +157,7 @@ export async function getFeaturedProducts(
     .eq("store.is_active", true)
     .order("featured", { ascending: false })
     .order("created_at", { ascending: false })
-    .limit(limit * 3); // Traer 3x para tener suficiente después de dedupe
+    .limit(limit * 3);
 
   if (error) {
     console.error("Error fetching featured products:", error);
@@ -259,7 +241,7 @@ export async function getFeaturedStores(
 }
 
 // ══════════════════════════════════════════════════════════
-// CATEGORÍAS
+// CATEGORÍAS - CON FOTOS REALES 🔥 v22.21
 // ══════════════════════════════════════════════════════════
 
 function extractEmoji(category: string): { emoji: string; label: string } {
@@ -273,7 +255,7 @@ function extractEmoji(category: string): { emoji: string; label: string } {
 export async function getCategories(): Promise<MarketplaceCategory[]> {
   const { data, error } = await supabase
     .from("products")
-    .select("category, catalog_product_id")
+    .select("category, catalog_product_id, images, price")
     .eq("is_active", true)
     .gt("stock", 0)
     .not("category", "is", null);
@@ -283,29 +265,69 @@ export async function getCategories(): Promise<MarketplaceCategory[]> {
     return [];
   }
 
-  // Deduplicar por catalog_product_id para el conteo
   const seenCatalog = new Set<string>();
-  const countMap = new Map<string, number>();
+  const categoryData = new Map<
+    string,
+    { count: number; images: string[]; prices: number[] }
+  >();
 
-  (data ?? []).forEach((p: { category: string | null; catalog_product_id: string | null }) => {
-    if (!p.category) return;
+  (data ?? []).forEach(
+    (p: {
+      category: string | null;
+      catalog_product_id: string | null;
+      images: string[] | null;
+      price: number | string | null;
+    }) => {
+      if (!p.category) return;
 
-    // Si es de catálogo y ya lo contamos, saltamos
-    if (p.catalog_product_id) {
-      if (seenCatalog.has(p.catalog_product_id)) return;
-      seenCatalog.add(p.catalog_product_id);
+      // Dedupe por catálogo (no contar duplicados)
+      if (p.catalog_product_id) {
+        if (seenCatalog.has(p.catalog_product_id)) return;
+        seenCatalog.add(p.catalog_product_id);
+      }
+
+      const current = categoryData.get(p.category) ?? {
+        count: 0,
+        images: [],
+        prices: [],
+      };
+
+      current.count += 1;
+
+      // Guardar imágenes disponibles
+      if (Array.isArray(p.images) && p.images[0]) {
+        current.images.push(p.images[0]);
+      }
+
+      // Guardar precios
+      if (p.price) {
+        current.prices.push(Number(p.price));
+      }
+
+      categoryData.set(p.category, current);
     }
+  );
 
-    countMap.set(p.category, (countMap.get(p.category) ?? 0) + 1);
-  });
-
-  return Array.from(countMap.entries())
-    .map(([category, count]) => {
+  return Array.from(categoryData.entries())
+    .map(([category, stats]) => {
       const { emoji, label } = extractEmoji(category);
+
+      // Elegir imagen aleatoria de las disponibles
+      const randomImage =
+        stats.images.length > 0
+          ? stats.images[Math.floor(Math.random() * stats.images.length)]
+          : null;
+
+      // Precio mínimo
+      const minPrice =
+        stats.prices.length > 0 ? Math.min(...stats.prices) : null;
+
       return {
         name: label,
         emoji,
-        product_count: count,
+        product_count: stats.count,
+        cover_image: randomImage,
+        min_price: minPrice,
       };
     })
     .sort((a, b) => b.product_count - a.product_count);
@@ -339,7 +361,6 @@ export async function getMarketplaceStats(): Promise<MarketplaceStats> {
       .filter(Boolean)
   );
 
-  // 🆕 Contar productos únicos (deduplicando catálogo)
   const seenCatalog = new Set<string>();
   let uniqueCount = 0;
   (productsRes.data ?? []).forEach(

@@ -1,5 +1,5 @@
 // src/pages/HomePage.tsx
-// 🏪 v22.20 - Homepage estilo "collage de apps" iOS/Android
+// 🎨 v22.21 - Bento grid con fotos reales estilo Airbnb/Netflix
 
 import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
@@ -13,26 +13,6 @@ import {
 } from "../lib/marketplace";
 import ProductCard from "../components/marketplace/ProductCard";
 import SEOHead from "../components/marketplace/SEOHead";
-
-// 🎨 Colores de fondo bonitos para cada categoría (rotativos)
-const CATEGORY_BG_COLORS = [
-  "from-rose-100 to-pink-200",
-  "from-blue-100 to-cyan-200",
-  "from-amber-100 to-orange-200",
-  "from-emerald-100 to-teal-200",
-  "from-purple-100 to-fuchsia-200",
-  "from-yellow-100 to-amber-200",
-  "from-indigo-100 to-blue-200",
-  "from-lime-100 to-green-200",
-  "from-red-100 to-rose-200",
-  "from-sky-100 to-blue-200",
-  "from-fuchsia-100 to-pink-200",
-  "from-teal-100 to-cyan-200",
-];
-
-function getCategoryBgColor(index: number): string {
-  return CATEGORY_BG_COLORS[index % CATEGORY_BG_COLORS.length];
-}
 
 export default function HomePage() {
   const [products, setProducts] = useState<MarketplaceProduct[]>([]);
@@ -147,53 +127,112 @@ export default function HomePage() {
       </section>
 
       {/* ═══════════════════════════════════════════════
-          🎨 CATEGORÍAS — Estilo collage apps
+          🎨 CATEGORÍAS — Bento Grid con fotos reales
       ═══════════════════════════════════════════════ */}
       {categories.length > 0 && (
         <section>
-          <div className="mb-6 text-center">
-            <h2 className="text-2xl font-black tracking-tight text-gray-900 md:text-3xl">
-              📁 Explora por categoría
-            </h2>
-            <p className="mt-1 text-sm text-gray-500">
-              Toca una categoría para ver todos los productos
-            </p>
+          <div className="mb-6 flex items-end justify-between">
+            <div>
+              <h2 className="text-3xl font-black tracking-tight text-gray-900 md:text-4xl">
+                Explora categorías
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Descubre productos únicos de emprendedores peruanos
+              </p>
+            </div>
+            <div className="hidden sm:block text-xs font-semibold text-gray-400">
+              {categories.length} categorías
+            </div>
           </div>
 
-          {/* Grid tipo apps de celular */}
-          <div className="grid gap-3 grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-            {categories.slice(0, 16).map((cat, idx) => (
-              <Link
-                key={cat.name}
-                to={`/categoria/${encodeURIComponent(cat.name.toLowerCase().replace(/\s+/g, "-"))}`}
-                className="group flex flex-col items-center"
-              >
-                {/* Icono cuadrado tipo app */}
-                <div
-                  className={`aspect-square w-full rounded-2xl bg-linear-to-br ${getCategoryBgColor(idx)} p-3 shadow-md transition group-hover:-translate-y-1 group-hover:shadow-lg flex items-center justify-center`}
+          {/* Bento Grid Asimétrico */}
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4 auto-rows-[180px] md:auto-rows-[220px]">
+            {categories.slice(0, 8).map((cat, idx) => {
+              const slug = encodeURIComponent(
+                cat.name.toLowerCase().replace(/\s+/g, "-")
+              );
+
+              // Tamaños asimétricos
+              const isBig = idx === 0 || idx === 4;
+              const isTall = idx === 2;
+
+              return (
+                <Link
+                  key={cat.name}
+                  to={`/categoria/${slug}`}
+                  className={`group relative overflow-hidden rounded-2xl shadow-md transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl ${
+                    isBig ? "md:col-span-2" : ""
+                  } ${isTall ? "md:row-span-2" : ""}`}
                 >
-                  <div className="text-4xl sm:text-5xl transition group-hover:scale-110">
-                    {cat.emoji}
-                  </div>
-                </div>
+                  {/* Imagen de fondo */}
+                  {cat.cover_image ? (
+                    <img
+                      src={cat.cover_image}
+                      alt={cat.name}
+                      className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 bg-linear-to-br from-rose-400 via-pink-500 to-orange-500" />
+                  )}
 
-                {/* Nombre debajo (como en iOS/Android) */}
-                <div className="mt-2 text-center">
-                  <div className="text-xs font-bold text-gray-900 line-clamp-1">
-                    {cat.name}
+                  {/* Overlay gradient */}
+                  <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/40 to-transparent" />
+
+                  {/* Contenido */}
+                  <div className="relative flex h-full flex-col justify-between p-4">
+                    {/* Emoji flotante arriba */}
+                    <div className="text-4xl md:text-5xl drop-shadow-lg self-start">
+                      {cat.emoji}
+                    </div>
+
+                    {/* Info abajo */}
+                    <div className="text-white">
+                      <h3
+                        className={`font-black leading-tight drop-shadow-lg ${
+                          isBig
+                            ? "text-2xl md:text-3xl"
+                            : "text-lg md:text-xl"
+                        }`}
+                      >
+                        {cat.name}
+                      </h3>
+
+                      <div className="mt-1 flex items-center gap-2 text-xs font-semibold">
+                        <span className="rounded-full bg-white/20 px-2 py-0.5 backdrop-blur">
+                          ✨ {cat.product_count} {cat.product_count === 1 ? "producto" : "productos"}
+                        </span>
+                        {cat.min_price && cat.min_price > 0 && (
+                          <span className="hidden sm:inline text-white/90">
+                            Desde <b>S/{cat.min_price.toFixed(0)}</b>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Flecha aparece en hover */}
+                      <div className="mt-3 flex items-center gap-1 text-xs font-bold opacity-0 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-1">
+                        Ver todo <span>→</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-[10px] text-gray-500">
-                    {cat.product_count} {cat.product_count === 1 ? "prod." : "prods."}
-                  </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
+
+          {/* Ver más si hay muchas categorías */}
+          {categories.length > 8 && (
+            <div className="mt-6 text-center">
+              <p className="text-xs text-gray-500">
+                Hay <b>{categories.length - 8} categorías más</b> — explora buscando o navegando por producto
+              </p>
+            </div>
+          )}
         </section>
       )}
 
       {/* ═══════════════════════════════════════════════
-          🔥 PRODUCTOS DESTACADOS — Grid pequeño
+          🔥 PRODUCTOS DESTACADOS
       ═══════════════════════════════════════════════ */}
       {(loading || products.length > 0) && (
         <section>
