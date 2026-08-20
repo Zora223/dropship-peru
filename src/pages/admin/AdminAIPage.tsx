@@ -1,5 +1,5 @@
 // src/pages/admin/AdminAIPage.tsx
-// 🍌 v22.7 - Panel Admin de Gestión de Membresías e IA (Sin variables en desuso)
+// 🍌 v22.8 - Panel Admin AI 100% Responsive Móvil + Gestión Automatizada de Planes
 
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
@@ -37,11 +37,14 @@ interface UpgradeRequest {
   created_at: string;
 }
 
-const PLAN_CONFIG: Record<PlanType, { label: string; price: number; credits: number; color: string; emoji: string }> = {
-  starter: { label: "Starter", price: 0, credits: 99999, color: "gray", emoji: "🆓" },
-  creator: { label: "Creator", price: 19, credits: 99999, color: "purple", emoji: "🎨" },
-  pro: { label: "Pro", price: 49, credits: 99999, color: "blue", emoji: "🚀" },
-  business: { label: "Business", price: 149, credits: -1, color: "amber", emoji: "💎" },
+const PLAN_CONFIG: Record<
+  PlanType,
+  { label: string; price: number; credits: number; color: string; emoji: string }
+> = {
+  starter: { label: "Starter (Prueba)", price: 0, credits: 75, color: "gray", emoji: "🚀" },
+  creator: { label: "Creator", price: 19, credits: 300, color: "purple", emoji: "🎨" },
+  pro: { label: "Pro", price: 49, credits: 800, color: "blue", emoji: "⚡" },
+  business: { label: "Business (VIP)", price: 149, credits: -1, color: "amber", emoji: "💎" },
 };
 
 export default function AdminAIPage() {
@@ -91,14 +94,14 @@ export default function AdminAIPage() {
         const store = storesMap.get(sub.vendor_id);
         return {
           vendor_id: sub.vendor_id,
-          email: profile?.email || "sin email",
+          email: profile?.email || "Sin email",
           full_name: profile?.full_name || null,
           store_name: store?.name || null,
           store_slug: store?.slug || null,
           plan: sub.plan as PlanType,
           status: sub.status,
-          credits_remaining: sub.credits_remaining ?? 99999,
-          credits_total: sub.credits_total ?? 99999,
+          credits_remaining: sub.credits_remaining ?? 75,
+          credits_total: sub.credits_total ?? 75,
           total_used: sub.total_used || 0,
           is_trial: sub.is_trial,
           expires_at: sub.expires_at,
@@ -127,7 +130,7 @@ export default function AdminAIPage() {
         const requests: UpgradeRequest[] = requestsData.map((r: any) => ({
           id: r.id,
           vendor_id: r.vendor_id,
-          vendor_email: reqProfilesMap.get(r.vendor_id)?.email || "sin email",
+          vendor_email: reqProfilesMap.get(r.vendor_id)?.email || "Sin email",
           vendor_name: reqProfilesMap.get(r.vendor_id)?.full_name || null,
           plan_requested: r.plan_requested,
           amount: Number(r.amount),
@@ -153,18 +156,20 @@ export default function AdminAIPage() {
 
   useEffect(() => {
     loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleResetCredits = async (vendor: VendorAI) => {
-    if (!confirm(`¿Restablecer plan de herramientas IA para ${vendor.email}?`)) return;
+  const handleResetPlan = async (vendor: VendorAI) => {
+    if (!confirm(`¿Restablecer cuota mensual de herramientas IA para ${vendor.email}?`)) return;
 
     try {
+      const config = PLAN_CONFIG[vendor.plan];
+      const defaultQuota = config.credits === -1 ? 9999 : config.credits;
+
       const { error } = await supabase
         .from("ai_subscriptions")
         .update({
-          credits_remaining: 99999,
-          credits_total: 99999,
+          credits_remaining: defaultQuota,
+          credits_total: defaultQuota,
           total_used: 0,
           updated_at: new Date().toISOString(),
         })
@@ -172,7 +177,7 @@ export default function AdminAIPage() {
 
       if (error) throw error;
 
-      toast.success("✅ Acceso IA Restablecido", `${vendor.email} → Herramientas Ilimitadas`);
+      toast.success("✅ Cuota Restablecida", `${vendor.email} reiniciado a su plan`);
       await loadData();
     } catch (err) {
       toast.error("Error", err instanceof Error ? err.message : "Intenta de nuevo");
@@ -184,13 +189,14 @@ export default function AdminAIPage() {
     setProcessing(true);
     try {
       const config = PLAN_CONFIG[newPlan];
+      const newQuota = config.credits === -1 ? 9999 : config.credits;
 
       const { error } = await supabase
         .from("ai_subscriptions")
         .update({
           plan: newPlan,
-          credits_remaining: 99999,
-          credits_total: 99999,
+          credits_remaining: newQuota,
+          credits_total: newQuota,
           total_used: 0,
           is_trial: false,
           status: "active",
@@ -202,8 +208,8 @@ export default function AdminAIPage() {
       if (error) throw error;
 
       toast.success(
-        "✅ Plan de Membresía Actualizado",
-        `${selectedVendor.email} → Plan ${config.label} (Herramientas Ilimitadas)`
+        "✅ Plan Asignado",
+        `${selectedVendor.email} → Plan ${config.label}`
       );
 
       setShowPlanModal(false);
@@ -217,19 +223,20 @@ export default function AdminAIPage() {
   };
 
   const handleApproveRequest = async (request: UpgradeRequest) => {
-    if (!confirm(`¿Aprobar upgrade de ${request.vendor_email} a plan ${request.plan_requested}?`)) return;
+    if (!confirm(`¿Aprobar Yape y cambiar a ${request.vendor_email} al plan ${request.plan_requested}?`)) return;
 
     setProcessing(true);
     try {
       const plan = request.plan_requested as PlanType;
       const config = PLAN_CONFIG[plan];
+      const newQuota = config.credits === -1 ? 9999 : config.credits;
 
       const { error: subError } = await supabase
         .from("ai_subscriptions")
         .update({
           plan: plan,
-          credits_remaining: 99999,
-          credits_total: 99999,
+          credits_remaining: newQuota,
+          credits_total: newQuota,
           total_used: 0,
           is_trial: false,
           status: "active",
@@ -253,10 +260,7 @@ export default function AdminAIPage() {
 
       if (reqError) throw reqError;
 
-      toast.success(
-        "✅ Upgrade aprobado",
-        `${request.vendor_email} ahora cuenta con ${config.label}`
-      );
+      toast.success("✅ Upgrade Aprobado", `${request.vendor_email} ahora es ${config.label}`);
       await loadData();
     } catch (err) {
       toast.error("Error", err instanceof Error ? err.message : "Intenta de nuevo");
@@ -266,7 +270,7 @@ export default function AdminAIPage() {
   };
 
   const handleRejectRequest = async (request: UpgradeRequest) => {
-    const reason = prompt("Motivo del rechazo (opcional):");
+    const reason = prompt("Motivo del rechazo:");
     if (reason === null) return;
 
     setProcessing(true);
@@ -275,7 +279,7 @@ export default function AdminAIPage() {
         .from("ai_upgrade_requests")
         .update({
           status: "rejected",
-          admin_notes: reason || "Rechazado sin motivo",
+          admin_notes: reason || "No verificado en Yape",
           updated_at: new Date().toISOString(),
         })
         .eq("id", request.id);
@@ -308,12 +312,6 @@ export default function AdminAIPage() {
     activeSubscriptions: vendors.filter((v) => v.status === "active").length,
     totalKits: vendors.reduce((sum, v) => sum + v.kits_generated, 0),
     mrr: vendors.reduce((sum, v) => sum + (PLAN_CONFIG[v.plan]?.price || 0), 0),
-    byPlan: {
-      starter: vendors.filter((v) => v.plan === "starter").length,
-      creator: vendors.filter((v) => v.plan === "creator").length,
-      pro: vendors.filter((v) => v.plan === "pro").length,
-      business: vendors.filter((v) => v.plan === "business").length,
-    },
   };
 
   if (loading) {
@@ -325,386 +323,355 @@ export default function AdminAIPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12">
       {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">
-            🎨 Gestión de Membresías e IA
-          </h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Administra los planes de Inteligencia Artificial y solicitudes de los vendedores
-          </p>
+          <h1 className="text-2xl font-black text-gray-900">🎨 Control de Membresías IA</h1>
+          <p className="text-xs text-gray-500">Gestión de acceso y límites para vendedores</p>
         </div>
-
         <button
           onClick={loadData}
-          className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+          className="w-full sm:w-auto rounded-xl bg-white border border-gray-200 px-4 py-2.5 text-xs font-bold text-gray-700 shadow-sm active:scale-95 transition"
         >
           🔄 Actualizar
         </button>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <div className="text-xs font-bold uppercase text-gray-500">Vendors Activos</div>
-          <div className="mt-1 text-2xl font-black text-gray-900">{stats.totalVendors}</div>
-          <div className="text-[10px] text-gray-500 mt-1">
-            {stats.byPlan.creator} creator · {stats.byPlan.pro} pro · {stats.byPlan.business} biz
-          </div>
+      {/* KPI Cards (Responsive Grid 2x2 en móvil) */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-2xl bg-white p-4 border border-gray-100 shadow-sm">
+          <div className="text-[10px] font-bold uppercase text-gray-400">Tiendas con IA</div>
+          <div className="text-2xl font-black text-gray-900 mt-1">{stats.totalVendors}</div>
         </div>
 
-        <div className="rounded-2xl bg-linear-to-br from-emerald-500 to-teal-500 p-4 text-white shadow-lg">
-          <div className="text-xs font-bold uppercase opacity-90">MRR Estimado IA</div>
-          <div className="mt-1 text-2xl font-black">S/ {stats.mrr}</div>
-          <div className="text-[10px] opacity-75 mt-1">Ingreso mensual estimado</div>
+        <div className="rounded-2xl bg-linear-to-br from-purple-600 to-pink-600 p-4 text-white shadow-md">
+          <div className="text-[10px] font-bold uppercase opacity-80">MRR Proyectado</div>
+          <div className="text-2xl font-black mt-1">S/ {stats.mrr}</div>
         </div>
 
-        <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <div className="text-xs font-bold uppercase text-gray-500">Membresías Activas</div>
-          <div className="mt-1 text-2xl font-black text-purple-600">
-            {stats.activeSubscriptions}
-          </div>
-          <div className="text-[10px] text-emerald-600 font-bold mt-1">Acceso Ilimitado ✅</div>
+        <div className="rounded-2xl bg-white p-4 border border-gray-100 shadow-sm">
+          <div className="text-[10px] font-bold uppercase text-gray-400">Activos</div>
+          <div className="text-2xl font-black text-emerald-600 mt-1">{stats.activeSubscriptions}</div>
         </div>
 
-        <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <div className="text-xs font-bold uppercase text-gray-500">Kits generados</div>
-          <div className="mt-1 text-2xl font-black text-pink-600">{stats.totalKits}</div>
-          <div className="text-[10px] text-gray-500 mt-1">Generaciones totales de vendedores</div>
+        <div className="rounded-2xl bg-white p-4 border border-gray-100 shadow-sm">
+          <div className="text-[10px] font-bold uppercase text-gray-400">Kits Creados</div>
+          <div className="text-2xl font-black text-purple-600 mt-1">{stats.totalKits}</div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-gray-200">
+      <div className="flex border-b border-gray-200">
         <button
           onClick={() => setActiveTab("vendors")}
-          className={`relative px-4 py-3 text-sm font-semibold transition ${
-            activeTab === "vendors" ? "text-gray-900" : "text-gray-500 hover:text-gray-700"
+          className={`flex-1 sm:flex-none px-4 py-3 text-xs sm:text-sm font-bold text-center border-b-2 transition ${
+            activeTab === "vendors"
+              ? "border-purple-600 text-purple-600 bg-purple-50/30"
+              : "border-transparent text-gray-500 hover:text-gray-700"
           }`}
         >
-          Vendors con IA
-          <span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
-            activeTab === "vendors" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"
-          }`}>
-            {vendors.length}
-          </span>
-          {activeTab === "vendors" && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500" />}
+          🏪 Tiendas ({vendors.length})
         </button>
-
         <button
           onClick={() => setActiveTab("requests")}
-          className={`relative px-4 py-3 text-sm font-semibold transition ${
-            activeTab === "requests" ? "text-gray-900" : "text-gray-500 hover:text-gray-700"
+          className={`flex-1 sm:flex-none px-4 py-3 text-xs sm:text-sm font-bold text-center border-b-2 transition relative ${
+            activeTab === "requests"
+              ? "border-purple-600 text-purple-600 bg-purple-50/30"
+              : "border-transparent text-gray-500 hover:text-gray-700"
           }`}
         >
-          Solicitudes de Upgrade
+          💳 Solicitudes Yape
           {pendingRequests.length > 0 && (
-            <span className="ml-2 rounded-full bg-red-500 px-2 py-0.5 text-xs text-white">
+            <span className="ml-1.5 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] text-white font-black">
               {pendingRequests.length}
             </span>
           )}
-          {activeTab === "requests" && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500" />}
         </button>
       </div>
 
-      {/* Contenido */}
+      {/* TAB 1: LISTADO DE TIENDAS */}
       {activeTab === "vendors" && (
-        <>
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="🔍 Buscar por email, nombre o tienda..."
-              className="w-full rounded-full border border-gray-200 bg-gray-50 px-5 py-2.5 text-sm outline-none focus:border-purple-500 focus:bg-white focus:ring-2 focus:ring-purple-100"
-            />
-          </div>
-
-          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-gray-50 text-gray-500">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Vendor</th>
-                    <th className="px-4 py-3 font-medium">Plan IA</th>
-                    <th className="px-4 py-3 font-medium">Herramientas</th>
-                    <th className="px-4 py-3 font-medium">Kits Creados</th>
-                    <th className="px-4 py-3 font-medium">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {filteredVendors.map((vendor) => {
-                    const config = PLAN_CONFIG[vendor.plan];
-
-                    return (
-                      <tr key={vendor.vendor_id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3">
-                          <div className="font-semibold text-gray-900">
-                            {vendor.full_name || "Sin nombre"}
-                          </div>
-                          <div className="text-xs text-gray-500">{vendor.email}</div>
-                          {vendor.store_name && (
-                            <div className="text-[10px] text-purple-600 font-medium mt-0.5">
-                              🏪 {vendor.store_name}
-                            </div>
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${
-                              config.color === "gray" ? "bg-gray-100 text-gray-700" :
-                              config.color === "purple" ? "bg-purple-100 text-purple-700" :
-                              config.color === "blue" ? "bg-blue-100 text-blue-700" :
-                              "bg-amber-100 text-amber-700"
-                            }`}
-                          >
-                            {config.emoji} {config.label}
-                          </span>
-                          {vendor.is_trial && (
-                            <div className="text-[10px] text-amber-600 font-bold mt-0.5">
-                              🎁 PRUEBA
-                            </div>
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">
-                            ⚡ Ilimitado
-                          </span>
-                        </td>
-
-                        <td className="px-4 py-3">
-                          <div className="text-sm font-bold text-pink-600">
-                            {vendor.kits_generated}
-                          </div>
-                        </td>
-
-                        <td className="px-4 py-3">
-                          <div className="flex gap-1.5 flex-wrap">
-                            <button
-                              onClick={() => {
-                                setSelectedVendor(vendor);
-                                setNewPlan(vendor.plan);
-                                setShowPlanModal(true);
-                              }}
-                              className="rounded-lg bg-purple-100 px-2.5 py-1 text-[11px] font-bold text-purple-800 hover:bg-purple-200"
-                              title="Cambiar plan"
-                            >
-                              📊 Editar Plan
-                            </button>
-
-                            <button
-                              onClick={() => handleResetCredits(vendor)}
-                              className="rounded-lg bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-800 hover:bg-amber-200"
-                              title="Restablecer plan"
-                            >
-                              🔄 Restablecer
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {filteredVendors.length === 0 && (
-              <div className="p-12 text-center text-gray-500">
-                {searchQuery ? "Sin resultados" : "Sin vendors registrados"}
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {activeTab === "requests" && (
         <div className="space-y-4">
-          {upgradeRequests.length === 0 ? (
-            <div className="rounded-2xl bg-white p-16 text-center shadow-sm">
-              <div className="text-6xl">📭</div>
-              <h3 className="mt-4 text-lg font-bold text-gray-900">Sin solicitudes pendientes</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                Las solicitudes de pago de Membresías IA aparecerán aquí
-              </p>
-            </div>
-          ) : (
-            upgradeRequests.map((req) => {
-              const config = PLAN_CONFIG[req.plan_requested as PlanType];
-              const isPending = req.status === "pending";
-              const isApproved = req.status === "approved";
-              const isRejected = req.status === "rejected";
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="🔍 Buscar por email, nombre o tienda..."
+            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-xs outline-none focus:border-purple-500 shadow-sm"
+          />
+
+          {/* VISTA MÓVIL: TARJETAS APILADAS */}
+          <div className="grid gap-3 sm:hidden">
+            {filteredVendors.map((vendor) => {
+              const config = PLAN_CONFIG[vendor.plan];
+              const isUnlimited = vendor.plan === "business";
+              const kitsLeft = isUnlimited
+                ? "♾️ Ilimitado"
+                : Math.max(0, Math.floor(vendor.credits_remaining / 15));
 
               return (
                 <div
-                  key={req.id}
-                  className={`rounded-2xl border-2 p-5 shadow-sm ${
-                    isPending ? "bg-amber-50 border-amber-200" :
-                    isApproved ? "bg-emerald-50 border-emerald-200" :
-                    "bg-gray-50 border-gray-200"
-                  }`}
+                  key={vendor.vendor_id}
+                  className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm space-y-3"
                 >
-                  <div className="flex items-start justify-between gap-4 flex-wrap">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
-                        {isPending && (
-                          <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs font-bold text-white">
-                            ⏳ PENDIENTE
-                          </span>
-                        )}
-                        {isApproved && (
-                          <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-xs font-bold text-white">
-                            ✅ APROBADO
-                          </span>
-                        )}
-                        {isRejected && (
-                          <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">
-                            ❌ RECHAZADO
-                          </span>
-                        )}
-                        <span className="text-xs text-gray-500">
-                          {new Date(req.created_at).toLocaleString("es-PE")}
-                        </span>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-bold text-sm text-gray-900">
+                        {vendor.full_name || "Sin nombre"}
                       </div>
-
-                      <div className="font-bold text-gray-900">
-                        {req.vendor_name || "Sin nombre"}
+                      <div className="text-xs text-gray-500 truncate max-w-50">
+                        {vendor.email}
                       </div>
-                      <div className="text-sm text-gray-600">{req.vendor_email}</div>
-
-                      <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                        <div>
-                          <div className="text-xs text-gray-500">Plan solicitado</div>
-                          <div className="font-bold text-gray-900">
-                            {config?.emoji} {config?.label}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-gray-500">Monto</div>
-                          <div className="font-bold text-emerald-600">
-                            S/ {req.amount.toFixed(2)}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-gray-500">Método</div>
-                          <div className="font-semibold text-gray-900">
-                            {req.payment_method}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-gray-500">Referencia</div>
-                          <div className="font-mono text-xs text-gray-900">
-                            {req.reference_code}
-                          </div>
-                        </div>
-                      </div>
-
-                      {req.admin_notes && (
-                        <div className="mt-3 rounded-lg bg-white/60 p-2 text-xs">
-                          <strong>Nota:</strong> {req.admin_notes}
+                      {vendor.store_name && (
+                        <div className="text-xs font-bold text-purple-600 mt-0.5">
+                          🏪 {vendor.store_name}
                         </div>
                       )}
                     </div>
+                    <span className="shrink-0 rounded-full bg-purple-100 px-2.5 py-1 text-[10px] font-black text-purple-800">
+                      {config.emoji} {config.label}
+                    </span>
+                  </div>
 
-                    {isPending && (
-                      <div className="flex gap-2 shrink-0">
-                        <button
-                          onClick={() => handleApproveRequest(req)}
-                          disabled={processing}
-                          className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-white shadow hover:bg-emerald-600 disabled:opacity-50"
-                        >
-                          ✅ Aprobar
-                        </button>
-                        <button
-                          onClick={() => handleRejectRequest(req)}
-                          disabled={processing}
-                          className="rounded-xl bg-red-500 px-4 py-2 text-sm font-bold text-white shadow hover:bg-red-600 disabled:opacity-50"
-                        >
-                          ❌ Rechazar
-                        </button>
-                      </div>
-                    )}
+                  <div className="grid grid-cols-2 gap-2 bg-gray-50 p-2.5 rounded-xl text-center text-xs">
+                    <div>
+                      <div className="text-[10px] text-gray-400 font-bold uppercase">Kits Disponibles</div>
+                      <div className="font-black text-gray-800 mt-0.5">{kitsLeft}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-gray-400 font-bold uppercase">Kits Generados</div>
+                      <div className="font-black text-purple-600 mt-0.5">{vendor.kits_generated}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setSelectedVendor(vendor);
+                        setNewPlan(vendor.plan);
+                        setShowPlanModal(true);
+                      }}
+                      className="flex-1 rounded-xl bg-purple-600 py-2 text-xs font-bold text-white shadow-sm active:scale-95"
+                    >
+                      ✏️ Cambiar Plan
+                    </button>
+                    <button
+                      onClick={() => handleResetPlan(vendor)}
+                      className="rounded-xl bg-gray-100 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-200"
+                    >
+                      🔄 Reset
+                    </button>
                   </div>
                 </div>
               );
-            })
+            })}
+          </div>
+
+          {/* VISTA ESCRITORIO: TABLA */}
+          <div className="hidden sm:block overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-gray-50 text-gray-500 font-bold uppercase">
+                <tr>
+                  <th className="px-4 py-3">Tienda / Vendor</th>
+                  <th className="px-4 py-3">Plan Actual</th>
+                  <th className="px-4 py-3">Kits Disponibles</th>
+                  <th className="px-4 py-3">Kits Creados</th>
+                  <th className="px-4 py-3 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredVendors.map((vendor) => {
+                  const config = PLAN_CONFIG[vendor.plan];
+                  const isUnlimited = vendor.plan === "business";
+                  const kitsLeft = isUnlimited
+                    ? "♾️ Ilimitado"
+                    : Math.max(0, Math.floor(vendor.credits_remaining / 15));
+
+                  return (
+                    <tr key={vendor.vendor_id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <div className="font-bold text-gray-900">{vendor.full_name || "Sin nombre"}</div>
+                        <div className="text-gray-500">{vendor.email}</div>
+                        {vendor.store_name && (
+                          <div className="text-purple-600 font-bold">🏪 {vendor.store_name}</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="rounded-full bg-purple-100 px-2.5 py-1 font-bold text-purple-800">
+                          {config.emoji} {config.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-bold text-gray-800">{kitsLeft}</td>
+                      <td className="px-4 py-3 font-bold text-purple-600">{vendor.kits_generated}</td>
+                      <td className="px-4 py-3 text-right space-x-1">
+                        <button
+                          onClick={() => {
+                            setSelectedVendor(vendor);
+                            setNewPlan(vendor.plan);
+                            setShowPlanModal(true);
+                          }}
+                          className="rounded-lg bg-purple-600 px-2.5 py-1 font-bold text-white shadow-sm"
+                        >
+                          Cambiar Plan
+                        </button>
+                        <button
+                          onClick={() => handleResetPlan(vendor)}
+                          className="rounded-lg bg-gray-100 px-2.5 py-1 font-bold text-gray-700 hover:bg-gray-200"
+                        >
+                          Reset
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: SOLICITUDES YAPE */}
+      {activeTab === "requests" && (
+        <div className="space-y-3">
+          {upgradeRequests.length === 0 ? (
+            <div className="rounded-2xl bg-white p-12 text-center shadow-sm">
+              <div className="text-4xl">📭</div>
+              <p className="text-xs text-gray-500 mt-2">No hay solicitudes registradas.</p>
+            </div>
+          ) : (
+            upgradeRequests.map((req) => (
+              <div
+                key={req.id}
+                className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm space-y-3"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase text-gray-400">
+                      {new Date(req.created_at).toLocaleDateString("es-PE")}
+                    </span>
+                    <h4 className="font-bold text-sm text-gray-900">{req.vendor_email}</h4>
+                  </div>
+                  <span
+                    className={`rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase ${
+                      req.status === "pending"
+                        ? "bg-amber-100 text-amber-800"
+                        : req.status === "approved"
+                        ? "bg-emerald-100 text-emerald-800"
+                        : "bg-red-100 text-red-800"
+                    }`}
+                  >
+                    {req.status}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 bg-gray-50 p-2.5 rounded-xl text-xs">
+                  <div>
+                    <span className="text-[10px] text-gray-400 block">Plan Solicitado</span>
+                    <span className="font-bold text-purple-700 uppercase">{req.plan_requested}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-400 block">Monto Yape</span>
+                    <span className="font-black text-emerald-600">S/ {req.amount.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {req.status === "pending" && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleApproveRequest(req)}
+                      disabled={processing}
+                      className="flex-1 rounded-xl bg-emerald-600 py-2 text-xs font-bold text-white shadow-sm"
+                    >
+                      ✅ Aprobar Yape
+                    </button>
+                    <button
+                      onClick={() => handleRejectRequest(req)}
+                      disabled={processing}
+                      className="flex-1 rounded-xl bg-red-100 py-2 text-xs font-bold text-red-700"
+                    >
+                      ❌ Rechazar
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))
           )}
         </div>
       )}
 
-      {/* Modal: Cambiar plan */}
+      {/* MODAL CAMBIAR PLAN (BOTTOM-SHEET EN MÓVIL) */}
       {showPlanModal && selectedVendor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white shadow-2xl">
-            <div className="bg-linear-to-br from-purple-500 to-pink-500 rounded-t-3xl p-5 text-white">
-              <h3 className="text-lg font-black">📊 Cambiar Membresía IA</h3>
-              <p className="text-xs opacity-90 mt-1">{selectedVendor.email}</p>
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4"
+          onClick={() => setShowPlanModal(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-t-3xl sm:rounded-3xl bg-white p-6 space-y-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+              <div>
+                <h3 className="font-black text-base text-gray-900">Asignar Plan de Membresía IA</h3>
+                <p className="text-xs text-gray-500 truncate max-w-62.5">{selectedVendor.email}</p>
+              </div>
+              <button
+                onClick={() => setShowPlanModal(false)}
+                className="text-xl font-bold text-gray-400 hover:text-gray-600"
+              >
+                ×
+              </button>
             </div>
 
-            <div className="p-6 space-y-4">
-              <div className="rounded-xl bg-gray-50 p-3 text-center">
-                <div className="text-xs text-gray-500">Plan actual</div>
-                <div className="text-lg font-black text-gray-900">
-                  {PLAN_CONFIG[selectedVendor.plan].emoji} {PLAN_CONFIG[selectedVendor.plan].label}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                {(Object.keys(PLAN_CONFIG) as PlanType[]).map((planKey) => {
-                  const config = PLAN_CONFIG[planKey];
-                  const isSelected = newPlan === planKey;
-                  return (
-                    <button
-                      key={planKey}
-                      onClick={() => setNewPlan(planKey)}
-                      className={`w-full rounded-xl border-2 p-3 text-left transition ${
-                        isSelected
-                          ? "border-purple-500 bg-purple-50"
-                          : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-bold text-gray-900">
-                            {config.emoji} {config.label}
-                          </div>
-                          <div className="text-xs text-emerald-600 font-bold mt-0.5">
-                            ⚡ Herramientas Ilimitadas
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-lg font-black text-purple-600">
-                            {config.price === 0 ? "Gratis" : `S/${config.price}`}
-                          </div>
-                          <div className="text-[10px] text-gray-400">/mes</div>
-                        </div>
+            <div className="space-y-2">
+              {(Object.keys(PLAN_CONFIG) as PlanType[]).map((planKey) => {
+                const config = PLAN_CONFIG[planKey];
+                const isSelected = newPlan === planKey;
+                return (
+                  <button
+                    key={planKey}
+                    type="button"
+                    onClick={() => setNewPlan(planKey)}
+                    className={`w-full rounded-2xl border-2 p-3 text-left transition flex items-center justify-between ${
+                      isSelected
+                        ? "border-purple-600 bg-purple-50/50"
+                        : "border-gray-100 hover:border-gray-200"
+                    }`}
+                  >
+                    <div>
+                      <div className="font-bold text-xs text-gray-900">
+                        {config.emoji} {config.label}
                       </div>
-                    </button>
-                  );
-                })}
-              </div>
+                      <div className="text-[10px] text-gray-500 mt-0.5">
+                        {config.credits === -1
+                          ? "Kits y Cargas Ilimitadas"
+                          : `Cuota de ${Math.floor(config.credits / 15)} Kits / mes`}
+                      </div>
+                    </div>
+                    <span className="font-black text-xs text-purple-700">
+                      {config.price === 0 ? "Gratis" : `S/ ${config.price}/m`}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
 
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setShowPlanModal(false);
-                    setSelectedVendor(null);
-                  }}
-                  className="flex-1 rounded-xl border-2 border-gray-200 py-3 text-sm font-bold text-gray-700 hover:bg-gray-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleChangePlan}
-                  disabled={processing || newPlan === selectedVendor.plan}
-                  className="flex-1 rounded-xl bg-purple-500 py-3 text-sm font-bold text-white shadow hover:bg-purple-600 disabled:opacity-50"
-                >
-                  {processing ? "⏳..." : "✅ Cambiar plan"}
-                </button>
-              </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowPlanModal(false)}
+                className="flex-1 rounded-xl border border-gray-200 py-3 text-xs font-bold text-gray-600"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleChangePlan}
+                disabled={processing}
+                className="flex-1 rounded-xl bg-purple-600 py-3 text-xs font-black text-white shadow-md active:scale-95 transition"
+              >
+                {processing ? "Guardando..." : "Guardar Plan"}
+              </button>
             </div>
           </div>
         </div>

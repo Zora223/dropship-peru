@@ -1,5 +1,5 @@
 // src/components/vendor/ProductLaunchAIModal.tsx
-// 🎨 v22.7 - Kits y Cargas Ilimitadas con Membresía Activa
+// 🍌 v22.9 - Control Automático de Límites por Nivel/Plan de Vendedor
 
 import { useState, useEffect } from "react";
 import {
@@ -20,7 +20,7 @@ interface ProductLaunchAIModalProps {
   onCreditsUpdate?: (credits: number) => void;
 }
 
-type Step = "checking" | "reuse_option" | "confirm" | "generating" | "completed" | "error";
+type Step = "checking" | "reuse_option" | "confirm" | "generating" | "completed" | "error" | "limit_reached";
 
 const GENERATION_STAGES = [
   { pct: 10, icon: "🔍", label: "Analizando tu producto..." },
@@ -37,6 +37,8 @@ export default function ProductLaunchAIModal({
   isOpen,
   onClose,
   params,
+  creditsRemaining,
+  plan,
   onSuccess,
   onCreditsUpdate,
 }: ProductLaunchAIModalProps) {
@@ -46,6 +48,11 @@ export default function ProductLaunchAIModal({
   const [resultKit, setResultKit] = useState<LaunchKit | null>(null);
   const [existingKit, setExistingKit] = useState<LaunchKit | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // 🤖 CONTROL AUTOMÁTICO DE LÍMITES
+  const CREDITS_PER_KIT = 15;
+  const isUnlimited = plan === "business";
+  const hasQuotaLeft = isUnlimited || creditsRemaining >= CREDITS_PER_KIT;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -61,22 +68,24 @@ export default function ProductLaunchAIModal({
       try {
         const kit = await getKitByProductId(params.product_id);
         if (kit) {
-          console.log("♻️ Kit existente encontrado:", kit.id);
           setExistingKit(kit);
           setStep("reuse_option");
         } else {
-          console.log("🆕 No hay kit previo, mostrar confirmación");
-          setStep("confirm");
+          // Si no tiene cuota disponible y no tiene kit guardado → Bloqueo automático
+          if (!hasQuotaLeft) {
+            setStep("limit_reached");
+          } else {
+            setStep("confirm");
+          }
         }
       } catch (err) {
         console.error("Error buscando kit:", err);
-        setStep("confirm");
+        setStep(hasQuotaLeft ? "confirm" : "limit_reached");
       }
     };
 
     checkExisting();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, params.product_id]);
+  }, [isOpen, params.product_id, hasQuotaLeft]);
 
   useEffect(() => {
     if (step !== "generating") return;
@@ -96,16 +105,18 @@ export default function ProductLaunchAIModal({
   }, [step]);
 
   const handleGenerate = async () => {
+    if (!hasQuotaLeft) {
+      setStep("limit_reached");
+      return;
+    }
+
     setStep("generating");
     setProgress(GENERATION_STAGES[0].pct);
     setCurrentStage(0);
     setError(null);
 
     try {
-      console.log("🚀 Enviando request...");
       const response = await generateLaunchKit(params);
-      console.log("✅ Respuesta:", response);
-
       setResultKit(response.kit);
       onCreditsUpdate?.(response.credits_remaining);
       setProgress(100);
@@ -117,7 +128,6 @@ export default function ProductLaunchAIModal({
       }, 800);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error al generar el kit";
-      console.error("🔴 Error:", err);
       setError(message);
       setStep("error");
     }
@@ -125,23 +135,9 @@ export default function ProductLaunchAIModal({
 
   const handleReuseExisting = () => {
     if (!existingKit) return;
-    console.log("♻️ Reutilizando kit existente (Gratis)");
     setResultKit(existingKit);
     setStep("completed");
     onSuccess?.(existingKit);
-  };
-
-  const handleGenerateNew = () => {
-    setStep("confirm");
-  };
-
-  const handleClose = () => {
-    if (step === "generating") {
-      if (!confirm("¿Cancelar la generación de tu Kit de Publicidad?")) {
-        return;
-      }
-    }
-    onClose();
   };
 
   if (!isOpen) return null;
@@ -152,7 +148,7 @@ export default function ProductLaunchAIModal({
         isOpen={true}
         kit={resultKit}
         onClose={onClose}
-        onRegenerate={handleGenerateNew}
+        onRegenerate={hasQuotaLeft ? () => setStep("confirm") : undefined}
       />
     );
   }
@@ -162,7 +158,7 @@ export default function ProductLaunchAIModal({
   return (
     <div
       className="fixed inset-0 z-55 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-      onClick={step === "confirm" || step === "reuse_option" ? handleClose : undefined}
+      onClick={step === "confirm" || step === "reuse_option" || step === "limit_reached" ? onClose : undefined}
     >
       <div
         className="relative w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-3xl bg-white shadow-2xl flex flex-col"
@@ -183,18 +179,12 @@ export default function ProductLaunchAIModal({
 
             {step !== "generating" && (
               <button
-                onClick={handleClose}
+                onClick={onClose}
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-xl text-white transition hover:bg-white/30"
               >
                 ×
               </button>
             )}
-          </div>
-
-          <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 backdrop-blur">
-            <span className="text-xs font-bold">
-              ⚡ Kits de Publicidad: ACTIVO E ILIMITADO ✅
-            </span>
           </div>
         </div>
 
@@ -205,8 +195,42 @@ export default function ProductLaunchAIModal({
             <div className="py-12 text-center">
               <div className="text-5xl animate-spin inline-block">⚙️</div>
               <p className="mt-4 text-sm text-gray-600">
-                Verificando si ya tienes un kit para este producto...
+                Verificando cuota disponible...
               </p>
+            </div>
+          )}
+
+          {/* 🛑 BLOQUEO AUTOMÁTICO POR LÍMITE DE PLAN */}
+          {step === "limit_reached" && (
+            <div className="space-y-5 text-center py-4">
+              <div className="text-6xl animate-bounce">🔒</div>
+              <div>
+                <h3 className="text-2xl font-black text-gray-900">
+                  Alcanzaste tu cuota de Kits IA de este mes
+                </h3>
+                <p className="mt-2 text-sm text-gray-600 max-w-md mx-auto">
+                  Has agotado los Kits nuevos incluidos en tu nivel actual. ¡Reutilizar tus kits ya guardados sigue siendo <strong>100% GRATIS</strong>!
+                </p>
+              </div>
+
+              <div className="rounded-2xl border-2 border-amber-200 bg-amber-50 p-4 text-left space-y-2">
+                <div className="text-xs font-bold uppercase text-amber-900">
+                  💡 ¿Cómo desbloquear más Kits?
+                </div>
+                <ul className="text-xs text-amber-800 space-y-1">
+                  <li>🚀 <strong>Opción 1:</strong> Vende más en tu tienda. Al llegar a 30 ventas este mes subes a Bronce (+15 Kits + Membresía GRATIS).</li>
+                  <li>💳 <strong>Opción 2:</strong> Realiza un Upgrade de Plan hoy para acceso inmediato.</li>
+                </ul>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={onClose}
+                  className="flex-1 rounded-xl border-2 border-gray-200 py-3 text-sm font-bold text-gray-700 hover:bg-gray-50"
+                >
+                  Entendido
+                </button>
+              </div>
             </div>
           )}
 
@@ -219,7 +243,7 @@ export default function ProductLaunchAIModal({
                   Ya tienes un kit guardado
                 </h3>
                 <p className="mt-2 text-sm text-gray-600">
-                  Reutiliza tus kits las veces que quieras de forma 100% gratuita
+                  Reutilizar tus kits guardados es 100% GRATIS e ilimitado
                 </p>
               </div>
 
@@ -237,16 +261,7 @@ export default function ProductLaunchAIModal({
                     <div className="text-sm font-bold text-gray-900 truncate">
                       {params.product_name}
                     </div>
-                    <div className="text-[10px] text-emerald-600">
-                      Generado: {new Date(existingKit.created_at || "").toLocaleDateString("es-PE")}
-                    </div>
                   </div>
-                </div>
-
-                <div className="text-xs text-emerald-800 bg-white/50 rounded-lg p-2">
-                  ✅ Captions Instagram + Facebook
-                  <br />✅ {existingKit.hashtags?.length || 15} hashtags optimizados
-                  <br />✅ Mensaje WhatsApp + Email listo para enviar
                 </div>
               </div>
 
@@ -258,16 +273,18 @@ export default function ProductLaunchAIModal({
                   ♻️ USAR KIT GUARDADO (Gratis)
                 </button>
 
-                <button
-                  onClick={handleGenerateNew}
-                  className="rounded-2xl border-2 border-purple-300 bg-purple-50 py-3 text-sm font-black text-purple-700 hover:bg-purple-100 transition"
-                >
-                  🔄 Generar NUEVO Kit de Publicidad ✨
-                </button>
-              </div>
-
-              <div className="text-center text-xs text-gray-500">
-                💡 Cada generación crea un copy fresco y único para tus redes
+                {hasQuotaLeft ? (
+                  <button
+                    onClick={() => setStep("confirm")}
+                    className="rounded-2xl border-2 border-purple-300 bg-purple-50 py-3 text-sm font-black text-purple-700 hover:bg-purple-100 transition"
+                  >
+                    🔄 Generar NUEVO Kit de Publicidad ✨
+                  </button>
+                ) : (
+                  <div className="text-center text-xs text-amber-700 bg-amber-50 p-2 rounded-xl border border-amber-200">
+                    🔒 Cuota de nuevos kits del mes agotada. Logra 30 ventas para desbloquear más.
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -309,42 +326,9 @@ export default function ProductLaunchAIModal({
                 </div>
               </div>
 
-              <div className="rounded-2xl border-2 border-purple-100 bg-linear-to-br from-purple-50 to-pink-50 p-5">
-                <h4 className="mb-3 text-sm font-black uppercase text-purple-900">
-                  🎁 Recibirás (personalizado con TU tienda):
-                </h4>
-                <ul className="space-y-2 text-sm">
-                  {[
-                    { icon: "📝", label: "Caption Instagram viral + tu @usuario de tienda" },
-                    { icon: "📘", label: "Post de Facebook adaptado a tu página" },
-                    { icon: "🏷️", label: "15 hashtags optimizados para Perú" },
-                    { icon: "💬", label: "Mensaje de WhatsApp con tu link directo de compra" },
-                    { icon: "📧", label: "Estructura de Email marketing con tu marca" },
-                    { icon: "🚀", label: "Botones rápidos de 1-tap para copiar y publicar" },
-                  ].map((item, i) => (
-                    <li key={i} className="flex items-center gap-2 text-gray-800">
-                      <span className="text-lg">{item.icon}</span>
-                      <span>{item.label}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-4 text-center">
-                <div className="text-xs font-bold uppercase text-emerald-700">
-                  Costo de Generación
-                </div>
-                <div className="mt-1 text-2xl font-black text-emerald-900">
-                  ✨ Incluido en tu Membresía
-                </div>
-                <div className="mt-1 text-xs text-emerald-600">
-                  Uso ilimitado y gratuito para todos tus productos
-                </div>
-              </div>
-
               <div className="flex gap-3">
                 <button
-                  onClick={handleClose}
+                  onClick={onClose}
                   className="flex-1 rounded-xl border-2 border-gray-200 py-3 text-sm font-bold text-gray-700 hover:bg-gray-50"
                 >
                   Cancelar
@@ -367,33 +351,19 @@ export default function ProductLaunchAIModal({
                   <div className="text-7xl animate-bounce">
                     {GENERATION_STAGES[currentStage].icon}
                   </div>
-                  <div className="absolute inset-0 rounded-full bg-linear-to-r from-purple-400/30 to-pink-400/30 animate-ping" />
                 </div>
                 <h3 className="mt-6 text-xl font-black text-gray-900">
                   {GENERATION_STAGES[currentStage].label}
                 </h3>
-                <p className="mt-2 text-sm text-gray-500">
-                  Personalizando con datos de tu tienda...
-                </p>
               </div>
 
               <div>
-                <div className="mb-2 flex items-center justify-between text-sm">
-                  <span className="font-bold text-gray-700">Progreso</span>
-                  <span className="font-black text-purple-600">{progress}%</span>
-                </div>
                 <div className="h-3 overflow-hidden rounded-full bg-gray-200">
                   <div
                     className="h-full bg-linear-to-r from-purple-500 via-pink-500 to-orange-500 transition-all duration-1000"
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-              </div>
-
-              <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 text-center">
-                <p className="text-xs text-blue-800">
-                  💡 <strong>Tip:</strong> Este kit se guardará en tu ficha de producto para que lo uses gratis siempre.
-                </p>
               </div>
             </div>
           )}
@@ -402,27 +372,13 @@ export default function ProductLaunchAIModal({
           {step === "error" && (
             <div className="py-12 space-y-6 text-center">
               <div className="text-6xl">😔</div>
-              <div>
-                <h3 className="text-xl font-black text-gray-900">
-                  Ups, algo salió mal
-                </h3>
-                <p className="mt-2 text-sm text-red-600">{error}</p>
-              </div>
-
-              <div className="flex gap-3 justify-center">
-                <button
-                  onClick={handleClose}
-                  className="rounded-xl border-2 border-gray-200 px-6 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50"
-                >
-                  Cerrar
-                </button>
-                <button
-                  onClick={() => setStep("confirm")}
-                  className="rounded-xl bg-linear-to-r from-purple-600 to-pink-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg"
-                >
-                  🔄 Reintentar
-                </button>
-              </div>
+              <p className="mt-2 text-sm text-red-600">{error}</p>
+              <button
+                onClick={onClose}
+                className="rounded-xl bg-gray-900 px-6 py-2.5 text-sm font-bold text-white shadow"
+              >
+                Cerrar
+              </button>
             </div>
           )}
         </div>
