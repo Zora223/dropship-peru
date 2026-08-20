@@ -1,3 +1,6 @@
+// src/pages/vendor/VendorDashboard.tsx
+// 🎨 v22.26 - Escalera de Éxito Gamificada (Niveles 30 a 150+ Ventas = Membresía + IA + Mkt Gratis)
+
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import ProductForm from "../../components/vendor/ProductForm";
@@ -7,6 +10,7 @@ import MiniChart from "../../components/MiniChart";
 import { useMyStore } from "../../hooks/useMyStore";
 import { fetchVendorOrders } from "../../lib/vendor-orders";
 import PickupOrdersSection from "../../components/vendor/PickupOrdersSection";
+import { supabase } from "../../lib/supabase";
 import {
   fetchVendorStatsSummary,
   fetchVendorSalesLastDays,
@@ -68,6 +72,132 @@ function formatShortDate(value: string) {
   }).format(new Date(value));
 }
 
+interface AiSubscriptionInfo {
+  credits_remaining: number;
+  credits_total: number;
+  plan: string;
+}
+
+// 🏆 HELPER PARA LA ESCALERA DE ÉXITO SEGÚN VENTAS
+function getTierInfo(monthlySales: number) {
+  if (monthlySales >= 150) {
+    return {
+      name: "💎 DIAMANTE IMPERIO",
+      nextTierName: "¡Nivel Máximo!",
+      target: 150,
+      nextTarget: 150,
+      color: "from-blue-600 via-indigo-600 to-purple-800",
+      textColor: "text-cyan-300",
+      progressPct: 100,
+      perks: [
+        "Membresía de Tienda 100% GRATIS",
+        "150 Kits de Publicidad IA / mes",
+        "Cargas Auto-Fill IA Ilimitadas",
+        "Soporte VIP 1 a 1 por WhatsApp",
+        "Destacado Prioritario en la Portada",
+      ],
+      remainingForNext: 0,
+      nextRewardMsg: "👑 ¡Eres un Vendedor Diamante Líder!",
+    };
+  }
+
+  if (monthlySales >= 60) {
+    return {
+      name: "🏆 PLATINO",
+      nextTierName: "💎 DIAMANTE IMPERIO",
+      target: 60,
+      nextTarget: 150,
+      color: "from-purple-900 via-fuchsia-900 to-gray-900",
+      textColor: "text-fuchsia-300",
+      progressPct: Math.min(100, Math.round(((monthlySales - 60) / 90) * 100)),
+      perks: [
+        "Membresía de Tienda 100% GRATIS",
+        "80 Kits de Publicidad IA / mes",
+        "Cargas Auto-Fill IA Ilimitadas",
+        "Productos Destacados en el Marketplace",
+      ],
+      remainingForNext: 150 - monthlySales,
+      nextRewardMsg: `Te faltan ${150 - monthlySales} ventas para desbloquear 150 Kits IA + Asesoría 1 a 1`,
+    };
+  }
+
+  if (monthlySales >= 50) {
+    return {
+      name: "🥇 ORO",
+      nextTierName: "🏆 PLATINO",
+      target: 50,
+      nextTarget: 60,
+      color: "from-amber-800 via-yellow-900 to-gray-900",
+      textColor: "text-amber-300",
+      progressPct: Math.min(100, Math.round(((monthlySales - 50) / 10) * 100)),
+      perks: [
+        "Membresía de Tienda 100% GRATIS",
+        "50 Kits de Publicidad IA / mes",
+        "100 Cargas Auto-Fill IA / mes",
+        "Plantillas de Marketing VIP Desbloqueadas",
+      ],
+      remainingForNext: 60 - monthlySales,
+      nextRewardMsg: `Te faltan ${60 - monthlySales} ventas para subir a PLATINO (80 Kits IA + Portada)`,
+    };
+  }
+
+  if (monthlySales >= 40) {
+    return {
+      name: "🥈 PLATA",
+      nextTierName: "🥇 ORO",
+      target: 40,
+      nextTarget: 50,
+      color: "from-slate-800 via-gray-800 to-gray-900",
+      textColor: "text-slate-300",
+      progressPct: Math.min(100, Math.round(((monthlySales - 40) / 10) * 100)),
+      perks: [
+        "Membresía de Tienda 100% GRATIS",
+        "30 Kits de Publicidad IA / mes",
+        "60 Cargas Auto-Fill IA / mes",
+      ],
+      remainingForNext: 50 - monthlySales,
+      nextRewardMsg: `Te faltan ${50 - monthlySales} ventas para subir a ORO (Plantillas VIP + 50 Kits IA)`,
+    };
+  }
+
+  if (monthlySales >= 30) {
+    return {
+      name: "🥉 BRONCE",
+      nextTierName: "🥈 PLATA",
+      target: 30,
+      nextTarget: 40,
+      color: "from-amber-900 via-orange-950 to-gray-900",
+      textColor: "text-orange-300",
+      progressPct: Math.min(100, Math.round(((monthlySales - 30) / 10) * 100)),
+      perks: [
+        "Membresía de Tienda 100% GRATIS (S/ 15 ➔ S/ 0)",
+        "15 Kits de Publicidad IA / mes",
+        "30 Cargas Auto-Fill IA / mes",
+      ],
+      remainingForNext: 40 - monthlySales,
+      nextRewardMsg: `Te faltan ${40 - monthlySales} ventas para subir a PLATA (30 Kits IA + 60 AutoFills)`,
+    };
+  }
+
+  // Nivel Inicial (0 - 29 ventas)
+  return {
+    name: "🚀 INICIO Y PRUEBA",
+    nextTierName: "🥉 BRONCE (Membresía GRATIS)",
+    target: 0,
+    nextTarget: 30,
+    color: "from-emerald-900 via-teal-950 to-gray-900",
+    textColor: "text-emerald-300",
+    progressPct: Math.min(100, Math.round((monthlySales / 30) * 100)),
+    perks: [
+      "5 Kits de Publicidad IA Gratis para engancharte",
+      "15 Cargas de Productos con Auto-Fill IA",
+      "Reuso Ilimitado de tus Kits Guardados",
+    ],
+    remainingForNext: 30 - monthlySales,
+    nextRewardMsg: `Te faltan ${30 - monthlySales} ventas para que tu Membresía te salga S/ 0.00 GRATIS`,
+  };
+}
+
 export default function VendorDashboard() {
   const { store, loading: storeLoading, error: storeError } = useMyStore();
 
@@ -75,6 +205,7 @@ export default function VendorDashboard() {
   const [salesChart, setSalesChart] = useState<DailySales[]>([]);
   const [topProducts, setTopProducts] = useState<TopSellingProduct[]>([]);
   const [recentOrders, setRecentOrders] = useState<DbOrder[]>([]);
+  const [aiSub, setAiSub] = useState<AiSubscriptionInfo | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -100,6 +231,22 @@ export default function VendorDashboard() {
       setSalesChart(chartData);
       setTopProducts(topData);
       setRecentOrders((ordersData ?? []).slice(0, 5));
+
+      if (store.owner_id) {
+        const { data: subData } = await supabase
+          .from("ai_subscriptions")
+          .select("credits_remaining, credits_total, plan")
+          .eq("vendor_id", store.owner_id)
+          .maybeSingle();
+
+        if (subData) {
+          setAiSub({
+            credits_remaining: subData.credits_remaining,
+            credits_total: subData.credits_total,
+            plan: subData.plan,
+          });
+        }
+      }
     } catch (err) {
       console.error(err);
       setError(
@@ -117,7 +264,6 @@ export default function VendorDashboard() {
     if (!storeLoading && !store) {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store?.id, storeLoading]);
 
   const handleProductSaved = async () => {
@@ -181,6 +327,15 @@ export default function VendorDashboard() {
 
   const totalWeekChart = salesChart.reduce((sum, d) => sum + d.total, 0);
 
+  // 🏆 LÓGICA DE GAMIFICACIÓN REAL SEGÚN LAS VENTAS DEL MES
+  const currentMonthSales = stats.this_month.orders || 0;
+  const tier = getTierInfo(currentMonthSales);
+
+  // Traducción de Créditos a Herramientas Reales
+  const remainingCredits = aiSub?.credits_remaining ?? 0;
+  const kitsAvailable = Math.floor(remainingCredits / 15);
+  const autoFillsAvailable = Math.floor(remainingCredits / 5);
+
   return (
     <div className="space-y-6 py-8">
       {/* Header */}
@@ -206,12 +361,119 @@ export default function VendorDashboard() {
       {/* Banner de trial */}
       <TrialBanner store={store} />
 
+      {/* 🏆 TARJETA DE GAMIFICACIÓN: ESCALERA DE ÉXITO Y MEMBRESÍA GRATIS */}
+      <div className={`overflow-hidden rounded-3xl border-2 border-emerald-400/40 bg-linear-to-br ${tier.color} p-6 text-white shadow-xl relative`}>
+        <div className="absolute top-0 right-0 p-8 opacity-10 text-8xl font-black select-none">
+          🏆
+        </div>
+
+        <div className="relative z-10 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 border border-white/20 px-3 py-1 text-xs font-bold text-white uppercase tracking-wider backdrop-blur">
+                <span>🎯 Nivel Actual de tu Tienda</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black mt-2 flex items-center gap-2">
+                <span>{tier.name}</span>
+              </h2>
+            </div>
+
+            <div className="text-right shrink-0">
+              <span className="text-xs text-gray-300 block uppercase font-semibold">
+                Costo de Membresía
+              </span>
+              <span className={`text-base sm:text-lg font-black ${tier.textColor}`}>
+                {currentMonthSales >= 30
+                  ? "🎉 ¡100% GRATIS (EXONERADA)!"
+                  : "S/ 15.00 / mes"}
+              </span>
+            </div>
+          </div>
+
+          <p className="text-xs sm:text-sm text-gray-200 leading-relaxed max-w-2xl">
+            <strong>Mientras más vendes, más ahorras y más herramientas obtienes.</strong> A partir de 30 ventas al mes, tu tienda y tus herramientas te salen totalmente gratis.
+          </p>
+
+          {/* Barra de progreso hacia el siguiente nivel */}
+          <div className="space-y-1.5 pt-2">
+            <div className="flex justify-between text-xs font-bold">
+              <span>Progreso este mes: {currentMonthSales} ventas completadas</span>
+              <span className={tier.textColor}>{tier.progressPct}% del nivel</span>
+            </div>
+            <div className="h-3.5 w-full bg-black/50 rounded-full overflow-hidden p-0.5 border border-white/20">
+              <div
+                className="h-full bg-linear-to-r from-emerald-400 via-teal-300 to-amber-300 rounded-full transition-all duration-700 shadow-sm"
+                style={{ width: `${tier.progressPct}%` }}
+              />
+            </div>
+            <p className="text-xs font-semibold text-amber-200 mt-1">
+              🔥 {tier.nextRewardMsg}
+            </p>
+          </div>
+
+          {/* Beneficios desbloqueados */}
+          <div className="pt-4 border-t border-white/10">
+            <span className="text-[11px] font-bold text-gray-300 uppercase tracking-wider block mb-2">
+              🎁 Beneficios Desbloqueados en tu Nivel:
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
+              {tier.perks.map((perk, idx) => (
+                <div key={idx} className="flex items-center gap-2 bg-white/10 rounded-xl px-3 py-2 backdrop-blur">
+                  <span className="text-emerald-300 font-bold">✓</span>
+                  <span className="font-medium text-gray-100">{perk}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Estado de herramientas disponibles */}
+          <div className="pt-3 border-t border-white/10 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div className="bg-white/10 rounded-2xl p-3 backdrop-blur border border-white/10">
+              <span className="text-gray-300 text-[10px] uppercase font-bold block">
+                🚀 Kits de Publicidad IA
+              </span>
+              <span className="text-base font-extrabold text-white">
+                {aiSub?.plan === "business" ? "♾️ Ilimitados" : `${kitsAvailable} Kits disponibles`}
+              </span>
+              <span className="text-[10px] text-emerald-300 block mt-0.5">
+                TikTok, Instagram, FB & WhatsApp
+              </span>
+            </div>
+
+            <div className="bg-white/10 rounded-2xl p-3 backdrop-blur border border-white/10">
+              <span className="text-gray-300 text-[10px] uppercase font-bold block">
+                🪄 Cargas de Productos IA
+              </span>
+              <span className="text-base font-extrabold text-white">
+                {aiSub?.plan === "business" ? "♾️ Ilimitadas" : `${autoFillsAvailable} Auto-Fills`}
+              </span>
+              <span className="text-[10px] text-emerald-300 block mt-0.5">
+                Publica en 1 click
+              </span>
+            </div>
+
+            <div className="bg-white/10 rounded-2xl p-3 backdrop-blur border border-white/10">
+              <span className="text-gray-300 text-[10px] uppercase font-bold block">
+                ♻️ Reuso de Kits
+              </span>
+              <span className="text-base font-extrabold text-amber-300">
+                100% GRATIS
+              </span>
+              <span className="text-[10px] text-gray-300 block mt-0.5">
+                Vuelve a usar tus kits guardados
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {error && (
         <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">
           {error}
         </div>
       )}
-       {/* 🆕 v17: Pedidos pickup */}
+
+      {/* 🆕 v17: Pedidos pickup */}
       <PickupOrdersSection storeId={store.id} />
 
       {productCreated && (
