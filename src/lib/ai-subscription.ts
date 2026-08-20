@@ -1,5 +1,5 @@
 // src/lib/ai-subscription.ts
-// 🤖 Cliente y constantes para la suscripción de IA del vendedor
+// 🤖 Cuotas: Inicio = 15 kits (225 créditos). 1 kit = 15 créditos.
 
 import { supabase } from "./supabase";
 
@@ -19,10 +19,6 @@ export interface AISubscription {
   updated_at: string;
 }
 
-/**
- * Obtiene la suscripción AI del vendor autenticado.
- * Si no existe, retorna null.
- */
 export async function getAISubscription(): Promise<AISubscription | null> {
   const {
     data: { user },
@@ -49,19 +45,28 @@ export async function getAISubscription(): Promise<AISubscription | null> {
 }
 
 /**
- * Info visual de cada plan (para UI)
- * Mantenemos la estructura de objeto para garantizar compatibilidad completa
+ * Créditos por plan (1 Kit Launch ≈ 15 créditos)
+ * starter  = 15 kits  → 225
+ * creator  = 50 kits  → 750
+ * pro      = 150 kits → 2250
+ * business = ilimitado
  */
 export const AI_PLANS_INFO: Record<
   AIPlan,
-  { label: string; price: number; credits: number; emoji: string }
+  { label: string; price: number; credits: number; emoji: string; kitsPerMonth: number | "unlimited" }
 > = {
-  starter: { label: "Starter", price: 0, credits: 99999, emoji: "🆓" },
-  creator: { label: "Creator", price: 19, credits: 99999, emoji: "🎨" },
-  pro: { label: "Pro", price: 49, credits: 99999, emoji: "🚀" },
-  business: { label: "Business", price: 149, credits: -1, emoji: "💎" }, // -1 = ilimitado
+  starter: { label: "Starter", price: 0, credits: 225, emoji: "🚀", kitsPerMonth: 15 },
+  creator: { label: "Creator", price: 19, credits: 750, emoji: "🎨", kitsPerMonth: 50 },
+  pro: { label: "Pro", price: 49, credits: 2250, emoji: "⚡", kitsPerMonth: 150 },
+  business: { label: "Business", price: 149, credits: -1, emoji: "💎", kitsPerMonth: "unlimited" },
 };
 
-export function isUnlimitedPlan(_plan: string): boolean {
-  return true; // Todos los planes bajo la membresía activa gozan de IA ilimitada
+export function isUnlimitedPlan(plan: string): boolean {
+  return plan === "business";
+}
+
+/** Kits restantes aproximados según créditos */
+export function kitsRemainingFromCredits(credits: number, plan: string): number | "unlimited" {
+  if (plan === "business" || credits < 0) return "unlimited";
+  return Math.max(0, Math.floor(credits / 15));
 }
