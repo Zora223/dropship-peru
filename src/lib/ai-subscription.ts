@@ -1,5 +1,5 @@
 // src/lib/ai-subscription.ts
-// 🤖 Cliente para la suscripción de AI del vendor
+// 🤖 Cliente y constantes para la suscripción de IA del vendedor
 
 import { supabase } from "./supabase";
 
@@ -21,7 +21,7 @@ export interface AISubscription {
 
 /**
  * Obtiene la suscripción AI del vendor autenticado.
- * Si no existe, retorna null (el vendor no ha activado ningún plan).
+ * Si no existe, retorna null.
  */
 export async function getAISubscription(): Promise<AISubscription | null> {
   const {
@@ -50,17 +50,18 @@ export async function getAISubscription(): Promise<AISubscription | null> {
 
 /**
  * Info visual de cada plan (para UI)
+ * Mantenemos la estructura de objeto para garantizar compatibilidad completa
  */
 export const AI_PLANS_INFO: Record<
   AIPlan,
   { label: string; price: number; credits: number; emoji: string }
 > = {
-  starter: { label: "Starter", price: 0, credits: 10, emoji: "🆓" },
-  creator: { label: "Creator", price: 19, credits: 100, emoji: "🎨" },
-  pro: { label: "Pro", price: 49, credits: 500, emoji: "🚀" },
+  starter: { label: "Starter", price: 0, credits: 99999, emoji: "🆓" },
+  creator: { label: "Creator", price: 19, credits: 99999, emoji: "🎨" },
+  pro: { label: "Pro", price: 49, credits: 99999, emoji: "🚀" },
   business: { label: "Business", price: 149, credits: -1, emoji: "💎" }, // -1 = ilimitado
 };
 
-export function isUnlimitedPlan(plan: string): boolean {
-  return plan === "business";
+export function isUnlimitedPlan(_plan: string): boolean {
+  return true; // Todos los planes bajo la membresía activa gozan de IA ilimitada
 }

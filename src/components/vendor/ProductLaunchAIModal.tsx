@@ -1,5 +1,5 @@
 // src/components/vendor/ProductLaunchAIModal.tsx
-// 🍌 v22.6 - Con reutilización de kits + prop onCreditsUpdate
+// 🎨 v22.7 - Kits y Cargas Ilimitadas con Membresía Activa
 
 import { useState, useEffect } from "react";
 import {
@@ -17,7 +17,7 @@ interface ProductLaunchAIModalProps {
   creditsRemaining: number;
   plan: string;
   onSuccess?: (kit: LaunchKit) => void;
-  onCreditsUpdate?: (credits: number) => void; // 🆕 v22.6
+  onCreditsUpdate?: (credits: number) => void;
 }
 
 type Step = "checking" | "reuse_option" | "confirm" | "generating" | "completed" | "error";
@@ -37,10 +37,8 @@ export default function ProductLaunchAIModal({
   isOpen,
   onClose,
   params,
-  creditsRemaining: initialCredits,
-  plan,
   onSuccess,
-  onCreditsUpdate, // 🆕
+  onCreditsUpdate,
 }: ProductLaunchAIModalProps) {
   const [step, setStep] = useState<Step>("checking");
   const [progress, setProgress] = useState(0);
@@ -48,13 +46,7 @@ export default function ProductLaunchAIModal({
   const [resultKit, setResultKit] = useState<LaunchKit | null>(null);
   const [existingKit, setExistingKit] = useState<LaunchKit | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [credits, setCredits] = useState(initialCredits);
 
-  const CREDITS_COST = 15;
-  const isUnlimited = plan === "business";
-  const canAfford = isUnlimited || credits >= CREDITS_COST;
-
-  // 🔥 Al abrir: buscar si ya existe kit
   useEffect(() => {
     if (!isOpen) return;
 
@@ -64,7 +56,6 @@ export default function ProductLaunchAIModal({
     setResultKit(null);
     setExistingKit(null);
     setError(null);
-    setCredits(initialCredits);
 
     const checkExisting = async () => {
       try {
@@ -87,7 +78,6 @@ export default function ProductLaunchAIModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, params.product_id]);
 
-  // Animación progreso
   useEffect(() => {
     if (step !== "generating") return;
 
@@ -117,8 +107,7 @@ export default function ProductLaunchAIModal({
       console.log("✅ Respuesta:", response);
 
       setResultKit(response.kit);
-      setCredits(response.credits_remaining);
-      onCreditsUpdate?.(response.credits_remaining); // 🆕 Notifica al padre
+      onCreditsUpdate?.(response.credits_remaining);
       setProgress(100);
       setCurrentStage(GENERATION_STAGES.length - 1);
 
@@ -136,7 +125,7 @@ export default function ProductLaunchAIModal({
 
   const handleReuseExisting = () => {
     if (!existingKit) return;
-    console.log("♻️ Reutilizando kit existente (0 créditos)");
+    console.log("♻️ Reutilizando kit existente (Gratis)");
     setResultKit(existingKit);
     setStep("completed");
     onSuccess?.(existingKit);
@@ -148,7 +137,7 @@ export default function ProductLaunchAIModal({
 
   const handleClose = () => {
     if (step === "generating") {
-      if (!confirm("¿Cancelar la generación? Los créditos ya se descontaron.")) {
+      if (!confirm("¿Cancelar la generación de tu Kit de Publicidad?")) {
         return;
       }
     }
@@ -157,14 +146,13 @@ export default function ProductLaunchAIModal({
 
   if (!isOpen) return null;
 
-  // Si ya está completado → mostrar viewer
   if (step === "completed" && resultKit) {
     return (
       <ProductLaunchKitViewer
         isOpen={true}
         kit={resultKit}
         onClose={onClose}
-        onRegenerate={canAfford ? handleGenerateNew : undefined}
+        onRegenerate={handleGenerateNew}
       />
     );
   }
@@ -173,7 +161,7 @@ export default function ProductLaunchAIModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-55 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
       onClick={step === "confirm" || step === "reuse_option" ? handleClose : undefined}
     >
       <div
@@ -184,12 +172,12 @@ export default function ProductLaunchAIModal({
         <div className="relative bg-linear-to-br from-purple-600 via-pink-600 to-orange-500 p-5 text-white shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="text-3xl animate-bounce">🍌</div>
+              <div className="text-3xl animate-bounce">🎨</div>
               <div>
                 <div className="text-[10px] font-bold uppercase tracking-wider opacity-90">
-                  Product Launch AI
+                  Herramientas IA Pro
                 </div>
-                <h2 className="text-lg font-black">Marketing en 30s</h2>
+                <h2 className="text-lg font-black">Kits de Publicidad IA</h2>
               </div>
             </div>
 
@@ -205,7 +193,7 @@ export default function ProductLaunchAIModal({
 
           <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 backdrop-blur">
             <span className="text-xs font-bold">
-              {isUnlimited ? "♾️ ILIMITADO" : `⚡ ${credits} créditos`}
+              ⚡ Kits de Publicidad: ACTIVO E ILIMITADO ✅
             </span>
           </div>
         </div>
@@ -222,20 +210,19 @@ export default function ProductLaunchAIModal({
             </div>
           )}
 
-          {/* REUSE OPTION - Ya existe kit */}
+          {/* REUSE OPTION */}
           {step === "reuse_option" && existingKit && (
             <div className="space-y-5">
               <div className="text-center">
-                <div className="text-5xl mb-2">♻️</div>
+                <div className="text-5xl mb-2">💾</div>
                 <h3 className="text-2xl font-black text-gray-900">
-                  Ya tienes un kit para este producto
+                  Ya tienes un kit guardado
                 </h3>
                 <p className="mt-2 text-sm text-gray-600">
-                  Puedes reutilizarlo sin gastar créditos
+                  Reutiliza tus kits las veces que quieras de forma 100% gratuita
                 </p>
               </div>
 
-              {/* Preview del kit existente */}
               <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <img
@@ -245,7 +232,7 @@ export default function ProductLaunchAIModal({
                   />
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-bold uppercase text-emerald-700">
-                      Kit existente
+                      Kit guardado
                     </div>
                     <div className="text-sm font-bold text-gray-900 truncate">
                       {params.product_name}
@@ -258,44 +245,42 @@ export default function ProductLaunchAIModal({
 
                 <div className="text-xs text-emerald-800 bg-white/50 rounded-lg p-2">
                   ✅ Captions Instagram + Facebook
-                  <br />✅ {existingKit.hashtags?.length || 15} hashtags
-                  <br />✅ Mensaje WhatsApp + Email
+                  <br />✅ {existingKit.hashtags?.length || 15} hashtags optimizados
+                  <br />✅ Mensaje WhatsApp + Email listo para enviar
                 </div>
               </div>
 
-              {/* Botones */}
               <div className="grid grid-cols-1 gap-3">
                 <button
                   onClick={handleReuseExisting}
                   className="rounded-2xl bg-linear-to-r from-emerald-500 to-teal-500 py-4 text-base font-black text-white shadow-lg hover:shadow-xl transition"
                 >
-                  ♻️ USAR KIT EXISTENTE (0 créditos)
+                  ♻️ USAR KIT GUARDADO (Gratis)
                 </button>
 
                 <button
                   onClick={handleGenerateNew}
-                  disabled={!canAfford}
-                  className="rounded-2xl border-2 border-purple-300 bg-purple-50 py-3 text-sm font-black text-purple-700 hover:bg-purple-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="rounded-2xl border-2 border-purple-300 bg-purple-50 py-3 text-sm font-black text-purple-700 hover:bg-purple-100 transition"
                 >
-                  🔄 Generar NUEVO kit (15 créditos)
+                  🔄 Generar NUEVO Kit de Publicidad ✨
                 </button>
               </div>
 
               <div className="text-center text-xs text-gray-500">
-                💡 Los kits nuevos tienen contenido diferente cada vez
+                💡 Cada generación crea un copy fresco y único para tus redes
               </div>
             </div>
           )}
 
-          {/* CONFIRM - Nuevo kit */}
+          {/* CONFIRM */}
           {step === "confirm" && (
             <div className="space-y-5">
               <div className="text-center">
                 <h3 className="text-2xl font-black text-gray-900">
-                  ✨ Kit Personalizado
+                  ✨ Kit de Publicidad Personalizado
                 </h3>
                 <p className="mt-2 text-sm text-gray-600">
-                  Contenido con datos de tu tienda
+                  Genera automáticamente captions, hashtags y mensajes listos para vender
                 </p>
               </div>
 
@@ -330,13 +315,12 @@ export default function ProductLaunchAIModal({
                 </h4>
                 <ul className="space-y-2 text-sm">
                   {[
-                    { icon: "📝", label: "Caption Instagram viral + tu @usuario" },
-                    { icon: "📘", label: "Post Facebook con tu página" },
-                    { icon: "🏷️", label: "15 hashtags optimizados Perú" },
-                    { icon: "💬", label: "Mensaje WhatsApp con tu número" },
-                    { icon: "📧", label: "Email marketing con tu marca" },
-                    { icon: "🔗", label: "Link directo a TU tienda incluido" },
-                    { icon: "🚀", label: "Botones 1-tap para publicar" },
+                    { icon: "📝", label: "Caption Instagram viral + tu @usuario de tienda" },
+                    { icon: "📘", label: "Post de Facebook adaptado a tu página" },
+                    { icon: "🏷️", label: "15 hashtags optimizados para Perú" },
+                    { icon: "💬", label: "Mensaje de WhatsApp con tu link directo de compra" },
+                    { icon: "📧", label: "Estructura de Email marketing con tu marca" },
+                    { icon: "🚀", label: "Botones rápidos de 1-tap para copiar y publicar" },
                   ].map((item, i) => (
                     <li key={i} className="flex items-center gap-2 text-gray-800">
                       <span className="text-lg">{item.icon}</span>
@@ -348,25 +332,15 @@ export default function ProductLaunchAIModal({
 
               <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-4 text-center">
                 <div className="text-xs font-bold uppercase text-emerald-700">
-                  Costo del Kit
+                  Costo de Generación
                 </div>
-                <div className="mt-1 text-3xl font-black text-emerald-900">
-                  ⚡ 15 créditos
+                <div className="mt-1 text-2xl font-black text-emerald-900">
+                  ✨ Incluido en tu Membresía
                 </div>
                 <div className="mt-1 text-xs text-emerald-600">
-                  {isUnlimited
-                    ? "✅ Plan Business - Ilimitado"
-                    : `Te quedarán ${credits - CREDITS_COST} créditos`}
+                  Uso ilimitado y gratuito para todos tus productos
                 </div>
               </div>
-
-              {!canAfford && (
-                <div className="rounded-xl border-2 border-red-200 bg-red-50 p-4 text-center">
-                  <p className="text-sm font-bold text-red-800">
-                    ⚠️ Créditos insuficientes
-                  </p>
-                </div>
-              )}
 
               <div className="flex gap-3">
                 <button
@@ -377,8 +351,7 @@ export default function ProductLaunchAIModal({
                 </button>
                 <button
                   onClick={handleGenerate}
-                  disabled={!canAfford}
-                  className="flex-1 rounded-xl bg-linear-to-r from-purple-600 via-pink-600 to-orange-500 py-3 text-sm font-black text-white shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 rounded-xl bg-linear-to-r from-purple-600 via-pink-600 to-orange-500 py-3 text-sm font-black text-white shadow-lg hover:shadow-xl active:scale-95 transition"
                 >
                   🚀 GENERAR AHORA
                 </button>
@@ -419,7 +392,7 @@ export default function ProductLaunchAIModal({
 
               <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 text-center">
                 <p className="text-xs text-blue-800">
-                  💡 <strong>Tip:</strong> Este kit quedará guardado para reutilizar.
+                  💡 <strong>Tip:</strong> Este kit se guardará en tu ficha de producto para que lo uses gratis siempre.
                 </p>
               </div>
             </div>

@@ -1,5 +1,5 @@
 // src/components/vendor/ProductLaunchKitViewer.tsx
-// 🎨 v22.13.3 - Layout v22.7 (botón grande + cuadrícula) + Web Share API mejorado
+// 🎨 v22.14 - Web Share API + Re-generación gratis ilimitada por membresía
 
 import { useState, useEffect } from "react";
 import { QRCodeCanvas } from "qrcode.react";
@@ -50,7 +50,6 @@ interface ExtendedKit extends LaunchKit {
   tiktok_caption?: string;
 }
 
-// 🎁 Mensajes promocionales pre-hechos
 const PROMO_MESSAGES = [
   {
     id: "new_collection",
@@ -123,11 +122,6 @@ const PROMO_MESSAGES = [
   },
 ];
 
-// ─────────────────────────────────────────────────────────────
-// HELPERS externos
-// ─────────────────────────────────────────────────────────────
-
-/** Descarga la imagen y la convierte en File para Web Share API */
 async function fetchImageFile(imageUrl: string): Promise<File | null> {
   try {
     const response = await fetch(imageUrl);
@@ -152,7 +146,7 @@ export default function ProductLaunchKitViewer({
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [imageFullscreen, setImageFullscreen] = useState(false);
   const [store, setStore] = useState<StoreData | null>(null);
-  const [sharing, setSharing] = useState<string | null>(null); // ⏳ id del botón que está compartiendo
+  const [sharing, setSharing] = useState<string | null>(null);
   const [shareCount, setShareCount] = useState(0);
   const [selectedPromo, setSelectedPromo] = useState<string>("new_collection");
 
@@ -178,10 +172,6 @@ export default function ProductLaunchKitViewer({
   const storeUrl = store?.slug ? `${baseUrl}/tienda/${store.slug}` : baseUrl;
 
   const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
-
-  // ═══════════════════════════════════════════════════════════
-  // HELPERS UI
-  // ═══════════════════════════════════════════════════════════
 
   const handleCopy = async (text: string, field: string) => {
     const ok = await copyToClipboard(text);
@@ -212,7 +202,6 @@ export default function ProductLaunchKitViewer({
     link.click();
   };
 
-  // Contenido personalizado por red
   const buildTextForNetwork = (network: NetworkType): string => {
     const storePhone = store?.whatsapp || store?.contact_phone || "";
     const cleanPhone = storePhone.replace(/[^\d]/g, "");
@@ -247,15 +236,6 @@ export default function ProductLaunchKitViewer({
     }
   };
 
-  // ═══════════════════════════════════════════════════════════
-  // 🚀 SHARE NATIVO MEJORADO (Web Share API Nivel 2)
-  // ═══════════════════════════════════════════════════════════
-
-  /**
-   * Comparte texto + foto + URL usando Web Share API.
-   * - Móvil moderno → abre menú nativo CON foto adjunta
-   * - Desktop / navegador viejo → fallback: copia texto + descarga foto
-   */
   const shareNative = async (
     text: string,
     shareId: string,
@@ -267,7 +247,6 @@ export default function ProductLaunchKitViewer({
     try {
       const imageUrl = kit.enhanced_image_url || kit.original_image_url;
 
-      // ── Intento 1: Share con archivo (móvil moderno) ──
       if (imageUrl && navigator.canShare) {
         const file = await fetchImageFile(imageUrl);
         if (file) {
@@ -280,14 +259,12 @@ export default function ProductLaunchKitViewer({
         }
       }
 
-      // ── Intento 2: Share solo texto + URL ──
       if (navigator.share) {
         await navigator.share({ title, text, url: targetUrl });
         setShareCount((c) => c + 1);
         return true;
       }
 
-      // ── Fallback: copiar + descargar ──
       await copyToClipboard(`${text}\n\n${targetUrl}`);
       await handleDownload();
       setCopiedField(shareId);
@@ -295,7 +272,6 @@ export default function ProductLaunchKitViewer({
       return false;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      // Cancelación del usuario → silencioso
       if (
         msg.toLowerCase().includes("cancel") ||
         msg.toLowerCase().includes("abort")
@@ -308,10 +284,6 @@ export default function ProductLaunchKitViewer({
       setSharing(null);
     }
   };
-
-  // ═══════════════════════════════════════════════════════════
-  // ACCIONES DE COMPARTIR PRODUCTO
-  // ═══════════════════════════════════════════════════════════
 
   const shareEverything = async () => {
     const shareText = buildTextForNetwork("generic");
@@ -381,10 +353,6 @@ export default function ProductLaunchKitViewer({
       window.open("https://www.tiktok.com/upload", "_blank");
     }
   };
-
-  // ═══════════════════════════════════════════════════════════
-  // ACCIONES DE COMPARTIR TIENDA
-  // ═══════════════════════════════════════════════════════════
 
   const getSelectedPromoMessage = (): string => {
     const promo = PROMO_MESSAGES.find((p) => p.id === selectedPromo);
@@ -491,7 +459,7 @@ export default function ProductLaunchKitViewer({
                 <div className="text-3xl shrink-0">🎉</div>
                 <div className="min-w-0">
                   <div className="text-[10px] font-bold uppercase tracking-wider opacity-90">
-                    Kit Personalizado
+                    Kit de Publicidad IA
                   </div>
                   <h2 className="text-base sm:text-lg font-black truncate">
                     {store?.name || "Tu tienda"}
@@ -502,7 +470,7 @@ export default function ProductLaunchKitViewer({
               <div className="flex items-center gap-2 shrink-0">
                 {shareCount > 0 && (
                   <div className="rounded-full bg-white/20 px-2 py-1 text-[10px] font-bold backdrop-blur">
-                    ✅ {shareCount} shares
+                    ✅ {shareCount} compartidos
                   </div>
                 )}
                 <button
@@ -520,7 +488,7 @@ export default function ProductLaunchKitViewer({
                 <span className="text-[10px] font-bold">{categoryInfo.label}</span>
               </div>
               <div className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2 py-0.5 backdrop-blur">
-                <span className="text-[10px] font-bold">⚡ {kit.credits_used}</span>
+                <span className="text-[10px] font-bold">⚡ IA ACTIVA</span>
               </div>
               {store?.slug && (
                 <div className="inline-flex items-center gap-1 rounded-full bg-white/30 px-2 py-0.5 backdrop-blur">
@@ -566,9 +534,7 @@ export default function ProductLaunchKitViewer({
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 min-h-0">
-            {/* ══════════════════════════════════════════════
-                🚀 PUBLICAR (LAYOUT v22.7)
-            ══════════════════════════════════════════════ */}
+            {/* 🚀 PUBLICAR */}
             {activeTab === "publish" && (
               <div className="space-y-4">
                 <div className="text-center">
@@ -589,7 +555,6 @@ export default function ProductLaunchKitViewer({
                   />
                 </div>
 
-                {/* 🚀 BOTÓN GRANDE PRINCIPAL */}
                 <button
                   onClick={shareEverything}
                   disabled={sharing === "share-all"}
@@ -616,7 +581,6 @@ export default function ProductLaunchKitViewer({
                   <div className="flex-1 h-px bg-gray-200" />
                 </div>
 
-                {/* 🎯 CUADRÍCULA 2x2 DE ICONOS GRANDES */}
                 <div className="grid grid-cols-2 gap-2 sm:gap-3">
                   <button
                     onClick={shareToInstagram}
@@ -688,7 +652,6 @@ export default function ProductLaunchKitViewer({
                     </div>
                   </button>
 
-                  {/* 🎵 TIKTOK — botón grande abajo */}
                   <button
                     onClick={shareToTikTok}
                     disabled={sharing === "tt-share"}
@@ -712,7 +675,6 @@ export default function ProductLaunchKitViewer({
                   </button>
                 </div>
 
-                {/* CTA nuevo tab tienda */}
                 {store && (
                   <button
                     onClick={() => setActiveTab("store")}
@@ -748,15 +710,13 @@ export default function ProductLaunchKitViewer({
                     onClick={onRegenerate}
                     className="w-full rounded-xl border-2 border-purple-300 bg-purple-50 py-3 text-xs font-bold text-purple-700 hover:bg-purple-100 transition"
                   >
-                    🔄 Generar variante nueva (15 créditos)
+                    🔄 Generar nueva variante ✨ (Gratis)
                   </button>
                 )}
               </div>
             )}
 
-            {/* ══════════════════════════════════════════════
-                🏪 MI TIENDA
-            ══════════════════════════════════════════════ */}
+            {/* 🏪 MI TIENDA */}
             {activeTab === "store" && store && (
               <div className="space-y-4">
                 <div className="text-center">

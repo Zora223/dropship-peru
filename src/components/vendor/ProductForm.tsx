@@ -1,5 +1,5 @@
 // src/components/vendor/ProductForm.tsx
-// 🍌 v22.1 - Con Auto-Fill AI integrado
+// 🎨 v22.2 - Con Auto-Fill IA ilimitado (sin conceptos de créditos)
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
@@ -17,8 +17,8 @@ import {
 } from "../../lib/product-quality";
 import ColorPicker, { type ProductColor } from "./ColorPicker";
 import ProductLaunchAIModal from "./ProductLaunchAIModal";
-import AutoFillHero from "./AutoFillHero"; // 🆕
-import FieldFillButton from "./FieldFillButton"; // 🆕
+import AutoFillHero from "./AutoFillHero";
+import FieldFillButton from "./FieldFillButton";
 import { getAISubscription } from "../../lib/ai-subscription";
 import type { AutoFillData } from "../../lib/auto-fill-ai";
 import type { DbProduct } from "../../types/database";
@@ -65,20 +65,17 @@ export default function ProductForm({
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
   const [colors, setColors] = useState<ProductColor[]>([]);
 
-  // 🆕 Estados Launch AI
   const [showLaunchOffer, setShowLaunchOffer] = useState(false);
   const [showLaunchModal, setShowLaunchModal] = useState(false);
   const [savedProduct, setSavedProduct] = useState<DbProduct | null>(null);
   const [aiCredits, setAiCredits] = useState(0);
   const [aiPlan, setAiPlan] = useState<string>("starter");
 
-  // 🆕 URL de la imagen para Auto-Fill (primera disponible)
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isEditing = Boolean(initial);
 
-  // ========== INIT ==========
   useEffect(() => {
     if (initial) {
       setForm({
@@ -102,7 +99,6 @@ export default function ProductForm({
         setColors(initialColors.filter((c: any) => c && c.name && c.hex));
       }
 
-      // Si tiene imagen, usarla para Auto-Fill
       if (initial.images && initial.images.length > 0) {
         setUploadedImageUrl(initial.images[0]);
       }
@@ -130,7 +126,6 @@ export default function ProductForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 🆕 Cargar suscripción AI al montar
   useEffect(() => {
     const loadAI = async () => {
       try {
@@ -146,7 +141,6 @@ export default function ProductForm({
     loadAI();
   }, []);
 
-  // ========== SCORE ==========
   const quality = useMemo(() => {
     const totalImages = existingImages.length + pendingFiles.length;
     return calculateProductQuality({
@@ -165,7 +159,6 @@ export default function ProductForm({
   const wantsToPublish = form.is_active;
   const isBlocked = wantsToPublish && !canPublish;
 
-  // ========== HANDLERS ==========
   const handleChange = (
     e: React.ChangeEvent<
       HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
@@ -202,7 +195,6 @@ export default function ProductForm({
     toast.success("SKU generado", "Puedes editarlo si quieres");
   };
 
-  // 🆕 Aplicar datos de Auto-Fill AI al form
   const applyAutoFillData = (data: AutoFillData) => {
     setForm((prev) => {
       const updates: any = { ...prev };
@@ -210,7 +202,6 @@ export default function ProductForm({
       if (data.description) updates.description = data.description;
       if (data.category) {
         updates.category = data.category;
-        // Verificar si es preset o custom
         const isPreset = PREDEFINED_CATEGORIES.some(
           (c) => c.label === data.category
         );
@@ -225,7 +216,6 @@ export default function ProductForm({
       return updates;
     });
 
-    // Aplicar colores detectados si el vendor no ha agregado ninguno
     if (data.colors_detected && data.colors_detected.length > 0 && colors.length === 0) {
       const detectedColors: ProductColor[] = data.colors_detected.map((name) => ({
         name: name.charAt(0).toUpperCase() + name.slice(1),
@@ -240,7 +230,6 @@ export default function ProductForm({
     );
   };
 
-  // Helper para convertir nombre de color a hex aproximado
   const getHexFromColorName = (name: string): string => {
     const map: Record<string, string> = {
       rojo: "#EF4444",
@@ -346,7 +335,6 @@ export default function ProductForm({
     setPendingFiles((prev) => [...prev, ...validFiles]);
     setPreviews((prev) => [...prev, ...validPreviews]);
 
-    // 🆕 Subir la PRIMERA imagen para Auto-Fill (si no hay ya una)
     if (validFiles.length > 0 && !uploadedImageUrl) {
       try {
         const urls = await uploadProductImages(storeId, [validFiles[0]]);
@@ -396,11 +384,10 @@ export default function ProductForm({
       const filtered = prev.filter((u) => u !== url);
       return [url, ...filtered];
     });
-    setUploadedImageUrl(url); // Actualizar la que se usa para AI
+    setUploadedImageUrl(url);
     toast.info("Imagen principal actualizada");
   };
 
-  // ========== SUBMIT ==========
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAttemptedSubmit(true);
@@ -429,7 +416,6 @@ export default function ProductForm({
     setSaving(true);
     try {
       let newImageUrls: string[] = [];
-      // Si la primera imagen ya está subida (por Auto-Fill), no la volvemos a subir
       const filesToUpload = uploadedImageUrl
         ? pendingFiles.slice(1)
         : pendingFiles;
@@ -491,7 +477,6 @@ export default function ProductForm({
 
       onSaved(result);
 
-      // 🍌 LAUNCH AI OFFER
       if (allImages.length > 0 && form.is_active) {
         setSavedProduct(result);
         try {
@@ -533,7 +518,6 @@ export default function ProductForm({
     onClose();
   };
 
-  // ========== UI HELPERS ==========
   const totalImages = existingImages.length + pendingFiles.length;
   const nameLen = form.name.length;
   const descLen = form.description.length;
@@ -579,7 +563,8 @@ export default function ProductForm({
     return issue?.message || null;
   };
 
-  const aiEnabled = aiCredits > 0 || aiPlan === "business";
+  // Herramientas IA siempre activas con membresía
+  const aiEnabled = true;
 
   return (
     <>
@@ -597,10 +582,10 @@ export default function ProductForm({
               <div className="absolute -top-8 -right-8 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
               <div className="absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
               <div className="relative">
-                <div className="text-6xl mb-3 animate-bounce">🍌</div>
+                <div className="text-6xl mb-3 animate-bounce">🎨</div>
                 <h3 className="text-2xl font-black">¡Producto publicado!</h3>
                 <p className="mt-2 text-sm opacity-90">
-                  ¿Quieres que la AI prepare TODO el marketing por ti?
+                  ¿Quieres que la IA prepare TODO el marketing por ti de forma gratuita?
                 </p>
               </div>
             </div>
@@ -610,15 +595,15 @@ export default function ProductForm({
                   🎁 Product Launch AI incluye:
                 </div>
                 <ul className="space-y-1.5 text-sm text-gray-700">
-                  <li>📸 Imagen publicitaria PRO</li>
-                  <li>📝 Captions Instagram & Facebook</li>
-                  <li>🏷️ 15 hashtags optimizados</li>
-                  <li>💬 Mensaje WhatsApp Broadcast</li>
-                  <li>📧 Email marketing completo</li>
+                  <li>📸 Imagen publicitaria optimizada</li>
+                  <li>📝 Captions virales para Instagram & Facebook</li>
+                  <li>🏷️ 15 hashtags enfocados en Perú</li>
+                  <li>💬 Mensaje estructurado de WhatsApp</li>
+                  <li>📧 Email marketing completo de lanzamiento</li>
                 </ul>
               </div>
               <div className="text-center text-xs text-gray-500">
-                ⚡ Solo 15 créditos · ⏱️ 30-45 segundos
+                ⚡ ¡100% Incluido en tu Membresía! · Sin límites de uso
               </div>
               <div className="flex gap-3 pt-2">
                 <button
@@ -897,7 +882,7 @@ export default function ProductForm({
               </p>
             </div>
 
-            {/* 🆕 AUTO-FILL HERO BUTTON */}
+            {/* AUTO-FILL HERO */}
             {aiEnabled && (
               <AutoFillHero
                 imageUrl={uploadedImageUrl}
@@ -1002,7 +987,7 @@ export default function ProductForm({
                     ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
                     : "border-gray-200 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
                 }`}
-                placeholder="Ej: Polo 100% algodón peinado, corte regular, cuello redondo reforzado. Ideal para uso diario. Disponible en tallas S, M, L, XL. Lavable en agua fría, no usar lejía."
+                placeholder="Ej: Polo 100% algodón peinado, corte regular, cuello redondo reforzado. Ideal para uso diario. Disponible en tallas S, M, L, XL."
               />
               <p className="mt-1 text-xs text-gray-400">
                 💡 Incluye: material, medidas, cuidados, beneficios, para qué sirve

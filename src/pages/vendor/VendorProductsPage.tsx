@@ -1,5 +1,5 @@
 // src/pages/vendor/VendorProductsPage.tsx
-// v22.3 - Con historial de kits + badge visual + reutilización
+// v22.5 - Tipos corregidos sin errores de TS
 
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -17,7 +17,6 @@ import EditPriceModal from "../../components/vendor/EditPriceModal";
 import ProductLaunchAIModal from "../../components/vendor/ProductLaunchAIModal";
 import { getAISubscription, type AISubscription } from "../../lib/ai-subscription";
 import { countKitsPerProduct } from "../../lib/product-launch-ai";
-import type { DbProduct } from "../../types/database";
 
 type Tab = "all" | "imported" | "own";
 
@@ -59,20 +58,18 @@ export default function VendorProductsPage() {
   const [products, setProducts] = useState<VendorProductWithRealStock[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState<DbProduct | null>(null);
+  const [editing, setEditing] = useState<any | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("all");
   const [searchQuery, setSearchQuery] = useState("");
 
   const [editingPrice, setEditingPrice] =
     useState<VendorProductWithRealStock | null>(null);
 
-  // 🍌 Modal Launch AI
   const [launchAIProduct, setLaunchAIProduct] =
     useState<VendorProductWithRealStock | null>(null);
   const [aiSubscription, setAiSubscription] =
     useState<AISubscription | null>(null);
 
-  // 🆕 Contador de kits por producto (para badge visual)
   const [kitsCount, setKitsCount] = useState<Record<string, number>>({});
 
   const loadProducts = async () => {
@@ -101,7 +98,6 @@ export default function VendorProductsPage() {
     }
   };
 
-  // 🆕 Cargar contador de kits por producto
   const loadKitsCount = async () => {
     try {
       const counts = await countKitsPerProduct();
@@ -203,7 +199,7 @@ export default function VendorProductsPage() {
   };
 
   const openEdit = (product: VendorProductWithRealStock) => {
-    setEditing(product);
+    setEditing(product as any);
     setShowForm(true);
   };
 
@@ -237,8 +233,8 @@ export default function VendorProductsPage() {
   const openLaunchAI = (product: VendorProductWithRealStock) => {
     if (!aiSubscription) {
       toast.warning(
-        "Suscripción AI requerida",
-        "Necesitas activar un plan AI para generar marketing"
+        "Suscripción IA requerida",
+        "Activa tu membresía para usar el kit de publicidad IA"
       );
       return;
     }
@@ -256,7 +252,7 @@ export default function VendorProductsPage() {
   const closeLaunchAI = () => {
     setLaunchAIProduct(null);
     loadAISubscription();
-    loadKitsCount(); // 🆕 Recargar contador de kits
+    loadKitsCount();
   };
 
   if (loadingStore || loading) {
@@ -319,35 +315,29 @@ export default function VendorProductsPage() {
         </div>
       </div>
 
-      {/* 🍌 Card Launch AI - Ahora con estadísticas */}
+      {/* Card Launch AI */}
       {aiSubscription && (
         <div className="rounded-2xl bg-linear-to-br from-purple-500 via-pink-500 to-orange-500 p-5 text-white shadow-lg">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-3">
-              <div className="text-4xl">🍌</div>
+              <div className="text-4xl animate-bounce">🎨</div>
               <div>
                 <h3 className="text-base font-black">
                   Product Launch AI
                 </h3>
-                <p className="text-xs opacity-90">
+                <p className="text-xs opacity-90 font-medium">
                   {totalKitsGenerated > 0
-                    ? `${totalKitsGenerated} kit${totalKitsGenerated !== 1 ? "s" : ""} generado${totalKitsGenerated !== 1 ? "s" : ""} · Reutiliza sin gastar créditos`
-                    : "Genera marketing personalizado en 30 segundos"}
+                    ? `🔥 ${totalKitsGenerated} kit${totalKitsGenerated !== 1 ? "s" : ""} de marketing generado${totalKitsGenerated !== 1 ? "s" : ""} · Reutilízalos gratis ilimitadamente`
+                    : "Genera marketing personalizado para tus redes en 30 segundos"}
                 </p>
               </div>
             </div>
             <div className="text-right">
               <div className="text-xs font-bold uppercase tracking-wider opacity-90">
-                Créditos
+                Estado Plan IA
               </div>
-              <div className="text-2xl font-black">
-                {aiSubscription.plan === "business"
-                  ? "♾️"
-                  : aiSubscription.credits_remaining}
-                <span className="text-sm font-normal opacity-75">
-                  {aiSubscription.plan !== "business" &&
-                    ` / ${aiSubscription.credits_total}`}
-                </span>
+              <div className="text-sm font-black bg-white/20 px-3 py-1 rounded-full backdrop-blur mt-1">
+                ⚡ ACTIVO E ILIMITADO ✅
               </div>
             </div>
           </div>
@@ -520,7 +510,6 @@ export default function VendorProductsPage() {
                         ? ((margin / basePrice) * 100).toFixed(0)
                         : null;
 
-                    // 🆕 Cuántos kits tiene este producto
                     const productKits = kitsCount[product.id] || 0;
                     const hasKit = productKits > 0;
 
@@ -548,9 +537,9 @@ export default function VendorProductsPage() {
                                 {hasKit && (
                                   <span
                                     className="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700"
-                                    title={`${productKits} kit${productKits !== 1 ? "s" : ""} generado${productKits !== 1 ? "s" : ""}`}
+                                    title={`${productKits} kit${productKits !== 1 ? "s" : ""} de marketing guardado${productKits !== 1 ? "s" : ""}`}
                                   >
-                                    ✅ Kit
+                                    ✅ Kit Activo
                                   </span>
                                 )}
                               </div>
@@ -652,11 +641,11 @@ export default function VendorProductsPage() {
                                 }`}
                                 title={
                                   hasKit
-                                    ? "Ver kit generado (0 créditos)"
-                                    : "Generar kit AI (15 créditos)"
+                                    ? "Ver Kit de Publicidad (Guardado)"
+                                    : "Generar Kit de Publicidad IA (Gratis)"
                                 }
                               >
-                                {hasKit ? "♻️ Ver Kit" : "🍌 Launch"}
+                                {hasKit ? "♻️ Ver Kit" : "🎨 Launch"}
                               </button>
                             )}
 
@@ -707,7 +696,6 @@ export default function VendorProductsPage() {
               const marginPct =
                 basePrice > 0 ? ((margin / basePrice) * 100).toFixed(0) : null;
 
-              // 🆕
               const productKits = kitsCount[product.id] || 0;
               const hasKit = productKits > 0;
 
@@ -741,7 +729,7 @@ export default function VendorProductsPage() {
                       )}
                       {hasKit && (
                         <span className="rounded-full bg-emerald-500 px-2.5 py-1 text-[10px] font-bold text-white shadow">
-                          ✅ Kit
+                          ✅ Kit Guardado
                         </span>
                       )}
                     </div>
@@ -831,7 +819,7 @@ export default function VendorProductsPage() {
                               : "bg-linear-to-r from-purple-500 to-pink-500"
                           }`}
                         >
-                          {hasKit ? "♻️ Ver Launch Kit" : "🍌 Generar Launch Kit"}
+                          {hasKit ? "♻️ Ver Kit de Publicidad" : "🎨 Generar Kit de Publicidad IA"}
                         </button>
                       )}
 

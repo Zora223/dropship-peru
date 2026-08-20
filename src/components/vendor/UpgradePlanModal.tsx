@@ -1,10 +1,10 @@
 // src/components/vendor/UpgradePlanModal.tsx
-// 🍌 Product Launch AI - Modal para upgrade de plan
+// 🍌 Product Launch AI - Modal para upgrade de plan de Membresía IA (Sin sugerencias de Tailwind)
+
 import { useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { AI_PLANS_INFO, type AIPlan } from "../../lib/ai-subscription";
 
-// 💜 Yape de Dropship para recibir pagos AI
 const DROPSHIP_YAPE = "930-415-718";
 const DROPSHIP_YAPE_NAME = "Marco Peña";
 
@@ -15,45 +15,44 @@ interface Props {
   onSuccess?: () => void;
 }
 
-// 📋 Info extendida de cada plan (features)
 const PLAN_FEATURES: Record<AIPlan, { features: string[]; description: string }> = {
   starter: {
-    description: "Para probar la AI",
+    description: "Plan Básico de Inicio",
     features: [
-      "10 créditos/mes",
-      "Solo texto (captions, hashtags)",
-      "0 Launch Kits",
-      "Soporte básico",
+      "Kits de Publicidad IA Básicos",
+      "Cargas Auto-Fill para tus productos",
+      "Reuso Ilimitado de Kits Guardados",
+      "Soporte Estándar",
     ],
   },
   creator: {
-    description: "Para vendedores que empiezan",
+    description: "Para vendedores en crecimiento",
     features: [
-      "100 créditos/mes",
-      "6 Launch Kits completos",
-      "Imagen PRO con Nano Banana",
-      "Captions + hashtags + WhatsApp",
-      "Soporte prioritario",
+      "Kits de Publicidad IA Ilimitados",
+      "Cargas Auto-Fill IA Ilimitadas",
+      "Generación de Imágenes HD",
+      "Copy para Instagram, FB y WhatsApp",
+      "Soporte Prioritario",
     ],
   },
   pro: {
-    description: "Para vendedores serios",
+    description: "Para vendedores consolidados",
     features: [
-      "500 créditos/mes",
-      "33 Launch Kits completos",
-      "Todo lo del plan Creator",
-      "Analytics avanzados",
-      "Soporte VIP",
+      "Kits de Publicidad IA Ilimitados",
+      "Cargas Auto-Fill IA Ilimitadas",
+      "Modelos IA Ultra Rápidos (Groq 120B)",
+      "Análisis de Calidad de Ficha",
+      "Soporte VIP 1 a 1",
     ],
   },
   business: {
-    description: "Sin límites",
+    description: "Acceso Total e Ilimitado",
     features: [
-      "♾️ Créditos ILIMITADOS",
-      "Launch Kits ilimitados",
-      "Todo lo del plan Pro",
-      "Publicación automática (próx)",
-      "Manager dedicado",
+      "♾️ Acceso TOTAL Ilimitado a la IA",
+      "Generación Instantánea de Kits",
+      "Prioridad en Servidores Groq",
+      "Destacado de Tienda en Marketplace",
+      "Manager Dedicado por WhatsApp",
     ],
   },
 };
@@ -72,7 +71,6 @@ export default function UpgradePlanModal({
 
   if (!isOpen) return null;
 
-  // Planes a los que puede hacer upgrade
   const upgradablePlans = (["creator", "pro", "business"] as AIPlan[]).filter(
     (p) =>
       p !== currentPlan &&
@@ -88,7 +86,6 @@ export default function UpgradePlanModal({
       setLoading(true);
       setError(null);
 
-      // Obtener usuario actual
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -96,7 +93,6 @@ export default function UpgradePlanModal({
         throw new Error("No hay sesión activa");
       }
 
-      // Registrar solicitud de pago
       const { error: insertError } = await supabase
         .from("ai_upgrade_requests")
         .insert({
@@ -109,7 +105,6 @@ export default function UpgradePlanModal({
         });
 
       if (insertError) {
-        // Si la tabla no existe aún, mostrar mensaje amigable
         console.error("Insert error:", insertError);
         throw new Error(
           "No se pudo registrar el pago. Contáctanos por WhatsApp: " +
@@ -151,11 +146,11 @@ export default function UpgradePlanModal({
           <div className="flex items-center justify-between">
             <div>
               <div className="text-xs font-bold uppercase tracking-wider opacity-90">
-                🍌 Product Launch AI
+                🎨 Herramientas IA Pro
               </div>
               <h2 className="text-lg font-bold">
-                {step === "select" && "⚡ Elige tu plan"}
-                {step === "payment" && "💳 Realiza el pago"}
+                {step === "select" && "⚡ Potencia tu tienda con IA"}
+                {step === "payment" && "💳 Realiza el pago de tu Membresía IA"}
               </h2>
             </div>
             <button
@@ -175,18 +170,17 @@ export default function UpgradePlanModal({
                 ¡Pago registrado con éxito!
               </h3>
               <p className="mt-2 text-sm text-gray-500">
-                Tu solicitud fue enviada al admin. Verificaremos tu pago y
-                activaremos tu plan en las próximas horas.
+                Tu solicitud fue enviada al equipo. Verificaremos tu pago y
+                activaremos tus herramientas ilimitadas en breve.
               </p>
-              <p className="mt-2 text-xs text-purple-600">
-                Recibirás una notificación por WhatsApp cuando esté activo.
+              <p className="mt-2 text-xs text-purple-600 font-medium">
+                Recibirás una confirmación por WhatsApp cuando tu plan esté activo.
               </p>
             </div>
           ) : step === "select" ? (
-            /* PASO 1: SELECCIÓN DE PLAN */
             <>
               <p className="mb-6 text-center text-sm text-gray-600">
-                Desbloquea el poder completo de Product Launch AI 🚀
+                Desbloquea kits de publicidad e inteligencia artificial ilimitada para tus productos 🚀
               </p>
 
               <div className="grid gap-4 sm:grid-cols-3">
@@ -245,7 +239,7 @@ export default function UpgradePlanModal({
                             key={i}
                             className="flex items-start gap-1.5 text-xs text-gray-700"
                           >
-                            <span className="text-emerald-600 shrink-0">✓</span>
+                            <span className="text-emerald-600 shrink-0 font-bold">✓</span>
                             <span>{f}</span>
                           </div>
                         ))}
@@ -274,13 +268,12 @@ export default function UpgradePlanModal({
                     Ya tienes el plan más alto
                   </h3>
                   <p className="mt-1 text-sm text-emerald-700">
-                    Disfruta de todas las funciones ilimitadas
+                    Disfruta de todas las herramientas de IA ilimitadas en tu tienda.
                   </p>
                 </div>
               )}
             </>
           ) : (
-            /* PASO 2: PAGO CON YAPE */
             plan &&
             selectedPlan && (
               <>
@@ -309,7 +302,6 @@ export default function UpgradePlanModal({
                 </div>
 
                 <div className="mt-4 space-y-4">
-                  {/* Instrucciones Yape */}
                   <div className="rounded-2xl bg-purple-50 border-2 border-purple-200 p-5">
                     <h4 className="text-sm font-black text-purple-900 uppercase tracking-wider">
                       💜 Paga con Yape
@@ -337,7 +329,6 @@ export default function UpgradePlanModal({
                     </div>
                   </div>
 
-                  {/* Código de referencia */}
                   <div className="rounded-xl bg-yellow-50 border border-yellow-200 p-4 text-sm">
                     ⚠️ <strong>Importante:</strong> En el mensaje de Yape escribe:
                     <br />
@@ -346,29 +337,24 @@ export default function UpgradePlanModal({
                     </code>
                   </div>
 
-                  {/* Instrucciones paso a paso */}
                   <div className="rounded-2xl bg-gray-50 p-4 text-sm">
                     <h4 className="font-bold text-gray-900">
                       📋 ¿Cómo funciona?
                     </h4>
                     <ol className="mt-2 space-y-1 text-xs text-gray-700">
                       <li>1. Realiza el Yape con el monto exacto</li>
-                      <li>
-                        2. Click en "Ya realicé el pago" abajo
-                      </li>
-                      <li>3. El admin verificará en menos de 24h</li>
-                      <li>4. Se activará tu plan y recibirás WhatsApp</li>
+                      <li>2. Haz click en "Ya realicé el pago" abajo</li>
+                      <li>3. Verificamos tu pago rápidamente</li>
+                      <li>4. Tus herramientas IA se activan inmediatamente</li>
                     </ol>
                   </div>
 
-                  {/* Error */}
                   {error && (
                     <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
                       ❌ {error}
                     </div>
                   )}
 
-                  {/* Botón confirmar */}
                   <button
                     onClick={handleConfirmPayment}
                     disabled={loading}

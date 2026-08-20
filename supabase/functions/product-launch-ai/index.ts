@@ -1,5 +1,5 @@
 // supabase/functions/product-launch-ai/index.ts
-// 🍌 v22.11 - SENIOR MASTER + Inclusivo + Variación total + Gatillos mentales
+// 🍌 v22.12 - Fix modelo Groq deprecado (llama-3.1)
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -12,8 +12,12 @@ const corsHeaders = {
 };
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const MODEL_LARGE = "llama-3.3-70b-versatile";
+
+// 🔥 v22.12 - Modelos actualizados (Groq deprecó 3.3)
+const MODEL_LARGE = "llama-3.1-70b-versatile";
 const MODEL_FAST = "llama-3.1-8b-instant";
+const MODEL_FALLBACK = "mixtral-8x7b-32768"; // Por si el principal falla
+
 const CREDITS_COST = 15;
 
 interface RequestBody {
@@ -160,7 +164,7 @@ function analyzeProductContext(
 }
 
 // ============================================
-// 🎨 BANCOS DE VARIACIÓN (para kits únicos)
+// 🎨 BANCOS DE VARIACIÓN
 // ============================================
 
 const INSTAGRAM_STYLES = [
@@ -257,14 +261,8 @@ const SOCIAL_PROOF = [
   "Se está haciendo tendencia",
 ];
 
-// Función helper para elegir aleatoriamente
 function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
-}
-
-function pickMultiple<T>(arr: T[], count: number): T[] {
-  const shuffled = [...arr].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, count);
 }
 
 // ============================================
@@ -282,62 +280,76 @@ function getApiKeys(): string[] {
   return keys;
 }
 
+/**
+ * 🔥 v22.12 - Retry con múltiples modelos y keys
+ * Si un modelo falla, prueba con el fallback
+ */
 async function callGroq(
   prompt: string,
-  temperature = 0.95, // 🆕 más alto para mayor variación
+  temperature = 0.95,
   model = MODEL_LARGE,
   maxTokens = 3500
 ): Promise<string> {
   const apiKeys = getApiKeys();
+  const modelsToTry = [model, MODEL_FALLBACK, MODEL_FAST];
   let lastError: Error | null = null;
 
-  for (let keyIndex = 0; keyIndex < apiKeys.length; keyIndex++) {
-    const apiKey = apiKeys[keyIndex];
-    const keyLabel = keyIndex === 0 ? "principal" : "respaldo";
+  for (const currentModel of modelsToTry) {
+    for (let keyIndex = 0; keyIndex < apiKeys.length; keyIndex++) {
+      const apiKey = apiKeys[keyIndex];
+      const keyLabel = keyIndex === 0 ? "principal" : "respaldo";
 
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        console.log(`🔑 Usando API key ${keyLabel} (intento ${attempt}/2)`);
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          console.log(`🔑 Modelo: ${currentModel} | Key: ${keyLabel} | Intento: ${attempt}/2`);
 
-        const response = await fetch(GROQ_API_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model,
-            messages: [{ role: "user", content: prompt }],
-            temperature,
-            max_tokens: maxTokens,
-            // 🆕 seed aleatorio para máxima variación
-            seed: Math.floor(Math.random() * 1000000),
-          }),
-        });
+          const response = await fetch(GROQ_API_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model: currentModel,
+              messages: [{ role: "user", content: prompt }],
+              temperature,
+              max_tokens: maxTokens,
+              seed: Math.floor(Math.random() * 1000000),
+            }),
+          });
 
-        if (response.status === 429) {
-          console.log(`⏱️ Rate limit en key ${keyLabel}, probando siguiente...`);
-          lastError = new Error(`Rate limit key ${keyLabel}`);
-          break;
+          if (response.status === 429) {
+            console.log(`⏱️ Rate limit en key ${keyLabel}, probando siguiente...`);
+            lastError = new Error(`Rate limit key ${keyLabel}`);
+            break;
+          }
+
+          // 🔥 Si el modelo no existe (404), pasar al siguiente modelo
+          if (response.status === 404) {
+            const errText = await response.text();
+            console.log(`⚠️ Modelo ${currentModel} no disponible, probando siguiente...`);
+            lastError = new Error(`Modelo ${currentModel} deprecado: ${errText}`);
+            break;
+          }
+
+          if (!response.ok) {
+            const err = await response.text();
+            throw new Error(`Groq error ${response.status}: ${err}`);
+          }
+
+          const data = await response.json();
+          console.log(`✅ Respuesta OK con modelo ${currentModel} + key ${keyLabel}`);
+          return data.choices?.[0]?.message?.content?.trim() || "";
+        } catch (err) {
+          lastError = err instanceof Error ? err : new Error(String(err));
+          console.log(`⚠️ Error: ${lastError.message}`);
+          if (attempt === 1) await sleep(1000);
         }
-
-        if (!response.ok) {
-          const err = await response.text();
-          throw new Error(`Groq error ${response.status}: ${err}`);
-        }
-
-        const data = await response.json();
-        console.log(`✅ Respuesta OK con key ${keyLabel}`);
-        return data.choices?.[0]?.message?.content?.trim() || "";
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-        console.log(`⚠️ Error con key ${keyLabel}: ${lastError.message}`);
-        if (attempt === 1) await sleep(1000);
       }
     }
   }
 
-  throw lastError || new Error("Todos los intentos fallaron");
+  throw lastError || new Error("Todos los modelos e intentos fallaron");
 }
 
 // ============================================
@@ -357,7 +369,6 @@ async function generateMegaKit(
     ? store.facebook.replace(/[\/]/g, "").replace("facebook.com/", "").trim()
     : "";
 
-  // 🆕 Elegir estilos aleatorios para este kit
   const igStyle = pickRandom(INSTAGRAM_STYLES);
   const fbStyle = pickRandom(FACEBOOK_STYLES);
   const waStyle = pickRandom(WHATSAPP_STYLES);
@@ -368,7 +379,6 @@ async function generateMegaKit(
 
   console.log(`🎨 Estilos: IG=${igStyle} | FB=${fbStyle} | WA=${waStyle} | TT=${ttStyle}`);
 
-  // 🎯 Configuración según género
   const genderConfig = {
     female: {
       lookGood: "te va a quedar hermoso, resaltará tu estilo único",
@@ -455,13 +465,6 @@ Genera un objeto JSON con exactamente esta estructura (SOLO JSON, sin texto adic
 ═══ REGLAS ESTRICTAS POR CAMPO ═══
 
 📷 INSTAGRAM (Estilo: ${igStyle}):
-Estilos posibles:
-- aspiracional_poetico: metáforas emocionales, lírico
-- minimalista_directo: pocas palabras, alto impacto
-- storytelling_emocional: mini historia + producto
-- provocador_curiosidad: pregunta que atrapa
-- testimonial_inspirador: como si un cliente hablara
-
 Estructura:
 1. Hook impactante primera línea
 2. Cuerpo aspiracional (${cfg.lookGood})
@@ -473,13 +476,6 @@ Estructura:
 Máximo: 220 caracteres
 
 📘 FACEBOOK (Estilo: ${fbStyle}) - LINK OBLIGATORIO:
-Estilos posibles:
-- informativo_confianza: datos, características, garantías
-- beneficios_bullets: lista con ✨
-- comparativo_valor: precio vs beneficio
-- educativo_experto: tips + producto
-- testimonial_social: reseñas ficticias creíbles
-
 Estructura:
 1. Hook visual con emoji
 2. 3 beneficios con ✨
@@ -502,13 +498,6 @@ Sin espacios, sin mayúsculas, sin números al final
 Usa saludo NEUTRAL: "${waGreeting}"
 Habla como a un amigo/a de cualquier género.
 
-Estilos posibles:
-- casual_amigable: como charla entre amigos
-- entusiasta_directo: energético, va al grano
-- consultivo_pregunta: hace pregunta que engancha
-- presentacion_novedad: "acaba de llegar..."
-- recomendacion_personal: "te acordé porque..."
-
 Estructura:
 1. Saludo neutral: "${waGreeting}"
 2. Presentación del producto (calidez sin género)
@@ -520,28 +509,7 @@ Estructura:
 
 Máximo: 350 caracteres
 
-Ejemplo IDEAL (inclusivo):
-"${waGreeting}
-
-Acaba de llegar algo increíble a la tienda 🛍️
-
-[Producto] - ${cfg.lookGood}. Además, es perfecto para regalar o para ti mism@.
-
-💰 Solo S/ ${price.toFixed(2)}
-
-También tengo ${cfg.moreItems}:
-🛒 ${storeUrl}
-
-¿Te separo uno? 💬"
-
 🎵 TIKTOK (Estilo: ${ttStyle}) - VIRAL:
-Estilos posibles:
-- pov_visual: "POV: encontraste..."
-- cuando_relatable: "Cuando por fin..."
-- storytime_breve: "Storytime rápido..."
-- trend_educativo: "3 razones por qué..."
-- shock_curiosidad: "Nadie te dijo esto..."
-
 Estructura:
 1. Hook viral primera línea
 2. Precio breve
@@ -554,10 +522,6 @@ Máximo: 150 caracteres
 - NO spam words (GRATIS, OFERTA, 50% OFF)
 - Máx 1 emoji
 - Genera curiosidad genuina
-Ejemplos:
-- "Pensé en ti al ver esto 💭"
-- "Nueva llegada que amarás"
-- "Algo especial esperándote"
 
 📧 EMAIL BODY - LINK OBLIGATORIO + STORYTELLING:
 Estructura:
@@ -572,13 +536,6 @@ Estructura:
 9. Urgencia sutil
 10. Cierre cálido firmado
 
-═══ REGLA DE ORO ═══
-- INSTAGRAM: aspiracional, sin link directo
-- FACEBOOK: informativo, LINK OBLIGATORIO
-- WHATSAPP: personal INCLUSIVO, LINK OBLIGATORIO, sin sexismo
-- TIKTOK: viral, "link en bio"
-- EMAIL: storytelling, LINK OBLIGATORIO
-
 ═══ IMPORTANTE ═══
 1. Responde SOLO JSON válido
 2. Sin markdown, sin \`\`\`
@@ -590,7 +547,7 @@ Estructura:
 
 RESPONDE AHORA (solo JSON):`;
 
-  console.log("🧠 Enviando MEGA PROMPT v22.11 SENIOR MASTER...");
+  console.log("🧠 Enviando MEGA PROMPT v22.12 con fallback de modelos...");
   const response = await callGroq(prompt, 0.95, MODEL_LARGE, 3500);
 
   // Parse JSON robusto
@@ -639,9 +596,8 @@ RESPONDE AHORA (solo JSON):`;
     .filter((t) => t.length > 1)
     .slice(0, 20);
 
-  // 🛡️ POST-PROCESAMIENTO: Garantizar links + CTAs + eliminar sexismo
+  // POST-PROCESAMIENTO: Garantizar links + CTAs + eliminar sexismo
 
-  // 📷 INSTAGRAM: Reforzar link en bio + CTA
   const igCta = pickRandom(CTA_INSTAGRAM);
   if (!parsed.instagram.toLowerCase().includes("link en bio")) {
     parsed.instagram += `\n\n👆 Link en bio para ver más productos increíbles`;
@@ -650,7 +606,6 @@ RESPONDE AHORA (solo JSON):`;
     parsed.instagram += `\n📷 ${igCta}: ${igHandle}`;
   }
 
-  // 📘 FACEBOOK: Garantizar link completo
   if (!parsed.facebook.includes(storeUrl)) {
     const fbCta = pickRandom(CTA_FACEBOOK);
     parsed.facebook += `\n\n🛒 CÓMPRALO AQUÍ:\n👉 ${storeUrl}\n\n🔥 Encuentra ${cfg.moreItems} en la tienda\n${fbCta}`;
@@ -659,8 +614,7 @@ RESPONDE AHORA (solo JSON):`;
     }
   }
 
-  // 💬 WHATSAPP: LIMPIAR SEXISMO + garantizar link
-  // Reemplazar términos sexistas por neutrales
+  // WHATSAPP: LIMPIAR SEXISMO + garantizar link
   parsed.whatsapp = parsed.whatsapp
     .replace(/¡?hola bella!?/gi, waGreeting)
     .replace(/¡?hola guapo!?/gi, waGreeting)
@@ -681,19 +635,17 @@ RESPONDE AHORA (solo JSON):`;
     parsed.whatsapp += `\n\n🛒 Míralo (y más productos increíbles):\n${storeUrl}\n\n${waCta}`;
   }
 
-  // 🎵 TIKTOK: Reforzar link en bio
   if (!parsed.tiktok.toLowerCase().includes("link en bio")) {
     const ttCta = pickRandom(CTA_TIKTOK);
     parsed.tiktok += `\n🔗 Link en bio\n${ttCta}`;
   }
 
-  // 📧 EMAIL: Garantizar link + urgencia
   if (!parsed.email_body.includes(storeUrl)) {
     const urgency = pickRandom(URGENCY_PHRASES);
     parsed.email_body += `\n\n🛒 CÓMPRALO EN 2 MINUTOS:\n👉 ${storeUrl}\n\n🔥 Descubre ${cfg.moreItems} en la tienda\n\n${urgency}\n\nCon cariño,\nEl equipo de ${store.name} 💜`;
   }
 
-  console.log("✅ MEGA KIT v22.11 SENIOR MASTER parseado + limpio + enriquecido");
+  console.log("✅ MEGA KIT v22.12 parseado + limpio + enriquecido");
   return parsed;
 }
 
@@ -747,7 +699,7 @@ serve(async (req: Request) => {
       );
     }
 
-    console.log(`🍌 Launch AI v22.11 SENIOR MASTER: ${product_name} (user: ${user.email})`);
+    console.log(`🍌 Launch AI v22.12: ${product_name} (user: ${user.email})`);
 
     const { data: storeData } = await supabase
       .from("stores")
@@ -793,7 +745,6 @@ serve(async (req: Request) => {
       );
     }
 
-    // 🆕 v22.11: Análisis profundo de contexto
     const context = analyzeProductContext(
       product_name,
       product_description,
@@ -801,13 +752,8 @@ serve(async (req: Request) => {
       product_price
     );
 
-    console.log(`🎯 Contexto detectado:`);
-    console.log(`   Categoría: ${context.category}`);
-    console.log(`   Género: ${context.gender}`);
-    console.log(`   Precio: ${context.priceRange}`);
-    console.log(`   Giftable: ${context.isGiftable}`);
+    console.log(`🎯 Contexto: ${context.category} | ${context.gender} | ${context.priceRange}`);
 
-    // 🚀 v22.11: SENIOR MASTER PROMPT con variación total
     const megaKit = await generateMegaKit(
       product_name,
       product_price,
@@ -816,7 +762,7 @@ serve(async (req: Request) => {
       storeUrl
     );
 
-    console.log("✅ Kit SENIOR MASTER generado");
+    console.log("✅ Kit generado");
 
     if (!isUnlimited) {
       const newCredits = subscription.credits_remaining - CREDITS_COST;

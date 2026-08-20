@@ -1,5 +1,5 @@
 // src/pages/vendor/VendorDashboard.tsx
-// 🎨 v22.26 - Escalera de Éxito Gamificada (Niveles 30 a 150+ Ventas = Membresía + IA + Mkt Gratis)
+// 🎨 v22.27 - Escalera de Éxito con Herramientas IA Ilimitadas por Membresía
 
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -91,7 +91,7 @@ function getTierInfo(monthlySales: number) {
       progressPct: 100,
       perks: [
         "Membresía de Tienda 100% GRATIS",
-        "150 Kits de Publicidad IA / mes",
+        "Kits de Publicidad IA Ilimitados",
         "Cargas Auto-Fill IA Ilimitadas",
         "Soporte VIP 1 a 1 por WhatsApp",
         "Destacado Prioritario en la Portada",
@@ -112,12 +112,12 @@ function getTierInfo(monthlySales: number) {
       progressPct: Math.min(100, Math.round(((monthlySales - 60) / 90) * 100)),
       perks: [
         "Membresía de Tienda 100% GRATIS",
-        "80 Kits de Publicidad IA / mes",
+        "Kits de Publicidad IA Ilimitados",
         "Cargas Auto-Fill IA Ilimitadas",
         "Productos Destacados en el Marketplace",
       ],
       remainingForNext: 150 - monthlySales,
-      nextRewardMsg: `Te faltan ${150 - monthlySales} ventas para desbloquear 150 Kits IA + Asesoría 1 a 1`,
+      nextRewardMsg: `Te faltan ${150 - monthlySales} ventas para desbloquear Asesoría VIP 1 a 1`,
     };
   }
 
@@ -132,12 +132,12 @@ function getTierInfo(monthlySales: number) {
       progressPct: Math.min(100, Math.round(((monthlySales - 50) / 10) * 100)),
       perks: [
         "Membresía de Tienda 100% GRATIS",
-        "50 Kits de Publicidad IA / mes",
-        "100 Cargas Auto-Fill IA / mes",
+        "Kits de Publicidad IA Ilimitados",
+        "Cargas Auto-Fill IA Ilimitadas",
         "Plantillas de Marketing VIP Desbloqueadas",
       ],
       remainingForNext: 60 - monthlySales,
-      nextRewardMsg: `Te faltan ${60 - monthlySales} ventas para subir a PLATINO (80 Kits IA + Portada)`,
+      nextRewardMsg: `Te faltan ${60 - monthlySales} ventas para subir a PLATINO (Portada destacada)`,
     };
   }
 
@@ -152,11 +152,11 @@ function getTierInfo(monthlySales: number) {
       progressPct: Math.min(100, Math.round(((monthlySales - 40) / 10) * 100)),
       perks: [
         "Membresía de Tienda 100% GRATIS",
-        "30 Kits de Publicidad IA / mes",
-        "60 Cargas Auto-Fill IA / mes",
+        "Kits de Publicidad IA Ilimitados",
+        "Cargas Auto-Fill IA Ilimitadas",
       ],
       remainingForNext: 50 - monthlySales,
-      nextRewardMsg: `Te faltan ${50 - monthlySales} ventas para subir a ORO (Plantillas VIP + 50 Kits IA)`,
+      nextRewardMsg: `Te faltan ${50 - monthlySales} ventas para subir a ORO (Plantillas VIP)`,
     };
   }
 
@@ -171,11 +171,11 @@ function getTierInfo(monthlySales: number) {
       progressPct: Math.min(100, Math.round(((monthlySales - 30) / 10) * 100)),
       perks: [
         "Membresía de Tienda 100% GRATIS (S/ 15 ➔ S/ 0)",
-        "15 Kits de Publicidad IA / mes",
-        "30 Cargas Auto-Fill IA / mes",
+        "Kits de Publicidad IA Ilimitados",
+        "Cargas Auto-Fill IA Ilimitadas",
       ],
       remainingForNext: 40 - monthlySales,
-      nextRewardMsg: `Te faltan ${40 - monthlySales} ventas para subir a PLATA (30 Kits IA + 60 AutoFills)`,
+      nextRewardMsg: `Te faltan ${40 - monthlySales} ventas para subir a PLATA`,
     };
   }
 
@@ -189,8 +189,8 @@ function getTierInfo(monthlySales: number) {
     textColor: "text-emerald-300",
     progressPct: Math.min(100, Math.round((monthlySales / 30) * 100)),
     perks: [
-      "5 Kits de Publicidad IA Gratis para engancharte",
-      "15 Cargas de Productos con Auto-Fill IA",
+      "Kits de Publicidad IA Ilimitados",
+      "Cargas Auto-Fill IA Ilimitadas",
       "Reuso Ilimitado de tus Kits Guardados",
     ],
     remainingForNext: 30 - monthlySales,
@@ -331,11 +331,6 @@ export default function VendorDashboard() {
   const currentMonthSales = stats.this_month.orders || 0;
   const tier = getTierInfo(currentMonthSales);
 
-  // Traducción de Créditos a Herramientas Reales
-  const remainingCredits = aiSub?.credits_remaining ?? 0;
-  const kitsAvailable = Math.floor(remainingCredits / 15);
-  const autoFillsAvailable = Math.floor(remainingCredits / 5);
-
   return (
     <div className="space-y-6 py-8">
       {/* Header */}
@@ -391,7 +386,7 @@ export default function VendorDashboard() {
           </div>
 
           <p className="text-xs sm:text-sm text-gray-200 leading-relaxed max-w-2xl">
-            <strong>Mientras más vendes, más ahorras y más herramientas obtienes.</strong> A partir de 30 ventas al mes, tu tienda y tus herramientas te salen totalmente gratis.
+            <strong>Mientras más vendes, más ahorras.</strong> A partir de 30 ventas al mes, tu tienda te sale totalmente gratis. Las herramientas IA vienen activas de forma ilimitada en cualquier nivel.
           </p>
 
           {/* Barra de progreso hacia el siguiente nivel */}
@@ -426,14 +421,14 @@ export default function VendorDashboard() {
             </div>
           </div>
 
-          {/* Estado de herramientas disponibles */}
+          {/* Estado de herramientas disponibles: SIEMPRE ILIMITADAS */}
           <div className="pt-3 border-t border-white/10 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
             <div className="bg-white/10 rounded-2xl p-3 backdrop-blur border border-white/10">
               <span className="text-gray-300 text-[10px] uppercase font-bold block">
                 🚀 Kits de Publicidad IA
               </span>
               <span className="text-base font-extrabold text-white">
-                {aiSub?.plan === "business" ? "♾️ Ilimitados" : `${kitsAvailable} Kits disponibles`}
+                ♾️ ILIMITADO (ACTIVO)
               </span>
               <span className="text-[10px] text-emerald-300 block mt-0.5">
                 TikTok, Instagram, FB & WhatsApp
@@ -442,10 +437,10 @@ export default function VendorDashboard() {
 
             <div className="bg-white/10 rounded-2xl p-3 backdrop-blur border border-white/10">
               <span className="text-gray-300 text-[10px] uppercase font-bold block">
-                🪄 Cargas de Productos IA
+                🪄 Cargas Auto-Fill IA
               </span>
               <span className="text-base font-extrabold text-white">
-                {aiSub?.plan === "business" ? "♾️ Ilimitadas" : `${autoFillsAvailable} Auto-Fills`}
+                ♾️ ILIMITADO (ACTIVO)
               </span>
               <span className="text-[10px] text-emerald-300 block mt-0.5">
                 Publica en 1 click
@@ -460,10 +455,16 @@ export default function VendorDashboard() {
                 100% GRATIS
               </span>
               <span className="text-[10px] text-gray-300 block mt-0.5">
-                Vuelve a usar tus kits guardados
+                Reutiliza los kits guardados
               </span>
             </div>
           </div>
+
+          {aiSub && aiSub.plan !== "starter" && (
+            <div className="pt-2 text-[10px] text-emerald-200 opacity-70">
+              Plan actual: <strong className="uppercase">{aiSub.plan}</strong>
+            </div>
+          )}
         </div>
       </div>
 
@@ -473,7 +474,7 @@ export default function VendorDashboard() {
         </div>
       )}
 
-      {/* 🆕 v17: Pedidos pickup */}
+      {/* Pedidos pickup */}
       <PickupOrdersSection storeId={store.id} />
 
       {productCreated && (
@@ -498,7 +499,7 @@ export default function VendorDashboard() {
         </div>
       )}
 
-      {/* KPIs principales — 4 cards con trend */}
+      {/* KPIs principales */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Ventas del mes"

@@ -1,5 +1,5 @@
 // src/pages/admin/AdminAIPage.tsx
-// 🍌 v22.5 - Gestión de créditos AI y suscripciones
+// 🍌 v22.7 - Panel Admin de Gestión de Membresías e IA (Sin variables en desuso)
 
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
@@ -38,9 +38,9 @@ interface UpgradeRequest {
 }
 
 const PLAN_CONFIG: Record<PlanType, { label: string; price: number; credits: number; color: string; emoji: string }> = {
-  starter: { label: "Starter", price: 0, credits: 10, color: "gray", emoji: "🆓" },
-  creator: { label: "Creator", price: 19, credits: 300, color: "purple", emoji: "🎨" },
-  pro: { label: "Pro", price: 49, credits: 800, color: "blue", emoji: "🚀" },
+  starter: { label: "Starter", price: 0, credits: 99999, color: "gray", emoji: "🆓" },
+  creator: { label: "Creator", price: 19, credits: 99999, color: "purple", emoji: "🎨" },
+  pro: { label: "Pro", price: 49, credits: 99999, color: "blue", emoji: "🚀" },
   business: { label: "Business", price: 149, credits: -1, color: "amber", emoji: "💎" },
 };
 
@@ -50,9 +50,7 @@ export default function AdminAIPage() {
   const [vendors, setVendors] = useState<VendorAI[]>([]);
   const [upgradeRequests, setUpgradeRequests] = useState<UpgradeRequest[]>([]);
   const [selectedVendor, setSelectedVendor] = useState<VendorAI | null>(null);
-  const [showCreditsModal, setShowCreditsModal] = useState(false);
   const [showPlanModal, setShowPlanModal] = useState(false);
-  const [creditsToAdd, setCreditsToAdd] = useState<number>(0);
   const [newPlan, setNewPlan] = useState<PlanType>("creator");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"vendors" | "requests">("vendors");
@@ -61,7 +59,6 @@ export default function AdminAIPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      // Cargar todos los vendors con AI subscription
       const { data: subsData, error: subsError } = await supabase
         .from("ai_subscriptions")
         .select("*")
@@ -69,7 +66,6 @@ export default function AdminAIPage() {
 
       if (subsError) throw subsError;
 
-      // Cargar perfiles y tiendas
       const vendorIds = (subsData || []).map((s) => s.vendor_id);
 
       const [profilesRes, storesRes, kitsRes] = await Promise.all([
@@ -85,7 +81,6 @@ export default function AdminAIPage() {
         (storesRes.data || []).map((s) => [s.owner_id, s])
       );
 
-      // Contar kits por vendor
       const kitsCount: Record<string, number> = {};
       (kitsRes.data || []).forEach((k: { vendor_id: string }) => {
         kitsCount[k.vendor_id] = (kitsCount[k.vendor_id] || 0) + 1;
@@ -102,8 +97,8 @@ export default function AdminAIPage() {
           store_slug: store?.slug || null,
           plan: sub.plan as PlanType,
           status: sub.status,
-          credits_remaining: sub.credits_remaining,
-          credits_total: sub.credits_total,
+          credits_remaining: sub.credits_remaining ?? 99999,
+          credits_total: sub.credits_total ?? 99999,
           total_used: sub.total_used || 0,
           is_trial: sub.is_trial,
           expires_at: sub.expires_at,
@@ -113,7 +108,6 @@ export default function AdminAIPage() {
 
       setVendors(vendorsData);
 
-      // Cargar upgrade requests pendientes
       const { data: requestsData } = await supabase
         .from("ai_upgrade_requests")
         .select("*")
@@ -162,55 +156,15 @@ export default function AdminAIPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleAddCredits = async () => {
-    if (!selectedVendor || creditsToAdd === 0) return;
-    setProcessing(true);
-    try {
-      const newRemaining = Math.max(0, selectedVendor.credits_remaining + creditsToAdd);
-      const newTotal = Math.max(selectedVendor.credits_total, newRemaining);
-
-      const { error } = await supabase
-        .from("ai_subscriptions")
-        .update({
-          credits_remaining: newRemaining,
-          credits_total: newTotal,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("vendor_id", selectedVendor.vendor_id);
-
-      if (error) throw error;
-
-      toast.success(
-        creditsToAdd > 0 ? "✅ Créditos agregados" : "✅ Créditos ajustados",
-        `${selectedVendor.email}: ${selectedVendor.credits_remaining} → ${newRemaining}`
-      );
-
-      setShowCreditsModal(false);
-      setCreditsToAdd(0);
-      setSelectedVendor(null);
-      await loadData();
-    } catch (err) {
-      toast.error(
-        "Error al actualizar",
-        err instanceof Error ? err.message : "Intenta de nuevo"
-      );
-    } finally {
-      setProcessing(false);
-    }
-  };
-
   const handleResetCredits = async (vendor: VendorAI) => {
-    const config = PLAN_CONFIG[vendor.plan];
-    const defaultCredits = config.credits === -1 ? 9999 : config.credits;
-
-    if (!confirm(`¿Resetear créditos de ${vendor.email} a ${defaultCredits}?`)) return;
+    if (!confirm(`¿Restablecer plan de herramientas IA para ${vendor.email}?`)) return;
 
     try {
       const { error } = await supabase
         .from("ai_subscriptions")
         .update({
-          credits_remaining: defaultCredits,
-          credits_total: defaultCredits,
+          credits_remaining: 99999,
+          credits_total: 99999,
           total_used: 0,
           updated_at: new Date().toISOString(),
         })
@@ -218,7 +172,7 @@ export default function AdminAIPage() {
 
       if (error) throw error;
 
-      toast.success("✅ Créditos reseteados", `${vendor.email} → ${defaultCredits} créditos`);
+      toast.success("✅ Acceso IA Restablecido", `${vendor.email} → Herramientas Ilimitadas`);
       await loadData();
     } catch (err) {
       toast.error("Error", err instanceof Error ? err.message : "Intenta de nuevo");
@@ -230,14 +184,13 @@ export default function AdminAIPage() {
     setProcessing(true);
     try {
       const config = PLAN_CONFIG[newPlan];
-      const newCredits = config.credits === -1 ? 9999 : config.credits;
 
       const { error } = await supabase
         .from("ai_subscriptions")
         .update({
           plan: newPlan,
-          credits_remaining: newCredits,
-          credits_total: newCredits,
+          credits_remaining: 99999,
+          credits_total: 99999,
           total_used: 0,
           is_trial: false,
           status: "active",
@@ -249,8 +202,8 @@ export default function AdminAIPage() {
       if (error) throw error;
 
       toast.success(
-        "✅ Plan actualizado",
-        `${selectedVendor.email} → Plan ${config.label} (${newCredits === 9999 ? "♾️" : newCredits} créditos)`
+        "✅ Plan de Membresía Actualizado",
+        `${selectedVendor.email} → Plan ${config.label} (Herramientas Ilimitadas)`
       );
 
       setShowPlanModal(false);
@@ -270,15 +223,13 @@ export default function AdminAIPage() {
     try {
       const plan = request.plan_requested as PlanType;
       const config = PLAN_CONFIG[plan];
-      const newCredits = config.credits === -1 ? 9999 : config.credits;
 
-      // Actualizar suscripción del vendor
       const { error: subError } = await supabase
         .from("ai_subscriptions")
         .update({
           plan: plan,
-          credits_remaining: newCredits,
-          credits_total: newCredits,
+          credits_remaining: 99999,
+          credits_total: 99999,
           total_used: 0,
           is_trial: false,
           status: "active",
@@ -289,7 +240,6 @@ export default function AdminAIPage() {
 
       if (subError) throw subError;
 
-      // Actualizar request
       const { data: { user } } = await supabase.auth.getUser();
       const { error: reqError } = await supabase
         .from("ai_upgrade_requests")
@@ -305,7 +255,7 @@ export default function AdminAIPage() {
 
       toast.success(
         "✅ Upgrade aprobado",
-        `${request.vendor_email} ahora es ${config.label}`
+        `${request.vendor_email} ahora cuenta con ${config.label}`
       );
       await loadData();
     } catch (err) {
@@ -317,7 +267,7 @@ export default function AdminAIPage() {
 
   const handleRejectRequest = async (request: UpgradeRequest) => {
     const reason = prompt("Motivo del rechazo (opcional):");
-    if (reason === null) return; // Canceló
+    if (reason === null) return;
 
     setProcessing(true);
     try {
@@ -353,11 +303,9 @@ export default function AdminAIPage() {
 
   const pendingRequests = upgradeRequests.filter((r) => r.status === "pending");
 
-  // Estadísticas globales
   const stats = {
     totalVendors: vendors.length,
-    totalCreditsRemaining: vendors.reduce((sum, v) => sum + v.credits_remaining, 0),
-    totalCreditsUsed: vendors.reduce((sum, v) => sum + v.total_used, 0),
+    activeSubscriptions: vendors.filter((v) => v.status === "active").length,
     totalKits: vendors.reduce((sum, v) => sum + v.kits_generated, 0),
     mrr: vendors.reduce((sum, v) => sum + (PLAN_CONFIG[v.plan]?.price || 0), 0),
     byPlan: {
@@ -382,10 +330,10 @@ export default function AdminAIPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-gray-900">
-            🍌 Panel AI
+            🎨 Gestión de Membresías e IA
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Gestiona créditos, suscripciones y solicitudes de upgrade
+            Administra los planes de Inteligencia Artificial y solicitudes de los vendedores
           </p>
         </div>
 
@@ -400,7 +348,7 @@ export default function AdminAIPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <div className="text-xs font-bold uppercase text-gray-500">Vendors AI</div>
+          <div className="text-xs font-bold uppercase text-gray-500">Vendors Activos</div>
           <div className="mt-1 text-2xl font-black text-gray-900">{stats.totalVendors}</div>
           <div className="text-[10px] text-gray-500 mt-1">
             {stats.byPlan.creator} creator · {stats.byPlan.pro} pro · {stats.byPlan.business} biz
@@ -408,25 +356,23 @@ export default function AdminAIPage() {
         </div>
 
         <div className="rounded-2xl bg-linear-to-br from-emerald-500 to-teal-500 p-4 text-white shadow-lg">
-          <div className="text-xs font-bold uppercase opacity-90">MRR Estimado</div>
+          <div className="text-xs font-bold uppercase opacity-90">MRR Estimado IA</div>
           <div className="mt-1 text-2xl font-black">S/ {stats.mrr}</div>
-          <div className="text-[10px] opacity-75 mt-1">Ingreso recurrente/mes</div>
+          <div className="text-[10px] opacity-75 mt-1">Ingreso mensual estimado</div>
         </div>
 
         <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <div className="text-xs font-bold uppercase text-gray-500">Créditos activos</div>
+          <div className="text-xs font-bold uppercase text-gray-500">Membresías Activas</div>
           <div className="mt-1 text-2xl font-black text-purple-600">
-            {stats.totalCreditsRemaining.toLocaleString()}
+            {stats.activeSubscriptions}
           </div>
-          <div className="text-[10px] text-gray-500 mt-1">Disponibles ahora</div>
+          <div className="text-[10px] text-emerald-600 font-bold mt-1">Acceso Ilimitado ✅</div>
         </div>
 
         <div className="rounded-2xl bg-white p-4 shadow-sm">
           <div className="text-xs font-bold uppercase text-gray-500">Kits generados</div>
           <div className="mt-1 text-2xl font-black text-pink-600">{stats.totalKits}</div>
-          <div className="text-[10px] text-gray-500 mt-1">
-            {stats.totalCreditsUsed.toLocaleString()} créditos usados total
-          </div>
+          <div className="text-[10px] text-gray-500 mt-1">Generaciones totales de vendedores</div>
         </div>
       </div>
 
@@ -438,7 +384,7 @@ export default function AdminAIPage() {
             activeTab === "vendors" ? "text-gray-900" : "text-gray-500 hover:text-gray-700"
           }`}
         >
-          Vendors AI
+          Vendors con IA
           <span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
             activeTab === "vendors" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"
           }`}>
@@ -453,7 +399,7 @@ export default function AdminAIPage() {
             activeTab === "requests" ? "text-gray-900" : "text-gray-500 hover:text-gray-700"
           }`}
         >
-          Solicitudes de upgrade
+          Solicitudes de Upgrade
           {pendingRequests.length > 0 && (
             <span className="ml-2 rounded-full bg-red-500 px-2 py-0.5 text-xs text-white">
               {pendingRequests.length}
@@ -466,7 +412,6 @@ export default function AdminAIPage() {
       {/* Contenido */}
       {activeTab === "vendors" && (
         <>
-          {/* Buscador */}
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <input
               type="text"
@@ -477,27 +422,21 @@ export default function AdminAIPage() {
             />
           </div>
 
-          {/* Tabla vendors */}
           <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="bg-gray-50 text-gray-500">
                   <tr>
                     <th className="px-4 py-3 font-medium">Vendor</th>
-                    <th className="px-4 py-3 font-medium">Plan</th>
-                    <th className="px-4 py-3 font-medium">Créditos</th>
-                    <th className="px-4 py-3 font-medium">Uso</th>
-                    <th className="px-4 py-3 font-medium">Kits</th>
+                    <th className="px-4 py-3 font-medium">Plan IA</th>
+                    <th className="px-4 py-3 font-medium">Herramientas</th>
+                    <th className="px-4 py-3 font-medium">Kits Creados</th>
                     <th className="px-4 py-3 font-medium">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {filteredVendors.map((vendor) => {
                     const config = PLAN_CONFIG[vendor.plan];
-                    const isUnlimited = vendor.plan === "business";
-                    const pctUsed = vendor.credits_total > 0
-                      ? Math.round((vendor.total_used / vendor.credits_total) * 100)
-                      : 0;
 
                     return (
                       <tr key={vendor.vendor_id} className="hover:bg-gray-50">
@@ -526,47 +465,15 @@ export default function AdminAIPage() {
                           </span>
                           {vendor.is_trial && (
                             <div className="text-[10px] text-amber-600 font-bold mt-0.5">
-                              🎁 TRIAL
+                              🎁 PRUEBA
                             </div>
                           )}
                         </td>
 
                         <td className="px-4 py-3">
-                          {isUnlimited ? (
-                            <span className="text-lg font-black text-amber-600">♾️</span>
-                          ) : (
-                            <div>
-                              <div className="font-bold text-gray-900">
-                                {vendor.credits_remaining}
-                                <span className="text-xs font-normal text-gray-500">
-                                  {" "}/ {vendor.credits_total}
-                                </span>
-                              </div>
-                              <div className="h-1.5 w-16 bg-gray-200 rounded-full overflow-hidden mt-1">
-                                <div
-                                  className={`h-full ${
-                                    vendor.credits_remaining < 20 ? "bg-red-500" :
-                                    vendor.credits_remaining < 50 ? "bg-amber-500" :
-                                    "bg-emerald-500"
-                                  }`}
-                                  style={{
-                                    width: `${(vendor.credits_remaining / vendor.credits_total) * 100}%`,
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          <div className="text-xs text-gray-600">
-                            {vendor.total_used.toLocaleString()} créditos
-                          </div>
-                          {!isUnlimited && (
-                            <div className="text-[10px] text-gray-400">
-                              {pctUsed}% usado
-                            </div>
-                          )}
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">
+                            ⚡ Ilimitado
+                          </span>
                         </td>
 
                         <td className="px-4 py-3">
@@ -580,33 +487,21 @@ export default function AdminAIPage() {
                             <button
                               onClick={() => {
                                 setSelectedVendor(vendor);
-                                setCreditsToAdd(100);
-                                setShowCreditsModal(true);
-                              }}
-                              className="rounded-lg bg-emerald-100 px-2 py-1 text-[11px] font-bold text-emerald-800 hover:bg-emerald-200"
-                              title="Agregar créditos"
-                            >
-                              ➕ Créditos
-                            </button>
-
-                            <button
-                              onClick={() => {
-                                setSelectedVendor(vendor);
                                 setNewPlan(vendor.plan);
                                 setShowPlanModal(true);
                               }}
-                              className="rounded-lg bg-purple-100 px-2 py-1 text-[11px] font-bold text-purple-800 hover:bg-purple-200"
+                              className="rounded-lg bg-purple-100 px-2.5 py-1 text-[11px] font-bold text-purple-800 hover:bg-purple-200"
                               title="Cambiar plan"
                             >
-                              📊 Plan
+                              📊 Editar Plan
                             </button>
 
                             <button
                               onClick={() => handleResetCredits(vendor)}
-                              className="rounded-lg bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-800 hover:bg-amber-200"
-                              title="Resetear créditos del plan"
+                              className="rounded-lg bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-800 hover:bg-amber-200"
+                              title="Restablecer plan"
                             >
-                              🔄 Reset
+                              🔄 Restablecer
                             </button>
                           </div>
                         </td>
@@ -619,7 +514,7 @@ export default function AdminAIPage() {
 
             {filteredVendors.length === 0 && (
               <div className="p-12 text-center text-gray-500">
-                {searchQuery ? "Sin resultados" : "Sin vendors con AI activo"}
+                {searchQuery ? "Sin resultados" : "Sin vendors registrados"}
               </div>
             )}
           </div>
@@ -631,9 +526,9 @@ export default function AdminAIPage() {
           {upgradeRequests.length === 0 ? (
             <div className="rounded-2xl bg-white p-16 text-center shadow-sm">
               <div className="text-6xl">📭</div>
-              <h3 className="mt-4 text-lg font-bold text-gray-900">Sin solicitudes</h3>
+              <h3 className="mt-4 text-lg font-bold text-gray-900">Sin solicitudes pendientes</h3>
               <p className="mt-1 text-sm text-gray-500">
-                Aquí aparecerán las solicitudes de upgrade de vendors
+                Las solicitudes de pago de Membresías IA aparecerán aquí
               </p>
             </div>
           ) : (
@@ -740,90 +635,12 @@ export default function AdminAIPage() {
         </div>
       )}
 
-      {/* Modal: Agregar créditos */}
-      {showCreditsModal && selectedVendor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white shadow-2xl">
-            <div className="bg-linear-to-br from-emerald-500 to-teal-500 rounded-t-3xl p-5 text-white">
-              <h3 className="text-lg font-black">➕ Ajustar créditos</h3>
-              <p className="text-xs opacity-90 mt-1">{selectedVendor.email}</p>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div className="rounded-xl bg-gray-50 p-3 text-center">
-                <div className="text-xs text-gray-500">Créditos actuales</div>
-                <div className="text-2xl font-black text-gray-900">
-                  {selectedVendor.credits_remaining}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-bold text-gray-700 mb-2 block">
-                  Cantidad a agregar/quitar
-                </label>
-                <div className="flex gap-2 mb-2">
-                  {[50, 100, 300, 500].map((amt) => (
-                    <button
-                      key={amt}
-                      onClick={() => setCreditsToAdd(amt)}
-                      className={`flex-1 rounded-lg py-2 text-xs font-bold transition ${
-                        creditsToAdd === amt
-                          ? "bg-emerald-500 text-white"
-                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                      }`}
-                    >
-                      +{amt}
-                    </button>
-                  ))}
-                </div>
-                <input
-                  type="number"
-                  value={creditsToAdd}
-                  onChange={(e) => setCreditsToAdd(Number(e.target.value))}
-                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-lg font-bold text-center focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none"
-                  placeholder="Ej: 100 (o -50 para quitar)"
-                />
-                <p className="text-[11px] text-gray-500 mt-1">
-                  Usa números negativos para quitar (ej: -50)
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-emerald-50 border-2 border-emerald-200 p-3 text-center">
-                <div className="text-xs text-emerald-700">Nuevo total</div>
-                <div className="text-2xl font-black text-emerald-900">
-                  {Math.max(0, selectedVendor.credits_remaining + creditsToAdd)}
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setShowCreditsModal(false);
-                    setSelectedVendor(null);
-                  }}
-                  className="flex-1 rounded-xl border-2 border-gray-200 py-3 text-sm font-bold text-gray-700 hover:bg-gray-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleAddCredits}
-                  disabled={processing || creditsToAdd === 0}
-                  className="flex-1 rounded-xl bg-emerald-500 py-3 text-sm font-bold text-white shadow hover:bg-emerald-600 disabled:opacity-50"
-                >
-                  {processing ? "⏳..." : "✅ Aplicar"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Modal: Cambiar plan */}
       {showPlanModal && selectedVendor && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="w-full max-w-md rounded-3xl bg-white shadow-2xl">
             <div className="bg-linear-to-br from-purple-500 to-pink-500 rounded-t-3xl p-5 text-white">
-              <h3 className="text-lg font-black">📊 Cambiar plan</h3>
+              <h3 className="text-lg font-black">📊 Cambiar Membresía IA</h3>
               <p className="text-xs opacity-90 mt-1">{selectedVendor.email}</p>
             </div>
 
@@ -854,8 +671,8 @@ export default function AdminAIPage() {
                           <div className="font-bold text-gray-900">
                             {config.emoji} {config.label}
                           </div>
-                          <div className="text-xs text-gray-500 mt-0.5">
-                            {config.credits === -1 ? "♾️ Ilimitado" : `${config.credits} créditos/mes`}
+                          <div className="text-xs text-emerald-600 font-bold mt-0.5">
+                            ⚡ Herramientas Ilimitadas
                           </div>
                         </div>
                         <div className="text-right">
