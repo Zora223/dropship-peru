@@ -1,5 +1,5 @@
 // src/layouts/AdminLayout.tsx
-// 🆕 v22.36 - Admin Realtime 360°: Pedidos 🧾 + Usuarios 👥 + Upgrades IA 💳
+// 🆕 v22.37 - Admin Realtime 360° + Pestaña "Salud & Analytics" 📊 agregada al menú
 
 import { useState, useEffect } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
@@ -7,6 +7,7 @@ import { supabase } from "../lib/supabase";
 
 const navItems = [
   { to: "/admin", label: "Resumen", icon: "📊", exact: true, badgeKey: null },
+  { to: "/admin/analytics", label: "Salud & Analytics", icon: "📈", badgeKey: null }, // 👈 AHORA SÍ INCLUIDO
   { to: "/admin/settings", label: "Configuración", icon: "⚙️", badgeKey: null },
   { to: "/admin/discounts", label: "Descuentos", icon: "🎁", badgeKey: null },
   { to: "/admin/catalog", label: "Catálogo", icon: "📦", badgeKey: null },
