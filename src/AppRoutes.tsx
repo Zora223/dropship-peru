@@ -1,5 +1,5 @@
 // src/AppRoutes.tsx
-// 🏪 v22.15 - Rutas públicas de marketplace + categorías + búsqueda
+// 🏪 v22.16 - Rutas públicas de marketplace + categorías + búsqueda + Admin Analytics & Salud 📊
 
 import VendorDeliverySettingsPage from "./pages/vendor/VendorDeliverySettingsPage";
 import AdminWhatsappTemplatesPage from "./pages/admin/AdminWhatsappTemplatesPage";
@@ -11,6 +11,7 @@ import AdminSupplierPayoutsPage from "./pages/admin/AdminSupplierPayoutsPage";
 import AdminSettingsPage from "./pages/admin/AdminSettingsPage";
 import AdminDiscountsPage from "./pages/admin/AdminDiscountsPage";
 import AdminAIPage from "./pages/admin/AdminAIPage";
+import AdminAnalyticsPage from "./pages/admin/AdminAnalyticsPage"; // 🆕 Admin Analytics & Diagnóstico
 
 // Páginas legales
 import TermsPage from "./pages/legal/TermsPage";
@@ -31,7 +32,7 @@ import OrderSuccessPage from "./pages/OrderSuccessPage";
 import OrderTrackingPage from "./pages/OrderTrackingPage";
 import NotFoundPage from "./pages/NotFoundPage";
 
-// 🆕 v22.15 - Páginas públicas marketplace
+// Páginas públicas marketplace
 import PublicCategoryPage from "./pages/PublicCategoryPage";
 import SearchPage from "./pages/SearchPage";
 
@@ -109,7 +110,7 @@ export default function AppRoutes() {
       <Route path="/order-success" element={<OrderSuccessPage />} />
       <Route path="/pedido/:orderNumber" element={<OrderTrackingPage />} />
 
-      {/* 🆕 v22.15 - Marketplace público */}
+      {/* Marketplace público */}
       <Route path="/categoria/:slug" element={<PublicCategoryPage />} />
       <Route path="/buscar" element={<SearchPage />} />
 
@@ -123,6 +124,7 @@ export default function AppRoutes() {
         }
       >
         <Route index element={<AdminDashboard />} />
+        <Route path="analytics" element={<AdminAnalyticsPage />} /> {/* 🆕 Diagnóstico de Salud & KPIs */}
         <Route path="settings" element={<AdminSettingsPage />} />
         <Route path="discounts" element={<AdminDiscountsPage />} />
         <Route path="theme" element={<AdminThemePage />} />
